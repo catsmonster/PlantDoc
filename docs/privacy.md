@@ -1,0 +1,103 @@
+# PlantDoc Privacy & Open Data Policy
+
+PlantDoc's public value depends on trust. The project should collect useful plant-care data while giving users clear control over what becomes public.
+
+## Data Classes
+
+### Private
+
+Private data must never appear in public exports.
+
+- user ID and auth identity,
+- email address,
+- exact latitude/longitude,
+- full postal code or street-level address,
+- plant nickname,
+- room or placement label,
+- private notes,
+- original image files,
+- image EXIF metadata,
+- raw storage paths for private files.
+
+### App-Internal Derived Data
+
+This data can be used inside PlantDoc for user features and enrichment, but should not be published without additional transformation.
+
+- climate-zone lookup results,
+- weather API enrichment,
+- geocoded administrative regions,
+- sensor-derived environmental readings,
+- plant health trend summaries.
+
+### Public Export Data
+
+Public data must be generated from consented source observations and a derived export table/collection or export job.
+
+Allowed public fields include:
+
+- scientific name or user-entered species text,
+- observation month or coarse date bucket,
+- treatment type and normalized non-identifying amount,
+- measurement values,
+- broad country/region when privacy thresholds are met,
+- climate zone,
+- coarse geo cell,
+- sanitized public image derivative when explicitly allowed,
+- dataset version and publication timestamp.
+
+## Consent Model
+
+- Default account setting: private contribution disabled.
+- Users can opt in at the account level and override per observation.
+- A private observation must remain private even if the account default later changes.
+- Users can revoke contribution for future exports.
+- The app must clearly explain that public exports are open data and may be copied after release.
+
+## Location Precision
+
+Use precision tiers:
+
+1. **Exact**: stored privately for user features and climate lookup.
+2. **Local**: city or postal-code prefix, app-internal only unless explicitly allowed.
+3. **Regional**: region/state/province, acceptable for public export when cohort size is safe.
+4. **Climate**: climate zone or broad geo cell, preferred default for public export.
+5. **Country only**: fallback when finer geography could identify a user.
+
+Public exports should prefer climate zone and coarse region over exact city. Add k-anonymity or minimum cohort checks before publishing small geographic/species groups.
+
+## Image Policy
+
+- Strip or ignore EXIF metadata on upload.
+- Keep originals private.
+- Generate sanitized derivatives for any public image use.
+- Require explicit consent for public image publication.
+- Avoid publishing images that include people, addresses, mail, documents, or other identifying background details.
+
+## Deletion And Revocation
+
+- Users must be able to delete private observations.
+- Deleted private observations must be removed from future public export builds.
+- If a dataset version has already been published, record the removal in the next dataset changelog rather than promising impossible retroactive deletion from third-party copies.
+- Revocation should remove records from future exports and from the live public API or dashboard.
+
+## Dataset Licensing
+
+Recommended default:
+
+- Derived tabular public observations: CC0 or CC BY 4.0, to be finalized before public launch.
+- Public image derivatives: separate license and explicit user consent.
+- Code: use the repository's selected open-source software license.
+
+Do not collect public contributions until the dataset license is visible during opt-in.
+
+## Public Export Checklist
+
+Before publishing a dataset version:
+
+- Confirm every row comes from consented observations.
+- Confirm private fields are absent.
+- Confirm timestamps are bucketed where appropriate.
+- Confirm exact location is absent.
+- Confirm public image derivatives are sanitized and consented.
+- Confirm small cohorts are suppressed or coarsened.
+- Record the schema version, dataset version, generation time, and changelog.
