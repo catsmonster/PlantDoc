@@ -42,18 +42,53 @@ Rejected alternatives:
 
 The local `.env` file supplies real Appwrite project credentials for setup automation. The implementation must read:
 
-- `VITE_APPWRITE_PROJECT_ID`
-- `VITE_APPWRITE_PROJECT_NAME`
-- `VITE_APPWRITE_ENDPOINT`
+- `APPWRITE_PROJECT_ID`
+- `APPWRITE_PROJECT_NAME`
+- `APPWRITE_ENDPOINT`
 - `APPWRITE_API_KEY`
 
 Security requirements:
 
 - `APPWRITE_API_KEY` must never be prefixed with `VITE_`.
-- Setup scripts may read `APPWRITE_API_KEY`; browser code must not.
+- Setup scripts must use the non-`VITE_` Appwrite variables above.
+- Browser code may use `VITE_APPWRITE_PROJECT_ID` and `VITE_APPWRITE_ENDPOINT` later, but those public client variables are not the setup script contract.
+- Browser code must never reference `APPWRITE_API_KEY`.
 - `.env` must remain ignored by Git.
 - `.env.example` must document variable names without secret values.
 - Commands must never print API keys or full secret-bearing environment dumps.
+
+## Appwrite Prerequisites
+
+Phase 0 assumes an Appwrite Cloud project already exists. The setup automation does not create:
+
+- the Appwrite project itself,
+- Auth providers or email templates,
+- Functions,
+- custom Appwrite API domains,
+- Cloudflare Pages projects,
+- Cloudflare DNS records.
+
+The API key used for setup must be scoped for the resources Phase 0 manages. Required scopes:
+
+- `databases.read`
+- `databases.write`
+- `tables.read`
+- `tables.write`
+- `columns.read`
+- `columns.write`
+- `indexes.read`
+- `indexes.write`
+- `rows.read`
+- `rows.write`
+- `buckets.read`
+- `buckets.write`
+
+Optional scopes:
+
+- `files.read`
+- `files.write`
+
+Only add `files.read` and `files.write` if Phase 0 seed automation creates fixture files in storage. The default seed strategy should use synthetic photo metadata rows and avoid real file uploads.
 
 ## MCP Tooling
 
@@ -137,6 +172,18 @@ Create these storage buckets:
 
 The schema implementation should follow `docs/schema.md`. If Appwrite SDK naming differs from the documentation language, preserve the PlantDoc domain names in constants and wrap SDK-specific calls in helper functions.
 
+## Setup Algorithm
+
+The setup script must be idempotent and conservative:
+
+- Use stable IDs for databases, tables, columns, indexes, and buckets.
+- Get each resource first; create it only when it is missing.
+- Compare existing resources to schema definitions before attempting changes.
+- Wait for asynchronous column and index creation to become ready before creating dependent resources or seed rows.
+- Never delete tables, columns, indexes, buckets, files, or rows automatically.
+- Fail with a clear "manual migration required" message when an existing resource has an incompatible type, required flag, relationship shape, or index definition.
+- Treat relationship and spatial column support as Appwrite-version-sensitive; isolate those calls behind helper functions so SDK/API differences are localized.
+
 ## Privacy Boundaries
 
 Private data must never appear in public export definitions or seed export records:
@@ -165,15 +212,32 @@ Public export definitions may include only derived or consent-safe fields docume
 - dataset version
 - publication timestamp
 
+`public_observations` is an internal derived/staging table in Phase 0, not a direct public API surface. It may contain internal traceability fields such as `source_observation_id` for export jobs, but those fields must never appear in public-readable files, public APIs, or dashboard projections.
+
 Seed data must be synthetic. It must not use the project owner's real email, exact home location, real private notes, or real image metadata.
 
 ## Permissions
 
-Private source tables should be designed for owner-only user access plus trusted server/admin access. Phase 0 setup may create table-level defaults and constants for row-level permissions even if seed fixtures use server-owned synthetic IDs.
+Private source tables should be designed for owner-only user access plus trusted server/admin access. No private source table should receive broad `Role.any()` read or write grants.
 
 `species` should be readable by app users and writable only by trusted admin/server automation.
 
-`public_observations` and public export files should be service-written and public-readable only after explicit publication workflow decisions. Phase 0 may create the resources but should keep seed exports clearly synthetic.
+`public_observations`, `plant-public-images`, and `open-data-exports` should be created without public read grants in Phase 0. Later public release work must add a separate publication workflow that projects export-safe fields, suppresses or coarsens risky cohorts, and grants public read only to approved derived files or API views.
+
+## Seed Strategy
+
+Seed data should exercise the schema without creating real personal data or depending on real Appwrite users.
+
+Seed rules:
+
+- Use fixed deterministic IDs and timestamps.
+- Use fixed synthetic user IDs such as `seed_user_alex` and `seed_user_mina`.
+- Write seed rows through the server API key.
+- Apply row permissions that match the intended owner-only shape where Appwrite allows fixed user permission labels without creating users.
+- If Appwrite requires real users for realistic user permissions, defer user-readable seed validation to a later onboarding/auth task instead of creating real or throwaway Auth users in Phase 0.
+- Use coarse synthetic geography only, such as country, region, climate zone, and deliberately imprecise geo cells.
+- Do not upload real images, real EXIF metadata, or owner-provided files.
+- Upsert by stable IDs; repeated seed runs must update or skip existing seed rows rather than creating duplicates.
 
 ## Local Tooling
 
@@ -189,14 +253,20 @@ Add package scripts:
 
 The Vite app shell can be minimal in Phase 0. It exists to prove the React/TypeScript project baseline and prepare for Phase 1 MVP work.
 
+Tailwind CSS should be included in the project baseline because `docs/tech_stack.md` names it as the frontend styling default. Phase 0 only needs base configuration and starter design-token files; polished application styling belongs to Phase 1.
+
 ## Verification
 
 Automated checks must cover:
 
 - `.env` contains required variable names when Appwrite scripts run.
 - No secret variable required by setup scripts starts with `VITE_`.
+- No source file under `src/` references `APPWRITE_API_KEY`.
 - Schema definitions include all required Phase 0 tables and buckets.
 - Public export definitions exclude private fields.
+- Public export tests prove `source_observation_id` is internal-only and absent from any public projection/export shape.
+- Public export tests prove exact timestamps, exact coordinates, private notes, private file IDs, original image paths, and EXIF fields are absent from public projections.
+- Permission tests prove Phase 0 creates no public-read grants for `public_observations`, `plant-public-images`, or `open-data-exports`.
 - Seed records are deterministic and synthetic.
 - Appwrite setup scripts can be run repeatedly without intentionally creating duplicate resources.
 
