@@ -14,16 +14,16 @@
 
 **Files:** Modify `appwrite/schema.ts`, `tests/appwrite/schema.test.ts`.
 
-- [ ] **1.1** Test: `public_observations` has a unique index on `['source_observation_id']`. FAIL.
-- [ ] **1.2** Add `{ key: 'idx_source_observation', type: 'unique', columns: ['source_observation_id'] }`. PASS.
-- [ ] **1.3** `npm run appwrite:setup` (live): index created; re-run idempotent. Commit.
+- [x] **1.1** Test: `public_observations` has a unique index on `['source_observation_id']`. FAIL.
+- [x] **1.2** Add `{ key: 'idx_source_observation', type: 'unique', columns: ['source_observation_id'] }`. PASS.
+- [x] **1.3** `npm run appwrite:setup` (live): index created; re-run idempotent. Commit.
 
 ### Task 2: Pure transform module (TDD)
 
 **Files:** Create `scripts/export/transform.ts`, `tests/export/transform.test.ts`.
 
-- [ ] **2.1** Tests first: consent rejection (throws on `contribute_to_public_dataset !== true`), note/photo types skipped (`toPublicRow` returns null), produced keys ⊆ `PUBLIC_EXPORT_FIELDS ∪ {source_observation_id}`, month bucketing, `plant_age_days`, species fallback to `species_text`, `public_file_id` always null, geo cohort coarsening (k=5: region→country→null), aggregate cells n<5 suppressed, CSV escaping (quotes/commas/newlines), serialized CSV/JSONL of a synthetic fixture contains no private markers (user id, nickname, note text). FAIL.
-- [ ] **2.2** Implement `toPublicRow(obs, opts)`, `coarsenGeoCohorts(rows)`, `buildAggregates(rows)`, `toCsv(rows, fields)`, `toJsonl(rows, fields)`, `nextVersion(existing)`. PASS. Commit.
+- [x] **2.1** Tests first: consent rejection (throws on `contribute_to_public_dataset !== true`), note/photo types skipped (`toPublicRow` returns null), produced keys ⊆ `PUBLIC_EXPORT_FIELDS ∪ {source_observation_id}`, month bucketing, `plant_age_days`, species fallback to `species_text`, `public_file_id` always null, geo cohort coarsening (k=5: region→country→null), aggregate cells n<5 suppressed, CSV escaping (quotes/commas/newlines), serialized CSV/JSONL of a synthetic fixture contains no private markers (user id, nickname, note text). FAIL.
+- [x] **2.2** Implement `toPublicRow(obs, opts)`, `coarsenGeoCohorts(rows)`, `buildAggregates(rows)`, `toCsv(rows, fields)`, `toJsonl(rows, fields)`, `nextVersion(existing)`. PASS. Commit.
 
 ### Task 3: Builder script (live reconciliation)
 
