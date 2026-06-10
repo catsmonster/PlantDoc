@@ -133,3 +133,30 @@ Use Codex Sites for demos, temporary dashboards, internal review apps, and data 
 ### References
 
 - [Codex Sites docs](https://developers.openai.com/codex/sites)
+
+## ADR-006: Use Native TablesDB Relationships And Built-In Timestamps
+
+- **Status**: Accepted.
+- **Date**: 2026-06-09
+
+### Context
+
+Appwrite TablesDB relationships are no longer beta, and Phase 0 implements the documented schema as code (`appwrite/schema.ts` + idempotent setup scripts). The documented schema modeled entity links as `relationship/string` columns and included custom `created_at`/`updated_at` columns described as "server generated", which Appwrite does not populate for custom columns.
+
+### Decision
+
+- Model entity links (`plants→species`, `plants→user_locations`, `observations→plants`, `treatments/measurements/photos→observations`, `environment_snapshots→plants/observations`) as native TablesDB relationship columns, created from the child side as `manyToOne`. Timeline children are two-way with cascade delete; optional links are one-way with set-null.
+- Keep `user_id` a plain string column everywhere: Appwrite Auth users are not TablesDB rows, and row-level permissions (`Role.user(...)`) carry ownership.
+- Keep `public_observations` relationship-free: export rows must stand alone so deletion/revocation of source rows cannot mutate published datasets, and plain values keep exports portable to future analytics stores.
+- Rely on built-in `$createdAt`/`$updatedAt` instead of custom timestamp columns.
+
+### Consequences
+
+- Deleting a plant cascades to its observations and their child rows; deleting species/locations nulls the references instead.
+- Relationship columns cannot be indexed or marked required; `observations.plant_id` requiredness is an app-layer rule.
+- Export jobs must project plain values (IDs, names) rather than relationship objects.
+- Setup automation serializes relationship-column creation and recovers `failed` async creates, because Appwrite builds relationship indexes asynchronously server-side.
+
+### References
+
+- [Appwrite relationships docs](https://appwrite.io/docs/products/databases/relationships)

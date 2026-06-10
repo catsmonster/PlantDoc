@@ -11,6 +11,17 @@ This schema assumes Appwrite Cloud using Databases/TablesDB. Some Appwrite UI/AP
 - Make anonymized public exports reproducible and versioned.
 - Keep the MVP small enough to fit Appwrite student/free-plan constraints.
 
+## Phase 0 Implementation Notes
+
+The schema below is implemented declaratively in [`appwrite/schema.ts`](../appwrite/schema.ts) and applied by `npm run appwrite:setup`. Where Appwrite's data model constrains the documented design, the implementation resolves it as follows (see ADR-006):
+
+- **Timestamps**: `created_at`/`updated_at` columns are not created. Appwrite's built-in `$createdAt`/`$updatedAt` row metadata serves these roles.
+- **Relationships**: columns documented as `relationship/string` (`species_id`, `location_id`, `plant_id`, `observation_id`) are native TablesDB relationship columns, created from the child side as `manyToOne`. Timeline children (`observations.plant_id`, `treatments/measurements/photos.observation_id`) are two-way with cascade delete; optional links (`plants.species_id`, `plants.location_id`, `environment_snapshots.*`) are one-way with set-null on delete. `user_id` stays a plain string everywhere because Auth users are not TablesDB rows.
+- **Required + default**: Appwrite forbids defaults on required columns. Columns documented as "required with default" (`preferred_units`, `public_contribution_default`, `contribute_to_public_dataset`, `exif_stripped`, `allow_public_image`, `status`) are optional-with-default. Relationship columns cannot be required in Appwrite, so `observations.plant_id` requiredness is enforced at the app layer.
+- **String types**: short indexable strings use `varchar`; private notes/captions/summaries use off-page `text` (keeps rows under Appwrite's 64 KB inline row budget).
+- **Dates**: `plants.acquired_on` is a datetime column (Appwrite has no date-only type); the app treats it as date-only.
+- **Indexes**: relationship columns cannot be indexed; the spatial index on `user_locations.location` is deferred until geo queries land (Phase 3).
+
 ## Databases
 
 ### `plantdoc_main`
@@ -274,21 +285,22 @@ Builds `public_observations` and export files from consented observations only. 
 
 ## Indexes
 
-Recommended starting indexes:
+Indexes created in Phase 0 (relationship columns are not indexable in Appwrite; relationship lookups go through the relation itself):
 
-- `profiles.user_id`
+- `profiles.user_id` (unique)
+- `user_locations.user_id`
 - `plants.user_id`
 - `plants.status`
-- `plants.species_id`
 - `observations.user_id`
-- `observations.plant_id`
 - `observations.observed_at`
-- `treatments.observation_id`
+- `observations.observation_type`
+- `treatments.user_id`
 - `treatments.treatment_type`
 - `public_observations.scientific_name`
 - `public_observations.observed_month`
 - `public_observations.climate_zone`
-- spatial index on `user_locations.location` when using geo queries
+
+Deferred: spatial index on `user_locations.location` until geo queries are introduced (Phase 3).
 
 Add more indexes only after query patterns are real.
 
