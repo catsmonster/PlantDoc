@@ -382,6 +382,7 @@ export const TABLES: TableDef[] = [
       { kind: 'datetime', key: 'published_at', required: true },
     ],
     indexes: [
+      { key: 'idx_source_observation', type: 'unique', columns: ['source_observation_id'] },
       { key: 'idx_scientific_name', type: 'key', columns: ['scientific_name'] },
       { key: 'idx_observed_month', type: 'key', columns: ['observed_month'] },
       { key: 'idx_climate_zone', type: 'key', columns: ['climate_zone'] },

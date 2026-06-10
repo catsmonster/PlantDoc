@@ -10,7 +10,9 @@
     "test": "vitest run",
     "appwrite:check": "tsx scripts/appwrite/check.ts",
     "appwrite:setup": "tsx scripts/appwrite/setup.ts",
-    "appwrite:seed": "tsx scripts/appwrite/seed.ts"
+    "appwrite:seed": "tsx scripts/appwrite/seed.ts",
+    "export:build": "tsx scripts/export/build.ts",
+    "export:publish": "tsx scripts/export/publish.ts"
   },
   "dependencies": {
     "appwrite": "^26.0.0",

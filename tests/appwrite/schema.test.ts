@@ -108,6 +108,14 @@ describe('schema coverage', () => {
     }
   });
 
+  it('public_observations has a unique index on source_observation_id for upserts', () => {
+    const pub = TABLES.find((t) => t.id === 'public_observations')!;
+    const index = pub.indexes.find((i) => i.key === 'idx_source_observation');
+    expect(index).toBeDefined();
+    expect(index!.type).toBe('unique');
+    expect(index!.columns).toEqual(['source_observation_id']);
+  });
+
   it('defines no custom created_at/updated_at columns (built-in timestamps)', () => {
     for (const table of TABLES) {
       const keys = table.columns.map((c) => c.key);

@@ -60,7 +60,7 @@ export function OnboardingScreen({ onComplete }: { onComplete: (profile: Profile
           />
           <CheckboxField
             label="Share my plant-care logs with open research"
-            hint="Sets the default for new log entries; you can change it per entry. Shared data is anonymized: no names, notes, photos, or precise locations ever leave your account — only coarse care and outcome data."
+            hint="Sets the default for new log entries; you can change it per entry. Shared data joins an open dataset (CC BY 4.0, draft license) and is anonymized: no names, notes, photos, or precise locations ever leave your account — only coarse care and outcome data."
             checked={contribute}
             onChange={(e) => setContribute(e.target.checked)}
           />
