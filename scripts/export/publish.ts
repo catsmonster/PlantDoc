@@ -100,11 +100,13 @@ async function main(): Promise<void> {
   }
 
   const version = nextVersion(existingFiles.map((f) => f.name));
-  const stamped = rows.map((row) => ({
-    ...row,
-    dataset_version: version,
-    published_at: generatedAt,
-  }));
+  const stamped = rows.map(
+    (row): PublicRow => ({
+      ...row,
+      dataset_version: version,
+      published_at: generatedAt,
+    }),
+  );
   const species = new Set(stamped.map((r) => r.scientific_name ?? r.species_id ?? 'unknown'));
   const months = [...new Set(stamped.map((r) => String(r.observed_month)))].sort();
 

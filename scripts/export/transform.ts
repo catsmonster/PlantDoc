@@ -141,7 +141,7 @@ export function coarsenGeoCohorts(rows: PublicRow[], k: number): PublicRow[] {
       regionCounts.set(key, (regionCounts.get(key) ?? 0) + 1);
     }
   }
-  const afterRegion = rows.map((row) => {
+  const afterRegion = rows.map((row): PublicRow => {
     if (row.region == null) return { ...row };
     const key = `${speciesKey(row)}|${row.country}|${row.region}`;
     if ((regionCounts.get(key) ?? 0) >= k) return { ...row };
@@ -153,7 +153,7 @@ export function coarsenGeoCohorts(rows: PublicRow[], k: number): PublicRow[] {
       countryCounts.set(key, (countryCounts.get(key) ?? 0) + 1);
     }
   }
-  return afterRegion.map((row) => {
+  return afterRegion.map((row): PublicRow => {
     if (row.country == null) return row;
     const key = `${speciesKey(row)}|${row.country}`;
     if ((countryCounts.get(key) ?? 0) >= k) return row;
