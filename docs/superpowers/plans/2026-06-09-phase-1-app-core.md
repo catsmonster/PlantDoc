@@ -69,10 +69,10 @@
 
 ### Task 7: Live verification + docs + merge
 
-- [ ] **7.1** `npm run dev`; verify in browser: sign up synthetic test user, onboarding, add plant, log watering + measurement + note, upload small photo, archive plant, sign out/in. Fix what breaks.
-- [ ] **7.2** All gates: lint, build, test, appwrite:check.
-- [ ] **7.3** Docs: schema.md permissions section (create:users), privacy note (photo originals private, EXIF not yet stripped on private originals — sanitization deferred to the image pipeline), roadmap tick-offs stay as-is (phase tracking lives in plan/spec docs).
-- [ ] **7.4** Tick plan checkboxes, merge to master locally per finishing-a-development-branch, keep unpushed.
+- [x] **7.1** `npm run dev`; verify in browser: sign up synthetic test user, onboarding, add plant, log watering + measurement + note, upload small photo, archive plant, sign out/in. Fix what breaks.
+- [x] **7.2** All gates: lint, build, test, appwrite:check.
+- [x] **7.3** Docs: schema.md permissions section (create:users), privacy note (photo originals private, EXIF not yet stripped on private originals — sanitization deferred to the image pipeline), roadmap tick-offs stay as-is (phase tracking lives in plan/spec docs).
+- [x] **7.4** Tick plan checkboxes, merge to master locally per finishing-a-development-branch, keep unpushed.
 
 ## Self-Review Notes
 

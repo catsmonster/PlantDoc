@@ -92,10 +92,25 @@ export async function listPlants(userId: string): Promise<Plant[]> {
   return result.rows as unknown as Plant[];
 }
 
-/** Full plant read; the two-way `observations` relationship arrives embedded
- * (relationship columns are not queryable, so this is the timeline read). */
+/** Full plant read with the timeline embedded. Appwrite does not hydrate
+ * relationships unless selected, and relationship columns are not queryable,
+ * so the nested select below IS the timeline read. */
 export async function getPlantWithTimeline(plantId: string): Promise<Plant> {
-  const row = await tablesDB.getRow({ databaseId: db, tableId: 'plants', rowId: plantId });
+  const row = await tablesDB.getRow({
+    databaseId: db,
+    tableId: 'plants',
+    rowId: plantId,
+    queries: [
+      Query.select([
+        '*',
+        'species_id.*',
+        'observations.*',
+        'observations.treatments.*',
+        'observations.measurements.*',
+        'observations.photos.*',
+      ]),
+    ],
+  });
   const plant = row as unknown as Plant;
   plant.observations = [...(plant.observations ?? [])].sort((a, b) =>
     b.observed_at.localeCompare(a.observed_at),
