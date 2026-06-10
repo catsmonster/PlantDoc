@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/*
+ * PlantDoc design tokens (Phase 0 baseline).
+ * Botanical greens paired with slate and soft clay per docs/tech_stack.md.
+ */
+@theme {
+  --color-leaf-50: #f2f7f2;
+  --color-leaf-100: #e0ecdf;
+  --color-leaf-300: #9cc49a;
+  --color-leaf-500: #4e8d4d;
+  --color-leaf-600: #3c7140;
+  --color-leaf-700: #2f5934;
+  --color-leaf-900: #1d3a22;
+
+  --color-clay-100: #f4ece4;
+  --color-clay-300: #ddc3ab;
+  --color-clay-500: #b98a62;
+  --color-clay-700: #8a5f3f;
+}

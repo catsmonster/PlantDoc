@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+.mcp.json
+.idea/
 
 node_modules/
 dist/
