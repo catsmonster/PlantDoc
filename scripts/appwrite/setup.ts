@@ -88,11 +88,16 @@ interface RemoteColumn {
   error?: string;
 }
 
-const stats = { created: 0, exists: 0 };
+const stats = { created: 0, exists: 0, updated: 0 };
 
-function log(action: 'created' | 'exists', resource: string): void {
+function log(action: 'created' | 'exists' | 'updated', resource: string): void {
   stats[action] += 1;
   console.log(`${action.padEnd(7)} ${resource}`);
+}
+
+/** True when two permission lists contain the same grants, ignoring order. */
+function samePermissions(a: string[], b: string[]): boolean {
+  return JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 }
 
 async function ensureDatabase(ctx: AdminContext): Promise<void> {
@@ -108,7 +113,26 @@ async function ensureDatabase(ctx: AdminContext): Promise<void> {
 
 async function ensureTable(ctx: AdminContext, table: TableDef): Promise<void> {
   try {
-    await ctx.tablesDB.getTable({ databaseId: DATABASE_ID, tableId: table.id });
+    const remote = await ctx.tablesDB.getTable({ databaseId: DATABASE_ID, tableId: table.id });
+    const wanted = toPermissions(table.permissions);
+    const broad = (remote.$permissions ?? []).filter((p: string) => p.includes('any'));
+    if (broad.length > 0) {
+      throw new ManualMigrationRequired(
+        `table ${table.id}`,
+        `unexpected public grant(s) present: ${broad.join(', ')}`,
+      );
+    }
+    if (!samePermissions(remote.$permissions ?? [], wanted)) {
+      await ctx.tablesDB.updateTable({
+        databaseId: DATABASE_ID,
+        tableId: table.id,
+        name: table.name,
+        permissions: wanted,
+        rowSecurity: table.rowSecurity,
+      });
+      log('updated', `table ${table.id} permissions`);
+      return;
+    }
     log('exists', `table ${table.id}`);
   } catch (error) {
     if (!isNotFound(error)) throw error;
@@ -378,6 +402,23 @@ async function ensureBucket(ctx: AdminContext, bucket: BucketDef): Promise<void>
         `unexpected public grant(s) present: ${broadGrants.join(', ')}`,
       );
     }
+    const wanted = toPermissions(bucket.permissions);
+    if (!samePermissions(remote.$permissions ?? [], wanted)) {
+      await ctx.storage.updateBucket({
+        bucketId: bucket.id,
+        name: bucket.name,
+        permissions: wanted,
+        fileSecurity: bucket.fileSecurity,
+        enabled: true,
+        maximumFileSize: bucket.maximumFileSize,
+        allowedFileExtensions: bucket.allowedFileExtensions,
+        compression: COMPRESSION[bucket.compression],
+        encryption: bucket.encryption,
+        antivirus: bucket.antivirus,
+      });
+      log('updated', `bucket ${bucket.id} permissions`);
+      return;
+    }
     log('exists', `bucket ${bucket.id}`);
   } catch (error) {
     if (!isNotFound(error)) throw error;
@@ -426,7 +467,9 @@ async function main(): Promise<void> {
 
   for (const bucket of BUCKETS) await ensureBucket(ctx, bucket);
 
-  console.log(`done: ${stats.created} created, ${stats.exists} already existed`);
+  console.log(
+    `done: ${stats.created} created, ${stats.updated} updated, ${stats.exists} already existed`,
+  );
 }
 
 void main().catch((error) => {
