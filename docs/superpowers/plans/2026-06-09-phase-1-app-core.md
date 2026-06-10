@@ -45,10 +45,10 @@
 
 **Files:** Create `src/features/auth/AuthContext.tsx`, `src/features/auth/SignInScreen.tsx`, `src/features/onboarding/OnboardingScreen.tsx`, `src/ui/` primitives. Modify `src/App.tsx`.
 
-- [ ] **4.1** AuthContext: `account.get()` on mount; `signUp(email,pw,name)` (create → createEmailPasswordSession), `signIn`, `signOut`; loading state.
-- [ ] **4.2** SignInScreen: single form toggling sign-in/sign-up, inline errors, mobile-first.
-- [ ] **4.3** App gate: no session → SignInScreen; session without profile → OnboardingScreen (units + contribution default, explains open-data consent); profile → PlantsScreen.
-- [ ] **4.4** Gates green; commit.
+- [x] **4.1** AuthContext: `account.get()` on mount; `signUp(email,pw,name)` (create → createEmailPasswordSession), `signIn`, `signOut`; loading state.
+- [x] **4.2** SignInScreen: single form toggling sign-in/sign-up, inline errors, mobile-first.
+- [x] **4.3** App gate: no session → SignInScreen; session without profile → OnboardingScreen (units + contribution default, explains open-data consent); profile → PlantsScreen.
+- [x] **4.4** Gates green; commit.
 
 ### Task 5: Plant dashboard + form
 
