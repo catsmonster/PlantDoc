@@ -29,15 +29,15 @@
 
 **Files:** Create `scripts/export/build.ts`; modify `package.json` (`export:build`).
 
-- [ ] **3.1** Paginated fetch of consented observations (nested select incl. `plant_id.*`, `plant_id.species_id.*`, `treatments.*`, `measurements.*`, `photos.*`), paginated fetch of existing `public_observations`; transform; diff by `source_observation_id`; createRow/updateRow/deleteRow accordingly; summary counts; non-zero exit on error.
-- [ ] **3.2** Run live: seed-consented observations + Phase 1 test watering row reconciled (seed-0 rows updated in place, revoked/absent sources deleted). Re-run: 0 changes. Commit.
+- [x] **3.1** Paginated fetch of consented observations (nested select incl. `plant_id.*`, `plant_id.species_id.*`, `treatments.*`, `measurements.*`, `photos.*`), paginated fetch of existing `public_observations`; transform; diff by `source_observation_id`; createRow/updateRow/deleteRow accordingly; summary counts; non-zero exit on error.
+- [x] **3.2** Run live: seed-consented observations + Phase 1 test watering row reconciled (seed-0 rows updated in place, revoked/absent sources deleted). Re-run: 0 changes. Commit.
 
 ### Task 4: Publisher script (artifacts)
 
 **Files:** Create `scripts/export/publish.ts`; modify `package.json` (`export:publish`), `.gitignore` (`exports/`).
 
-- [ ] **4.1** Read all `public_observations`, project `PUBLIC_EXPORT_FIELDS`, compute `vN` from existing `manifest-*` files in bucket, write `exports/` artifacts (csv, jsonl, aggregates, manifest, data-dictionary.md, changelog.md with build/revocation counts), upload via InputFile (no public grant unless `--publish`).
-- [ ] **4.2** Run live (without `--publish`); list bucket files via admin SDK to verify presence + no `any` grants. Commit.
+- [x] **4.1** Read all `public_observations`, project `PUBLIC_EXPORT_FIELDS`, compute `vN` from existing `manifest-*` files in bucket, write `exports/` artifacts (csv, jsonl, aggregates, manifest, data-dictionary.md, changelog.md with build/revocation counts), upload via InputFile (no public grant unless `--publish`).
+- [x] **4.2** Run live (without `--publish`); list bucket files via admin SDK to verify presence + no `any` grants (`scripts/export/verify-bucket.ts`: 6 v1 files, 0 public grants). Commit.
 
 ### Task 5: Consent copy, docs, gates, merge
 
