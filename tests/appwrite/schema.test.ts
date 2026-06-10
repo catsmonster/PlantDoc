@@ -43,6 +43,33 @@ describe('schema coverage', () => {
     }
   });
 
+  it('private user tables grant exactly create:users at table level', () => {
+    const privateTables = [
+      'profiles',
+      'user_locations',
+      'plants',
+      'observations',
+      'treatments',
+      'measurements',
+      'photos',
+      'environment_snapshots',
+    ];
+    for (const id of privateTables) {
+      expect(TABLES.find((t) => t.id === id)!.permissions, id).toEqual(['create:users']);
+    }
+    expect(TABLES.find((t) => t.id === 'species')!.permissions).toEqual(['read:users']);
+    expect(TABLES.find((t) => t.id === 'public_observations')!.permissions).toEqual([]);
+  });
+
+  it('only the private images bucket grants create:users', () => {
+    expect(BUCKETS.find((b) => b.id === 'plant-private-images')!.permissions).toEqual([
+      'create:users',
+    ]);
+    for (const id of ['plant-public-images', 'open-data-exports']) {
+      expect(BUCKETS.find((b) => b.id === id)!.permissions, id).toEqual([]);
+    }
+  });
+
   it('no table or bucket grants Role.any()', () => {
     for (const table of TABLES) {
       expect(table.permissions.join(), table.id).not.toMatch(/\bany\b/);

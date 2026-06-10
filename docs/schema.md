@@ -17,6 +17,7 @@ The schema below is implemented declaratively in [`appwrite/schema.ts`](../appwr
 
 - **Timestamps**: `created_at`/`updated_at` columns are not created. Appwrite's built-in `$createdAt`/`$updatedAt` row metadata serves these roles.
 - **Relationships**: columns documented as `relationship/string` (`species_id`, `location_id`, `plant_id`, `observation_id`) are native TablesDB relationship columns, created from the child side as `manyToOne`. Timeline children (`observations.plant_id`, `treatments/measurements/photos.observation_id`) are two-way with cascade delete; optional links (`plants.species_id`, `plants.location_id`, `environment_snapshots.*`) are one-way with set-null on delete. `user_id` stays a plain string everywhere because Auth users are not TablesDB rows.
+- **Relationship reads**: Appwrite does not hydrate relationship columns by default — a plain read returns related-row IDs as strings. Embedding requires an explicit nested select (e.g. `Query.select(['*', 'observations.*', 'observations.treatments.*'])`), which is how the app loads a plant's timeline (`getPlantWithTimeline` in `src/lib/repo.ts`). Relationship columns also cannot be filtered on, so the timeline is always read through the parent row.
 - **Required + default**: Appwrite forbids defaults on required columns. Columns documented as "required with default" (`preferred_units`, `public_contribution_default`, `contribute_to_public_dataset`, `exif_stripped`, `allow_public_image`, `status`) are optional-with-default. Relationship columns cannot be required in Appwrite, so `observations.plant_id` requiredness is enforced at the app layer.
 - **String types**: short indexable strings use `varchar`; private notes/captions/summaries use off-page `text` (keeps rows under Appwrite's 64 KB inline row budget).
 - **Dates**: `plants.acquired_on` is a datetime column (Appwrite has no date-only type); the app treats it as date-only.
@@ -249,6 +250,7 @@ Public exports must exclude:
 - Private originals.
 - Read/write only by owning user and trusted service functions.
 - Do not expose through public export jobs.
+- **Privacy note (Phase 1)**: originals are uploaded as-is, so EXIF metadata (including GPS, if present) survives on the private original. That is acceptable only because files carry owner-only permissions; EXIF stripping happens in the `image-sanitize` pipeline before anything can become public. Nothing from this bucket is ever published.
 
 ### `plant-public-images`
 
@@ -282,6 +284,8 @@ Builds `public_observations` and export files from consented observations only. 
 - Public export rows/files are service-write and public-read only after approval.
 - Service functions perform export generation and privileged maintenance.
 - Avoid granting broad public access to any source table.
+
+As implemented (Phase 1): private user tables and the `plant-private-images` bucket carry a table/bucket-level `create("users")` grant (row/file security is on, and Appwrite cannot grant create per-row, so authenticated users need the table-level grant to insert). Each row/file is then written with owner-only `read/update/delete(user:<id>)` permissions stamped by the app (`src/lib/owner.ts`). `species` is `read("users")` only; `public_observations` and the public/export buckets have no user grants at all. `npm run appwrite:setup` reconciles any permission drift and refuses `any()` grants.
 
 ## Indexes
 

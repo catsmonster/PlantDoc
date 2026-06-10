@@ -81,7 +81,7 @@ export const TABLES: TableDef[] = [
   {
     id: 'profiles',
     name: 'Profiles',
-    permissions: [],
+    permissions: ['create:users'],
     rowSecurity: true,
     columns: [
       userId,
@@ -94,7 +94,7 @@ export const TABLES: TableDef[] = [
   {
     id: 'user_locations',
     name: 'User Locations',
-    permissions: [],
+    permissions: ['create:users'],
     rowSecurity: true,
     columns: [
       userId,
@@ -132,7 +132,7 @@ export const TABLES: TableDef[] = [
   {
     id: 'plants',
     name: 'Plants',
-    permissions: [],
+    permissions: ['create:users'],
     rowSecurity: true,
     columns: [
       userId,
@@ -178,7 +178,7 @@ export const TABLES: TableDef[] = [
   {
     id: 'observations',
     name: 'Observations',
-    permissions: [],
+    permissions: ['create:users'],
     rowSecurity: true,
     columns: [
       userId,
@@ -211,7 +211,7 @@ export const TABLES: TableDef[] = [
   {
     id: 'treatments',
     name: 'Treatments',
-    permissions: [],
+    permissions: ['create:users'],
     rowSecurity: true,
     columns: [
       userId,
@@ -253,7 +253,7 @@ export const TABLES: TableDef[] = [
   {
     id: 'measurements',
     name: 'Measurements',
-    permissions: [],
+    permissions: ['create:users'],
     rowSecurity: true,
     columns: [
       userId,
@@ -279,7 +279,7 @@ export const TABLES: TableDef[] = [
   {
     id: 'photos',
     name: 'Photos',
-    permissions: [],
+    permissions: ['create:users'],
     rowSecurity: true,
     columns: [
       userId,
@@ -306,7 +306,7 @@ export const TABLES: TableDef[] = [
   {
     id: 'environment_snapshots',
     name: 'Environment Snapshots',
-    permissions: [],
+    permissions: ['create:users'],
     rowSecurity: true,
     columns: [
       userId,
@@ -393,7 +393,7 @@ export const BUCKETS: BucketDef[] = [
   {
     id: 'plant-private-images',
     name: 'Plant Private Images',
-    permissions: [],
+    permissions: ['create:users'],
     fileSecurity: true,
     maximumFileSize: 15 * MB,
     allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'heic'],
