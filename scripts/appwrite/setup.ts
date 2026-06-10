@@ -8,11 +8,9 @@
 import {
   AppwriteException,
   Compression,
-  Permission,
   Query,
   RelationMutate,
   RelationshipType,
-  Role,
   TablesDBIndexType,
   type Models,
 } from 'node-appwrite';
@@ -24,10 +22,10 @@ import {
   type BucketDef,
   type ColumnDef,
   type IndexDef,
-  type Perm,
   type TableDef,
 } from '../../appwrite/schema';
 import { createAdminContext, type AdminContext } from './client';
+import { toPermissions } from './permissions';
 
 class ManualMigrationRequired extends Error {
   constructor(resource: string, detail: string) {
@@ -38,28 +36,6 @@ class ManualMigrationRequired extends Error {
 
 function isNotFound(error: unknown): boolean {
   return error instanceof AppwriteException && error.code === 404;
-}
-
-/** Maps the schema permission DSL ('read:users', 'read:user:<id>') to SDK strings. */
-export function toPermissions(perms: Perm[]): string[] {
-  return perms.map((perm) => {
-    const [action, role, id] = perm.split(':');
-    const roleString =
-      role === 'users' ? Role.users() : role === 'user' && id ? Role.user(id) : undefined;
-    if (!roleString) throw new Error(`Unsupported permission DSL entry: ${perm}`);
-    switch (action) {
-      case 'read':
-        return Permission.read(roleString);
-      case 'create':
-        return Permission.create(roleString);
-      case 'update':
-        return Permission.update(roleString);
-      case 'delete':
-        return Permission.delete(roleString);
-      default:
-        throw new Error(`Unsupported permission action: ${perm}`);
-    }
-  });
 }
 
 const RELATION_TYPE = {
@@ -271,12 +247,45 @@ async function ensureColumn(ctx: AdminContext, tableId: string, col: ColumnDef):
       tableId,
       key: col.key,
     })) as unknown as RemoteColumn;
+    if (['failed', 'stuck'].includes(remote.status)) {
+      // A failed async create never became a real column and holds no data;
+      // clearing it is recovery, not a destructive migration.
+      console.log(`recreating failed column ${tableId}.${col.key} (${remote.error ?? 'no detail'})`);
+      await ctx.tablesDB.deleteColumn({ databaseId: DATABASE_ID, tableId, key: col.key });
+      await createColumn(ctx, tableId, col);
+      log('created', `column ${tableId}.${col.key}`);
+      return;
+    }
     assertColumnCompatible(tableId, col, remote);
     log('exists', `column ${tableId}.${col.key}`);
   } catch (error) {
     if (!isNotFound(error)) throw error;
     await createColumn(ctx, tableId, col);
     log('created', `column ${tableId}.${col.key}`);
+  }
+}
+
+/**
+ * Relationship creation also builds indexes server-side; creating another
+ * relationship on the same table while one is still processing can fail.
+ * Wait for the column to settle before creating the next one.
+ */
+async function waitForColumn(ctx: AdminContext, tableId: string, key: string): Promise<void> {
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    const remote = (await ctx.tablesDB.getColumn({
+      databaseId: DATABASE_ID,
+      tableId,
+      key,
+    })) as unknown as RemoteColumn;
+    if (remote.status === 'available') return;
+    if (['failed', 'stuck'].includes(remote.status)) {
+      throw new Error(`column ${tableId}.${key} ${remote.status}: ${remote.error ?? 'no detail'}`);
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for column ${tableId}.${key} (${remote.status})`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 }
 
@@ -405,6 +414,7 @@ async function main(): Promise<void> {
   for (const table of TABLES) {
     for (const col of table.columns.filter((c) => c.kind === 'relationship')) {
       await ensureColumn(ctx, table.id, col);
+      await waitForColumn(ctx, table.id, col.key);
     }
   }
   for (const table of TABLES) await waitForColumns(ctx, table);

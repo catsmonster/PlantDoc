@@ -6,7 +6,7 @@
 import { DATABASE_ID } from '../../appwrite/schema';
 import { SEED_ROWS } from '../../appwrite/seed-data';
 import { createAdminContext } from './client';
-import { toPermissions } from './setup';
+import { toPermissions } from './permissions';
 
 async function main(): Promise<void> {
   const ctx = await createAdminContext();
