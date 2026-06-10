@@ -62,10 +62,10 @@
 
 **Files:** Create `src/features/timeline/PlantScreen.tsx`, `src/features/timeline/LogSheet.tsx`, `src/features/timeline/PhotoButton.tsx`.
 
-- [ ] **6.1** PlantScreen: header (names, placement), timeline list grouped by day, icons per observation type, child detail line (e.g. "Watered · 250 ml · top water"), unit display via profile.
-- [ ] **6.2** LogSheet bottom sheet: type picker; watering fast path (preset 250 ml); fields per type; consent checkbox defaulting from profile; creates rows via `repo.createLog`.
-- [ ] **6.3** PhotoButton: capture/upload → `repo.uploadPhoto`; photo observations render a thumbnail via `storage.getFilePreview` (falls back to file icon on error).
-- [ ] **6.4** Gates green; commit.
+- [x] **6.1** PlantScreen: header (names, placement), timeline list grouped by day, icons per observation type, child detail line (e.g. "Watered · 250 ml · top water"), unit display via profile.
+- [x] **6.2** LogSheet bottom sheet: type picker; watering fast path (preset 250 ml); fields per type; consent checkbox defaulting from profile; creates rows via `repo.createLog`.
+- [x] **6.3** PhotoButton: capture/upload → `repo.uploadPhoto`; photo observations render a thumbnail via `storage.getFilePreview` (falls back to file icon on error).
+- [x] **6.4** Gates green; commit.
 
 ### Task 7: Live verification + docs + merge
 

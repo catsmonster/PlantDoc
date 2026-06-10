@@ -6,6 +6,7 @@ import { SignInScreen } from './features/auth/SignInScreen';
 import { OnboardingScreen } from './features/onboarding/OnboardingScreen';
 import { PlantForm } from './features/plants/PlantForm';
 import { PlantsScreen } from './features/plants/PlantsScreen';
+import { PlantScreen } from './features/timeline/PlantScreen';
 import { getProfile } from './lib/repo';
 import type { Plant, Profile } from './lib/types';
 import { Button } from './ui/Button';
@@ -90,13 +91,13 @@ function SignedIn({ user }: { user: Models.User<Models.Preferences> }) {
           />
         )}
         {view.name === 'plant' && (
-          // Timeline screen lands in the next task; minimal stop-gap for navigation.
-          <div className="space-y-4 py-6">
-            <p className="text-sm text-slate-500">Plant timeline coming up.</p>
-            <Button variant="secondary" onClick={() => setView({ name: 'plants' })}>
-              ← Back to plants
-            </Button>
-          </div>
+          <PlantScreen
+            plantId={view.plantId}
+            userId={user.$id}
+            profile={profile}
+            onEdit={(plant) => setView({ name: 'edit-plant', plant })}
+            onBack={() => setView({ name: 'plants' })}
+          />
         )}
       </main>
     </div>
