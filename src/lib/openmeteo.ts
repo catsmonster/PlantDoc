@@ -1,0 +1,173 @@
+/**
+ * Thin Open-Meteo client (keyless, CORS-enabled, browser-direct). Every
+ * request gets coordinates rounded to ~11 km via forApi — exact coordinates
+ * never leave the device. All functions resolve to null/[] on failure;
+ * callers decide whether that is fatal (location form) or silent (log-time
+ * enrichment).
+ */
+import { forApi, type Coords } from './geo';
+import { aggregateMonthly, type MonthlyNormals } from './koppen';
+
+type FetchFn = typeof fetch;
+
+export interface GeocodeResult {
+  name: string;
+  region: string | null;
+  country: string | null;
+  latitude: number;
+  longitude: number;
+}
+
+export async function geocodeCity(name: string, fetchFn: FetchFn = fetch): Promise<GeocodeResult[]> {
+  try {
+    const url =
+      'https://geocoding-api.open-meteo.com/v1/search?' +
+      new URLSearchParams({ name, count: '5', language: 'en', format: 'json' });
+    const response = await fetchFn(url);
+    if (!response.ok) return [];
+    const body = (await response.json()) as {
+      results?: { name: string; latitude: number; longitude: number; country?: string; admin1?: string }[];
+    };
+    return (body.results ?? []).map((r) => ({
+      name: r.name,
+      region: r.admin1 ?? null,
+      country: r.country ?? null,
+      latitude: r.latitude,
+      longitude: r.longitude,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+interface DailyResponse {
+  daily?: {
+    time?: string[];
+    temperature_2m_mean?: (number | null)[];
+    temperature_2m_max?: (number | null)[];
+    temperature_2m_min?: (number | null)[];
+    precipitation_sum?: (number | null)[];
+    relative_humidity_2m_mean?: (number | null)[];
+    daylight_duration?: (number | null)[];
+    weather_code?: (number | null)[];
+  };
+}
+
+/**
+ * Monthly climate normals from the last five complete years of daily data.
+ * An approximation of the 30-year normal that is good enough for a coarse
+ * Köppen zone (see design spec decision 2).
+ */
+export async function fetchClimateNormals(
+  coords: Coords,
+  fetchFn: FetchFn = fetch,
+): Promise<MonthlyNormals | null> {
+  try {
+    const { lat, lon } = forApi(coords);
+    const year = new Date().getUTCFullYear();
+    const url =
+      'https://archive-api.open-meteo.com/v1/archive?' +
+      new URLSearchParams({
+        latitude: String(lat),
+        longitude: String(lon),
+        start_date: `${year - 5}-01-01`,
+        end_date: `${year - 1}-12-31`,
+        daily: 'temperature_2m_mean,precipitation_sum',
+        timezone: 'UTC',
+      });
+    const response = await fetchFn(url);
+    if (!response.ok) return null;
+    const body = (await response.json()) as DailyResponse;
+    const daily = body.daily;
+    if (!daily?.time || !daily.temperature_2m_mean || !daily.precipitation_sum) return null;
+    return aggregateMonthly(daily.time, daily.temperature_2m_mean, daily.precipitation_sum);
+  } catch {
+    return null;
+  }
+}
+
+export interface DailyWeather {
+  outdoorTempC: number | null;
+  humidityPercent: number | null;
+  photoperiodHours: number | null;
+  summary: string | null;
+}
+
+const WEATHER_SUMMARIES: [number, string][] = [
+  [0, 'clear sky'],
+  [1, 'mainly clear'],
+  [2, 'partly cloudy'],
+  [3, 'overcast'],
+  [45, 'fog'],
+  [48, 'rime fog'],
+  [51, 'light drizzle'],
+  [53, 'drizzle'],
+  [55, 'heavy drizzle'],
+  [56, 'freezing drizzle'],
+  [57, 'freezing drizzle'],
+  [61, 'light rain'],
+  [63, 'rain'],
+  [65, 'heavy rain'],
+  [66, 'freezing rain'],
+  [67, 'freezing rain'],
+  [71, 'light snow'],
+  [73, 'snow'],
+  [75, 'heavy snow'],
+  [77, 'snow grains'],
+  [80, 'light showers'],
+  [81, 'showers'],
+  [82, 'heavy showers'],
+  [85, 'snow showers'],
+  [86, 'snow showers'],
+  [95, 'thunderstorm'],
+  [96, 'thunderstorm with hail'],
+  [99, 'thunderstorm with hail'],
+];
+
+function weatherSummary(code: number | null | undefined): string | null {
+  if (code == null) return null;
+  return WEATHER_SUMMARIES.find(([c]) => c === code)?.[1] ?? null;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const ARCHIVE_CUTOFF_DAYS = 5;
+const DAILY_VARS =
+  'temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean,daylight_duration,weather_code';
+
+/** Daily weather for one ISO date: archive for the past, forecast for recent/near-future dates. */
+export async function fetchDailyWeather(
+  coords: Coords,
+  isoDate: string,
+  fetchFn: FetchFn = fetch,
+): Promise<DailyWeather | null> {
+  try {
+    const { lat, lon } = forApi(coords);
+    const ageDays = (Date.now() - Date.parse(`${isoDate}T00:00:00Z`)) / DAY_MS;
+    const base = { latitude: String(lat), longitude: String(lon), daily: DAILY_VARS };
+    const url =
+      ageDays > ARCHIVE_CUTOFF_DAYS
+        ? 'https://archive-api.open-meteo.com/v1/archive?' +
+          new URLSearchParams({ ...base, start_date: isoDate, end_date: isoDate, timezone: 'UTC' })
+        : 'https://api.open-meteo.com/v1/forecast?' +
+          new URLSearchParams({ ...base, past_days: '7', forecast_days: '7', timezone: 'UTC' });
+    const response = await fetchFn(url);
+    if (!response.ok) return null;
+    const body = (await response.json()) as DailyResponse;
+    const daily = body.daily;
+    const index = daily?.time?.indexOf(isoDate) ?? -1;
+    if (!daily || index < 0) return null;
+
+    const max = daily.temperature_2m_max?.[index] ?? null;
+    const min = daily.temperature_2m_min?.[index] ?? null;
+    const daylightSeconds = daily.daylight_duration?.[index] ?? null;
+    return {
+      outdoorTempC: max != null && min != null ? Math.round(((max + min) / 2) * 10) / 10 : null,
+      humidityPercent: daily.relative_humidity_2m_mean?.[index] ?? null,
+      photoperiodHours:
+        daylightSeconds != null ? Math.round((daylightSeconds / 3600) * 10) / 10 : null,
+      summary: weatherSummary(daily.weather_code?.[index]),
+    };
+  } catch {
+    return null;
+  }
+}
