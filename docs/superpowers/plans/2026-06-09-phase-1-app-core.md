@@ -54,9 +54,9 @@
 
 **Files:** Create `src/features/plants/PlantsScreen.tsx`, `src/features/plants/PlantForm.tsx`.
 
-- [ ] **5.1** Dashboard: list cards (nickname, common/species name, placement chip, status), add button, archived toggle, empty/loading/error states.
-- [ ] **5.2** PlantForm (add/edit): nickname*, common_name, species select (seeded) + species_text, placement_type, acquired_on, status (edit only). Archive action on edit.
-- [ ] **5.3** Gates green; commit.
+- [x] **5.1** Dashboard: list cards (nickname, common/species name, placement chip, status), add button, archived toggle, empty/loading/error states.
+- [x] **5.2** PlantForm (add/edit): nickname*, common_name, species select (seeded) + species_text, placement_type, acquired_on, status (edit only). Archive action on edit.
+- [x] **5.3** Gates green; commit.
 
 ### Task 6: Timeline + logging + photo
 
