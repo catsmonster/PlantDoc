@@ -43,9 +43,9 @@
 
 **Files:** Modify `src/features/onboarding/OnboardingScreen.tsx`, `src/features/timeline/LogSheet.tsx`; create `docs/open-data.md`; modify `docs/schema.md`.
 
-- [ ] **5.1** Consent hints mention "open data (CC BY 4.0, draft)". Lint/build/test green.
-- [ ] **5.2** `docs/open-data.md`: how to run build/publish, versioning, revocation behavior, publish flag. schema.md: index + pipeline note.
-- [ ] **5.3** All gates (lint, build, test, appwrite:check). Tick checkboxes, merge to master locally, keep unpushed.
+- [x] **5.1** Consent hints mention "open data (CC BY 4.0, draft)". Lint/build/test green.
+- [x] **5.2** `docs/open-data.md`: how to run build/publish, versioning, revocation behavior, publish flag. schema.md: index + pipeline note.
+- [x] **5.3** All gates (lint, build, test 51/51, appwrite:check "all good"). Tick checkboxes, merge to master locally, keep unpushed.
 
 ## Self-Review Notes
 

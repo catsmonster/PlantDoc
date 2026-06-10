@@ -233,7 +233,7 @@ export function LogSheet({
           />
           <CheckboxField
             label="Contribute to open dataset"
-            hint="Anonymized care/outcome data only — never notes, photos, or location details."
+            hint="Anonymized care/outcome data only, released as open data (CC BY 4.0, draft) — never notes, photos, or location details."
             checked={contribute}
             onChange={(e) => setContribute(e.target.checked)}
           />

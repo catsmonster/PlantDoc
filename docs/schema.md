@@ -262,6 +262,7 @@ Public exports must exclude:
 - Versioned CSV/JSONL exports.
 - Public read once a dataset version is approved.
 - Include a data dictionary and changelog with every release.
+- **As implemented (Phase 2)**: files upload admin-only; per-file public read is granted only by `npm run export:publish -- --publish` after review. See `docs/open-data.md`.
 
 ## Functions
 
@@ -276,6 +277,8 @@ Looks up climate/weather context from private location data and writes `environm
 ### `public-export`
 
 Builds `public_observations` and export files from consented observations only. Applies privacy thresholds before publishing.
+
+**As implemented (Phase 2)**: this runs as two admin scripts rather than an Appwrite Function — `npm run export:build` (table reconciliation, including deletion of revoked/removed sources) and `npm run export:publish` (versioned artifact generation/upload). Operations guide: `docs/open-data.md`. A scheduled Function can wrap the same modules later without changing the privacy boundary (`scripts/export/transform.ts`).
 
 ## Permissions
 
@@ -303,6 +306,7 @@ Indexes created in Phase 0 (relationship columns are not indexable in Appwrite; 
 - `public_observations.scientific_name`
 - `public_observations.observed_month`
 - `public_observations.climate_zone`
+- `public_observations.source_observation_id` (unique, added Phase 2 — upsert/revocation key for the export builder)
 
 Deferred: spatial index on `user_locations.location` until geo queries are introduced (Phase 3).
 
