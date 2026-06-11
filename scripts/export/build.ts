@@ -48,6 +48,7 @@ export async function buildPublicObservations(): Promise<BuildSummary> {
         '*',
         'plant_id.*',
         'plant_id.species_id.*',
+        'plant_id.location_id.*',
         'treatments.*',
         'measurements.*',
         'photos.*',

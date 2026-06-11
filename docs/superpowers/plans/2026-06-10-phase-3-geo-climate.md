@@ -42,22 +42,22 @@
 
 **Files:** Modify `src/lib/repo.ts`, `src/lib/types.ts`, `src/App.tsx`, `src/features/plants/PlantsScreen.tsx`, `src/features/plants/PlantForm.tsx`; create `src/features/locations/LocationsScreen.tsx`, `src/features/locations/LocationForm.tsx`.
 
-- [ ] **5.1** Repo: `listLocations()`, `createLocation(input)` (owner perms, stores `forStorage` coords + computed climate_zone), `deleteLocation(id)`; `UserLocation` type. `PlantForm`: optional location select (loads locations, value plant.location_id, handles string|object like species). `getPlantWithTimeline`: add `observations.environment_snapshots.*` select; sort/attach.
-- [ ] **5.2** UI: `LocationsScreen` (list + delete + "Add location"), `LocationForm` (city search via `geocodeCity`, result picker, precision select with export-impact hint + Open-Meteo disclosure, computes climate zone via `fetchClimateNormals`+`koppenZone` on save). `App.tsx` view `{name:'locations'}`, entry point from PlantsScreen header. Lint/build/test green. Commit.
+- [x] **5.1** Repo: `listLocations()`, `createLocation(input)` (owner perms, stores `forStorage` coords + computed climate_zone), `deleteLocation(id)`; `UserLocation` type. `PlantForm`: optional location select (loads locations, value plant.location_id, handles string|object like species). `getPlantWithTimeline`: add `observations.environment_snapshots.*` select; sort/attach.
+- [x] **5.2** UI: `LocationsScreen` (list + delete + "Add location"), `LocationForm` (city search via `geocodeCity`, result picker, precision select with export-impact hint + Open-Meteo disclosure, computes climate zone via `fetchClimateNormals`+`koppenZone` on save). `App.tsx` view `{name:'locations'}`, entry point in app header. Lint/build/test green. Commit.
 
 ### Task 6: Log-time enrichment + timeline display
 
 **Files:** Modify `src/lib/repo.ts`, `src/features/timeline/LogSheet.tsx`, `src/features/timeline/PlantScreen.tsx`, `src/lib/types.ts`.
 
-- [ ] **6.1** `createEnvironmentSnapshot(input)` repo fn (owner perms, source `weather_api`). After `createLog` succeeds in LogSheet: if plant's location has coords, `fetchDailyWeather` → snapshot row linked to the new observation; failures `console.warn` only, UI unaffected.
-- [ ] **6.2** `PlantScreen` TimelineEntry renders environment line ("18°C · 64% RH · partly cloudy") when `observation.environment_snapshots[0]` exists. Lint/build/test green. Commit.
+- [x] **6.1** `createEnvironmentSnapshot(input)` repo fn (owner perms, source `weather_api`). After `createLog` succeeds in LogSheet: if plant's location has coords, `fetchDailyWeather` → snapshot row linked to the new observation (via `src/lib/enrich.ts`); failures `console.warn` only, UI unaffected.
+- [x] **6.2** `PlantScreen` TimelineEntry renders environment line ("18°C · 64% RH · partly cloudy") when `observation.environment_snapshots[0]` exists. Lint/build/test green. Commit.
 
 ### Task 7: Export pipeline geo wiring
 
 **Files:** Modify `scripts/export/transform.ts`, `scripts/export/build.ts`, `tests/export/transform.test.ts`.
 
-- [ ] **7.1** Tests: `SourceLocation` on `plant_id.location_id`; toPublicRow uses `exportGeo` mapping (regional location → country+region+climate_zone; climate → no region; country → country only; no location → nulls); serialized output never contains city/postal/lat/lon markers from fixtures. FAIL.
-- [ ] **7.2** Implement via `src/lib/geo.ts` `exportGeo`; build.ts select adds `plant_id.location_id.*`. PASS. Run `npm run export:build` live (no location rows yet → 0 changes expected). Commit.
+- [x] **7.1** Tests: `SourceLocation` on `plant_id.location_id`; toPublicRow uses `exportGeo` mapping (regional location → country+region+climate_zone; climate → no region; country → country only; no location → nulls); serialized output never contains city/postal/lat/lon markers from fixtures. FAIL.
+- [x] **7.2** Implement via `src/lib/geo.ts` `exportGeo`; build.ts select adds `plant_id.location_id.*`; coarsening keeps `geo_precision: climate` when only the zone survives. PASS. Live: 4 seed rows gained climate zones (regional locations coarsened to climate-only, cohorts < 5); re-run 0 changes. Commit.
 
 ### Task 8: Docs, gates, live verification, merge
 
