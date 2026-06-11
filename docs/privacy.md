@@ -65,6 +65,20 @@ Use precision tiers:
 
 Public exports should prefer climate zone and coarse region over exact city. Add k-anonymity or minimum cohort checks before publishing small geographic/species groups.
 
+### As Implemented (Phase 3)
+
+- Coordinates are rounded to **2 decimal places (~1.1 km) before storage** in `user_locations`; the exact device/geocoder value is discarded and never persists anywhere.
+- Every outbound weather/geocoding API call rounds further to **1 decimal place (~11 km)**, so no third party ever receives finer than ~11 km.
+- Geography reaches the public export only through the precision-tier projection in docs/open-data.md (country/region/climate zone at most); city, postal prefix, coordinates, and location labels never export.
+
+## Third-Party Services
+
+Geocoding (location setup) and weather enrichment (log entries) call **Open-Meteo** directly from the browser. These requests are keyless, carry no account identity, and include only coordinates rounded to 1 decimal place (~11 km) plus dates. No other third-party service receives user data. The location form discloses this in-app at the point of entry. If a provider is added or replaced, this section and the in-app disclosure must be updated first.
+
+## Device-Local Data
+
+Unsaved log-entry drafts are kept in browser `localStorage` (keyed per user and plant) so a failed save or reload does not lose typed input. Drafts never sync, never reach Appwrite or any third party, and are deleted on successful save or when the form returns to its pristine state. Insight feedback (thumbs up/down on care insights) is stored server-side as owner-only rows and is excluded from public exports.
+
 ## Image Policy
 
 - Strip or ignore EXIF metadata on upload.

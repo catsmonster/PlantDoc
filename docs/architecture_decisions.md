@@ -160,3 +160,58 @@ Appwrite TablesDB relationships are no longer beta, and Phase 0 implements the d
 ### References
 
 - [Appwrite relationships docs](https://appwrite.io/docs/products/databases/relationships)
+
+## ADR-007: Browser-Direct Open-Meteo Enrichment With Coordinate Rounding Tiers
+
+- **Status**: Accepted.
+- **Date**: 2026-06-10
+
+### Context
+
+Phase 3 needs geocoding (location setup), a climate zone per location, and per-observation weather context. The roadmap sketched a `climate-enrich` Appwrite Function, but Open-Meteo's geocoding, forecast, and archive APIs are keyless and CORS-enabled, so a server-side Function would add deploy surface and latency without protecting any secret. Exact coordinates are private data (docs/privacy.md tier 1) and should neither persist nor leave the device at full precision.
+
+### Decision
+
+- Call Open-Meteo directly from the browser at log time; no Appwrite Function, no API key, no backend transit of coordinates.
+- Round coordinates in two tiers: **2 decimal places (~1.1 km) for storage** in `user_locations`, **1 decimal place (~11 km) for every outbound API call**. Exact device/geocoder coordinates are discarded after rounding.
+- Compute the Köppen-Geiger climate zone in-app from 5-year Open-Meteo archive monthly normals instead of bundling a raster dataset or calling a zone-lookup service.
+- Store weather context as `environment_snapshots` rows linked to observations via a two-way cascade relationship (consistent with ADR-006 timeline children); enrichment is best-effort and never blocks saving a log entry.
+
+### Consequences
+
+- No server secret exists for weather/geocoding, and `APPWRITE_API_KEY` stays out of every enrichment path.
+- Published or stored geography can never be finer than ~1.1 km, and third parties (Open-Meteo) never see better than ~11 km.
+- Offline or failed enrichment degrades to a log entry without weather context — acceptable by design.
+- If Open-Meteo changes terms or rate limits, enrichment switches providers or moves server-side under a new ADR; rows already written are unaffected.
+
+### References
+
+- [Open-Meteo docs](https://open-meteo.com/en/docs)
+- docs/schema.md (`environment_snapshots`, `user_locations` as-implemented notes)
+
+## ADR-008: Deterministic Care Insights Recomputed At Render, Feedback As The Only Stored Artifact
+
+- **Status**: Accepted.
+- **Date**: 2026-06-10
+
+### Context
+
+Phase 4 calls for care recommendations. AI-generated advice requires a provider key (absent from the environment), plus opt-in consent, provenance labeling, and deletion-coupling guarantees. The user's own timeline already supports useful deterministic signals: watering cadence, growth trends, and stress indicators.
+
+### Decision
+
+- Implement insights as a pure function (`src/lib/insights.ts`) over the already-hydrated plant timeline: median watering interval (median, not mean, to resist vacation gaps), least-squares growth slope per 30 days with a dead-band, and rule-based stress signals. Insights are **recomputed on every render and never stored** — no staleness, nothing to migrate, deleting an observation instantly changes the advice.
+- Store only user feedback: an `insight_feedback` table (one verdict per user/plant/insight kind), owner-only rows, two-way cascade from `plants` so feedback never outlives its plant. Feedback is private and excluded from public export fields.
+- Label the panel "Experimental" with a provenance line ("computed from your logs, not a prediction").
+- Defer the AI track until a provider key exists, and defer cross-user baselines until public-dataset cohorts pass the k=5 suppression threshold.
+
+### Consequences
+
+- Insights cost zero storage and zero backend executions; correctness is unit-testable as pure functions.
+- Feedback data accumulates as ground truth for evaluating any future AI track before it ships.
+- Thresholds (3 waterings minimum, 1.5× overdue factor, ±0.5 trend dead-band) are code constants; tuning them is a code change, not a migration.
+
+### References
+
+- docs/superpowers/specs/2026-06-10-phase-4-recommendations-design.md
+- docs/schema.md (`insight_feedback`)
