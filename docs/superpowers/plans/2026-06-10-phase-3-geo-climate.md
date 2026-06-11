@@ -14,29 +14,29 @@
 
 **Files:** Create `src/lib/geo.ts`, `tests/lib/geo.test.ts`.
 
-- [ ] **1.1** Tests first: `roundCoord(v, dp)` half-up rounding; `forStorage({lat,lon})` = 2 dp; `forApi({lat,lon})` = 1 dp; `exportGeo(location)` mapping — exact/local/regional → {country, region, climate_zone, geo_precision:'regional'}; climate → {country, climate_zone, region:null, geo_precision:'climate'}; country → {country only, geo_precision:'country'}; null/missing location → all-null with geo_precision:'country'; city/postal_code_prefix never present in output keys. FAIL.
-- [ ] **1.2** Implement; export `ExportGeo` type `{ country: string | null; region: string | null; climate_zone: string | null; geo_precision: 'regional' | 'climate' | 'country' }`. PASS. Commit.
+- [x] **1.1** Tests first: `roundCoord(v, dp)` half-up rounding; `forStorage({lat,lon})` = 2 dp; `forApi({lat,lon})` = 1 dp; `exportGeo(location)` mapping — exact/local/regional → {country, region, climate_zone, geo_precision:'regional'}; climate → {country, climate_zone, region:null, geo_precision:'climate'}; country → {country only, geo_precision:'country'}; null/missing location → all-null with geo_precision:'country'; city/postal_code_prefix never present in output keys. FAIL.
+- [x] **1.2** Implement; export `ExportGeo` type `{ country: string | null; region: string | null; climate_zone: string | null; geo_precision: 'regional' | 'climate' | 'country' }`. PASS. Commit.
 
 ### Task 2: Köppen module (TDD)
 
 **Files:** Create `src/lib/koppen.ts`, `tests/lib/koppen.test.ts`.
 
-- [ ] **2.1** Tests first: `aggregateMonthly(dates, tempMeans, precipSums)` returns `{ tempC: number[12], precipMm: number[12] }` averaging temp and averaging monthly precip totals across years, null if any month has no data; `koppenZone(tempC, precipMm, latitudeSign)` fixtures — Af (Singapore-like), Aw (savanna), BWh (hot desert), BSk (cold steppe), Csa (Mediterranean), Cfb (oceanic), Dfb (humid continental), ET (tundra); returns null on 12-month input violations. FAIL.
-- [ ] **2.2** Implement standard Köppen-Geiger rules (E by warmest month <10°C; B by aridity threshold `20*meanT + offset` with summer/winter precip split; A by coldest month ≥18°C; C/D by coldest month threshold 0°C; second letter s/w/f; third letter a/b/c + h/k for B). PASS. Commit.
+- [x] **2.1** Tests first: `aggregateMonthly(dates, tempMeans, precipSums)` returns `{ tempC: number[12], precipMm: number[12] }` averaging temp and averaging monthly precip totals across years, null if any month has no data; `koppenZone(tempC, precipMm, latitudeSign)` fixtures — Af (Singapore-like), Aw (savanna), BWh (hot desert), BSk (cold steppe), Csa (Mediterranean), Cfb (oceanic), Dfb (humid continental), ET (tundra); returns null on 12-month input violations. FAIL.
+- [x] **2.2** Implement standard Köppen-Geiger rules (E by warmest month <10°C; B by aridity threshold `20*meanT + offset` with summer/winter precip split; A by coldest month ≥18°C; C/D by coldest month threshold 0°C; second letter s/w/f; third letter a/b/c + h/k for B). PASS. Commit.
 
 ### Task 3: Open-Meteo client
 
 **Files:** Create `src/lib/openmeteo.ts`, `tests/lib/openmeteo.test.ts`.
 
-- [ ] **3.1** Tests with injected fetch stub: `geocodeCity(name, fetchFn)` → top 5 results `{name, region, country, latitude, longitude}` from geocoding-api response, [] on no results; `fetchClimateNormals(coords, fetchFn)` calls archive-api with 1-dp coords, last 5 complete years, daily `temperature_2m_mean,precipitation_sum`, returns aggregated monthly normals via koppen module; `fetchDailyWeather(coords, isoDate, fetchFn)` picks archive vs forecast (date older than 5 days → archive), returns `{ outdoorTempC, humidityPercent, photoperiodHours, summary }` (weathercode → text map), null on API failure. Assert request URLs contain rounded coords only. FAIL.
-- [ ] **3.2** Implement; default `fetchFn = fetch`. PASS. Commit.
+- [x] **3.1** Tests with injected fetch stub: `geocodeCity(name, fetchFn)` → top 5 results `{name, region, country, latitude, longitude}` from geocoding-api response, [] on no results; `fetchClimateNormals(coords, fetchFn)` calls archive-api with 1-dp coords, last 5 complete years, daily `temperature_2m_mean,precipitation_sum`, returns aggregated monthly normals via koppen module; `fetchDailyWeather(coords, isoDate, fetchFn)` picks archive vs forecast (date older than 5 days → archive), returns `{ outdoorTempC, humidityPercent, photoperiodHours, summary }` (weathercode → text map), null on API failure. Assert request URLs contain rounded coords only. FAIL.
+- [x] **3.2** Implement; default `fetchFn = fetch`. PASS. Live API variable names verified (archive + forecast). Commit.
 
 ### Task 4: Snapshot relationship migration
 
 **Files:** Modify `appwrite/schema.ts`, `tests/appwrite/schema.test.ts`, `scripts/appwrite/setup.ts` (only if reconcile can't replace relationships).
 
-- [ ] **4.1** Schema: `environment_snapshots.observation_id` → `twoWay: true`, `twoWayKey: 'environment_snapshots'`, `onDelete: 'cascade'`. Test asserts twoWay+cascade. PASS locally.
-- [ ] **4.2** Live: delete stale one-way column on empty table, re-run `npm run appwrite:setup` to create the two-way version; `npm run appwrite:check` green. Commit.
+- [x] **4.1** Schema: `environment_snapshots.observation_id` → `twoWay: true`, `twoWayKey: 'environment_snapshots'`, `onDelete: 'cascade'`. Test asserts twoWay+cascade. PASS locally.
+- [x] **4.2** Live: `scripts/appwrite/migrate-snapshot-rel.ts` deleted the 2 seed snapshot rows + one-way column; `appwrite:setup` recreated it two-way; `appwrite:seed` restored seed rows; `appwrite:check` green. Commit.
 
 ### Task 5: Locations repo + UI
 

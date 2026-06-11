@@ -319,12 +319,16 @@ export const TABLES: TableDef[] = [
         onDelete: 'setNull',
       },
       {
+        // Two-way so timelines hydrate snapshots from the observation side
+        // (relationship columns cannot be filtered); cascade so enrichment
+        // derived from a deleted observation never outlives it.
         kind: 'relationship',
         key: 'observation_id',
         relatedTableId: 'observations',
         relationType: 'manyToOne',
-        twoWay: false,
-        onDelete: 'setNull',
+        twoWay: true,
+        twoWayKey: 'environment_snapshots',
+        onDelete: 'cascade',
       },
       { kind: 'datetime', key: 'recorded_at', required: true },
       {
