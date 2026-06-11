@@ -63,9 +63,9 @@
 
 **Files:** Modify `docs/schema.md`, `docs/open-data.md`.
 
-- [ ] **8.1** Live browser verification (preview MCP): create location (geocoded, climate zone computed), assign to plant, save a log, snapshot appears on timeline with environment line; verify snapshot row perms owner-only.
-- [ ] **8.2** Docs: schema.md "As implemented (Phase 3)" notes (two-way snapshot relationship, precision gating); open-data.md geo-fields section update.
-- [ ] **8.3** All gates (lint, build, test, appwrite:check). Tick checkboxes, merge to master locally, keep unpushed.
+- [x] **8.1** Live browser verification (preview MCP): created "Test home" location (Valencia geocoded, Csa computed from 5-year normals), assigned to new plant, logged a watering — timeline shows "🌤️ 22.1°C · 71% RH · overcast"; forecast call used 1-dp coords (39.5, -0.4); snapshot row perms owner-only (verified via network response body); no enrichment warnings.
+- [x] **8.2** Docs: schema.md "As implemented (Phase 3)" notes (two-way snapshot relationship, location creation/rounding/Köppen, client-side climate-enrich); open-data.md "Geography fields (Phase 3)" section (precision-tier table + coarsening relabel).
+- [x] **8.3** All gates green (lint, build, test 89/89, appwrite:check). Merged to master locally, kept unpushed.
 
 ## Self-Review Notes
 

@@ -38,6 +38,27 @@ cut a release.
   observations produce rows; notes and photos are skipped entirely.
 - Applies `coarsenGeoCohorts` (k = 5): species×country×region cohorts under 5
   lose region; species×country cohorts under 5 lose country too.
+
+## Geography fields (Phase 3)
+
+`country`, `region`, `climate_zone`, and `geo_precision` are populated from
+the plant's linked location (`plant_id.location_id`, nested-selected at depth
+3) through `exportGeo` in `src/lib/geo.ts`. The location's user-chosen
+`location_precision` tier caps what may export:
+
+| Location precision | Exported geography | `geo_precision` |
+| --- | --- | --- |
+| `exact`, `local`, `regional` | country + region + climate zone | `regional` |
+| `climate` (default) | country + climate zone | `climate` |
+| `country` | country only | `country` |
+| no location | all geo fields null | `country` |
+
+City, postal prefix, coordinates, location labels, and location IDs never
+export at any tier. `coarsenGeoCohorts` applies on top of the tier gate; when
+coarsening strips country/region but the climate zone survives,
+`geo_precision` is relabeled `climate` so the field always describes what the
+row actually contains. `geo_cell` stays null until a coarse spatial cell
+scheme is designed.
 - Diffs against existing `public_observations` by `source_observation_id`
   (unique index `idx_source_observation`): creates new rows, updates changed
   ones, and **deletes rows whose source observation disappeared or had its

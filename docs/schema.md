@@ -16,7 +16,7 @@ This schema assumes Appwrite Cloud using Databases/TablesDB. Some Appwrite UI/AP
 The schema below is implemented declaratively in [`appwrite/schema.ts`](../appwrite/schema.ts) and applied by `npm run appwrite:setup`. Where Appwrite's data model constrains the documented design, the implementation resolves it as follows (see ADR-006):
 
 - **Timestamps**: `created_at`/`updated_at` columns are not created. Appwrite's built-in `$createdAt`/`$updatedAt` row metadata serves these roles.
-- **Relationships**: columns documented as `relationship/string` (`species_id`, `location_id`, `plant_id`, `observation_id`) are native TablesDB relationship columns, created from the child side as `manyToOne`. Timeline children (`observations.plant_id`, `treatments/measurements/photos.observation_id`) are two-way with cascade delete; optional links (`plants.species_id`, `plants.location_id`, `environment_snapshots.*`) are one-way with set-null on delete. `user_id` stays a plain string everywhere because Auth users are not TablesDB rows.
+- **Relationships**: columns documented as `relationship/string` (`species_id`, `location_id`, `plant_id`, `observation_id`) are native TablesDB relationship columns, created from the child side as `manyToOne`. Timeline children (`observations.plant_id`, `treatments/measurements/photos.observation_id`, and since Phase 3 `environment_snapshots.observation_id`) are two-way with cascade delete; optional links (`plants.species_id`, `plants.location_id`, `environment_snapshots.plant_id`) are one-way with set-null on delete. `user_id` stays a plain string everywhere because Auth users are not TablesDB rows.
 - **Relationship reads**: Appwrite does not hydrate relationship columns by default — a plain read returns related-row IDs as strings. Embedding requires an explicit nested select (e.g. `Query.select(['*', 'observations.*', 'observations.treatments.*'])`), which is how the app loads a plant's timeline (`getPlantWithTimeline` in `src/lib/repo.ts`). Relationship columns also cannot be filtered on, so the timeline is always read through the parent row.
 - **Required + default**: Appwrite forbids defaults on required columns. Columns documented as "required with default" (`preferred_units`, `public_contribution_default`, `contribute_to_public_dataset`, `exif_stripped`, `allow_public_image`, `status`) are optional-with-default. Relationship columns cannot be required in Appwrite, so `observations.plant_id` requiredness is enforced at the app layer.
 - **String types**: short indexable strings use `varchar`; private notes/captions/summaries use off-page `text` (keeps rows under Appwrite's 64 KB inline row budget).
@@ -65,6 +65,8 @@ Private location records used for climate lookup and user features.
 | `updated_at` | datetime | yes | Server generated. |
 
 Indexes: spatial index on `location` if geo queries are enabled; index `user_id`.
+
+**As implemented (Phase 3)**: locations are created through a city search against the keyless Open-Meteo geocoding API; coordinates are rounded to 2 decimal places (~1.1 km) before storage and 1 decimal place (~11 km) before any external API call (`src/lib/geo.ts`), so exact GPS never persists and never leaves the device. `climate_zone` is computed in-app at save time: 5 complete years of Open-Meteo archive daily data are aggregated into monthly normals and classified with the Köppen-Geiger rules (`src/lib/koppen.ts`). `location_precision` is chosen by the user at creation (default `climate`) and gates what geography the export pipeline may publish — see `docs/open-data.md`.
 
 ### `species`
 
@@ -194,6 +196,8 @@ Manual, sensor, inferred, or weather API context near an observation.
 | `geo_resolution` | string | no | Indicates precision used. |
 | `created_at` | datetime | yes | Server generated. |
 
+**As implemented (Phase 3)**: snapshots are created client-side right after a log entry saves (`src/lib/enrich.ts`), when the plant has a location with coordinates. Daily weather comes from Open-Meteo (archive API for dates older than 5 days, forecast API otherwise) using 1-dp-rounded coordinates; enrichment failures only log a console warning and never block the log save. `observation_id` is a two-way cascade relationship (`twoWayKey: environment_snapshots`), so the timeline reads snapshots through the parent observation and deleting an observation deletes its snapshots. Rows carry owner-only permissions like every private table.
+
 ## Public Export Tables
 
 Public data should be generated into a separate table/collection or object-storage export. Do not expose private tables directly.
@@ -273,6 +277,8 @@ Triggered after upload or called explicitly. Strips metadata, generates safe der
 ### `climate-enrich`
 
 Looks up climate/weather context from private location data and writes `environment_snapshots`.
+
+**As implemented (Phase 3)**: this runs in the browser at log time (`src/lib/enrich.ts`), not as an Appwrite Function — Open-Meteo is keyless and CORS-enabled, so no server secret is needed and the rounded coordinates never transit our backend. A scheduled Function could later backfill snapshots for historical observations using the same modules.
 
 ### `public-export`
 
