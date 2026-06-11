@@ -1,13 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { errorMessage } from '../../lib/error';
-import { createPlant, listSpecies, updatePlant, type PlantInput } from '../../lib/repo';
-import type { PlacementType, Plant, PlantStatus, Species } from '../../lib/types';
+import {
+  createPlant,
+  listLocations,
+  listSpecies,
+  updatePlant,
+  type PlantInput,
+} from '../../lib/repo';
+import type { PlacementType, Plant, PlantStatus, Species, UserLocation } from '../../lib/types';
 import { Button } from '../../ui/Button';
 import { ErrorText, SelectField, TextField } from '../../ui/Field';
 
 function speciesIdOf(plant: Plant | undefined): string {
   if (!plant?.species_id) return '';
   return typeof plant.species_id === 'string' ? plant.species_id : plant.species_id.$id;
+}
+
+function locationIdOf(plant: Plant | undefined): string {
+  if (!plant?.location_id) return '';
+  return typeof plant.location_id === 'string' ? plant.location_id : plant.location_id.$id;
 }
 
 export function PlantForm({
@@ -23,6 +34,8 @@ export function PlantForm({
 }) {
   const editing = Boolean(plant);
   const [species, setSpecies] = useState<Species[]>([]);
+  const [locations, setLocations] = useState<UserLocation[]>([]);
+  const [locationId, setLocationId] = useState(locationIdOf(plant));
   const [nickname, setNickname] = useState(plant?.nickname ?? '');
   const [commonName, setCommonName] = useState(plant?.common_name ?? '');
   const [speciesId, setSpeciesId] = useState(speciesIdOf(plant));
@@ -45,10 +58,17 @@ export function PlantForm({
       .catch(() => {
         // Species catalog is optional; free-text species still works.
       });
+    listLocations(userId)
+      .then((rows) => {
+        if (!cancelled) setLocations(rows);
+      })
+      .catch(() => {
+        // Locations are optional; the select just stays empty.
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userId]);
 
   async function save(input: PlantInput | Partial<PlantInput>) {
     setError(null);
@@ -74,6 +94,7 @@ export function PlantForm({
       placement_type: placementType,
       placement_label: placementLabel.trim() || null,
       acquired_on: acquiredOn ? new Date(acquiredOn).toISOString() : null,
+      location_id: locationId || null,
       ...(editing ? { status } : {}),
     });
   }
@@ -143,6 +164,20 @@ export function PlantForm({
         value={acquiredOn}
         onChange={(e) => setAcquiredOn(e.target.value)}
       />
+      {locations.length > 0 && (
+        <SelectField
+          label="Location (for weather context)"
+          value={locationId}
+          onChange={(e) => setLocationId(e.target.value)}
+        >
+          <option value="">— None —</option>
+          {locations.map((l) => (
+            <option key={l.$id} value={l.$id}>
+              {l.label ?? l.city ?? l.region ?? l.country ?? 'Location'}
+            </option>
+          ))}
+        </SelectField>
+      )}
       {editing && (
         <SelectField
           label="Status"

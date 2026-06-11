@@ -43,6 +43,71 @@ function wateringObs(overrides: Partial<SourceObservation> = {}): SourceObservat
   };
 }
 
+const HOME_LOCATION = {
+  $id: 'loc_home',
+  label: 'Home',
+  country: 'Spain',
+  region: 'Madrid',
+  city: 'Alcobendas',
+  postal_code_prefix: '28100',
+  location: [-3.7, 40.42] as [number, number],
+  location_precision: 'regional' as const,
+  climate_zone: 'Csa',
+};
+
+describe('toPublicRow geography', () => {
+  function locatedObs(precision: 'exact' | 'local' | 'regional' | 'climate' | 'country') {
+    const obs = wateringObs();
+    obs.plant_id!.location_id = { ...HOME_LOCATION, location_precision: precision };
+    return obs;
+  }
+
+  it('regional precision exports country, region, and climate zone', () => {
+    const row = toPublicRow(locatedObs('regional'), OPTS)!;
+    expect(row.country).toBe('Spain');
+    expect(row.region).toBe('Madrid');
+    expect(row.climate_zone).toBe('Csa');
+    expect(row.geo_precision).toBe('regional');
+  });
+
+  it('climate precision drops region', () => {
+    const row = toPublicRow(locatedObs('climate'), OPTS)!;
+    expect(row.country).toBe('Spain');
+    expect(row.region).toBeNull();
+    expect(row.climate_zone).toBe('Csa');
+    expect(row.geo_precision).toBe('climate');
+  });
+
+  it('country precision exports country only', () => {
+    const row = toPublicRow(locatedObs('country'), OPTS)!;
+    expect(row.country).toBe('Spain');
+    expect(row.region).toBeNull();
+    expect(row.climate_zone).toBeNull();
+    expect(row.geo_precision).toBe('country');
+  });
+
+  it('no location keeps all geo fields null', () => {
+    const row = toPublicRow(wateringObs(), OPTS)!;
+    expect(row.country).toBeNull();
+    expect(row.region).toBeNull();
+    expect(row.climate_zone).toBeNull();
+    expect(row.geo_precision).toBe('country');
+  });
+
+  it('never leaks city, postal prefix, or coordinates at any precision', () => {
+    for (const tier of ['exact', 'local', 'regional', 'climate', 'country'] as const) {
+      const row = toPublicRow(locatedObs(tier), OPTS)!;
+      const serialized = toCsv([row], PUBLIC_EXPORT_FIELDS) + toJsonl([row], PUBLIC_EXPORT_FIELDS);
+      expect(serialized).not.toContain('Alcobendas');
+      expect(serialized).not.toContain('28100');
+      expect(serialized).not.toContain('40.42');
+      expect(serialized).not.toContain('-3.7');
+      expect(serialized).not.toContain('loc_home');
+      expect(serialized).not.toContain('Home');
+    }
+  });
+});
+
 describe('toPublicRow', () => {
   it('throws on non-consented observations', () => {
     expect(() =>
@@ -134,6 +199,21 @@ describe('coarsenGeoCohorts', () => {
     expect(smallOut[0].region).toBeNull();
     expect(smallOut[0].country).toBeNull();
     expect(smallOut[0].geo_precision).toBe('country');
+  });
+
+  it('keeps climate precision when only the climate zone survives', () => {
+    const row = {
+      ...toPublicRow(wateringObs(), OPTS)!,
+      country: 'Spain',
+      region: 'Madrid',
+      climate_zone: 'Csa',
+      geo_precision: 'regional',
+    };
+    const out = coarsenGeoCohorts([row], 5);
+    expect(out[0].country).toBeNull();
+    expect(out[0].region).toBeNull();
+    expect(out[0].climate_zone).toBe('Csa');
+    expect(out[0].geo_precision).toBe('climate');
   });
 });
 

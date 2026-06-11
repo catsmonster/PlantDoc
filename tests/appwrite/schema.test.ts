@@ -108,6 +108,17 @@ describe('schema coverage', () => {
     }
   });
 
+  it('environment_snapshots.observation_id is two-way with cascade delete', () => {
+    const snapshots = TABLES.find((t) => t.id === 'environment_snapshots')!;
+    const rel = snapshots.columns.find((c) => c.key === 'observation_id')!;
+    expect(rel.kind).toBe('relationship');
+    if (rel.kind === 'relationship') {
+      expect(rel.twoWay).toBe(true);
+      expect(rel.twoWayKey).toBe('environment_snapshots');
+      expect(rel.onDelete).toBe('cascade');
+    }
+  });
+
   it('public_observations has a unique index on source_observation_id for upserts', () => {
     const pub = TABLES.find((t) => t.id === 'public_observations')!;
     const index = pub.indexes.find((i) => i.key === 'idx_source_observation');

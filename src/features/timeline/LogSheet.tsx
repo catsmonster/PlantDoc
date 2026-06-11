@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
+import { enrichObservationWeather } from '../../lib/enrich';
 import { errorMessage } from '../../lib/error';
 import { createLog } from '../../lib/repo';
-import type { Profile, TreatmentType } from '../../lib/types';
+import type { Profile, TreatmentType, UserLocation } from '../../lib/types';
 import { Button } from '../../ui/Button';
 import { CheckboxField, ErrorText, Segmented, SelectField, TextField } from '../../ui/Field';
 
@@ -30,12 +31,14 @@ export function LogSheet({
   userId,
   plantId,
   profile,
+  location,
   onClose,
   onLogged,
 }: {
   userId: string;
   plantId: string;
   profile: Profile;
+  location?: UserLocation | null;
   onClose: () => void;
   onLogged: () => void;
 }) {
@@ -61,15 +64,17 @@ export function LogSheet({
     setError(null);
     setBusy(true);
     try {
+      const observedAtIso = new Date(observedAt).toISOString();
       const base = {
         userId,
         plantId,
-        observedAt: new Date(observedAt).toISOString(),
+        observedAt: observedAtIso,
         contribute,
         note: note || undefined,
       };
+      let observation;
       if (mode === 'water') {
-        await createLog({
+        observation = await createLog({
           ...base,
           treatment: {
             treatment_type: 'watering',
@@ -79,7 +84,7 @@ export function LogSheet({
           },
         });
       } else if (mode === 'care') {
-        await createLog({
+        observation = await createLog({
           ...base,
           treatment: {
             treatment_type: careType,
@@ -88,7 +93,7 @@ export function LogSheet({
         });
       } else if (mode === 'measure') {
         const heightCm = height ? (imperial ? Number(height) * 2.54 : Number(height)) : undefined;
-        await createLog({
+        observation = await createLog({
           ...base,
           measurement: {
             height_cm: heightCm,
@@ -98,7 +103,19 @@ export function LogSheet({
           },
         });
       } else {
-        await createLog(base);
+        observation = await createLog(base);
+      }
+      // The entry is saved; weather context is best-effort on top of it.
+      try {
+        await enrichObservationWeather({
+          userId,
+          plantId,
+          observationId: observation.$id,
+          observedAt: observedAtIso,
+          location,
+        });
+      } catch (enrichError) {
+        console.warn('weather enrichment failed', enrichError);
       }
       onLogged();
     } catch (e) {

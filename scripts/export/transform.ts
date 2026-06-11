@@ -1,3 +1,4 @@
+import { exportGeo, type GeoLocation } from '../../src/lib/geo';
 import { PUBLIC_EXPORT_FIELDS } from '../../appwrite/schema';
 
 /**
@@ -11,12 +12,21 @@ export interface SourceSpecies {
   scientific_name: string;
 }
 
+/** Location as nested-selected on plant_id.location_id; precision gates what
+ * exports (src/lib/geo.ts exportGeo). City/postal/coordinates never export. */
+export interface SourceLocation extends GeoLocation {
+  $id: string;
+  label?: string | null;
+  location?: [number, number] | null;
+}
+
 export interface SourcePlant {
   $id: string;
   nickname?: string;
   acquired_on: string | null;
   species_text: string | null;
   species_id?: SourceSpecies | null;
+  location_id?: SourceLocation | null;
 }
 
 export interface SourceTreatment {
@@ -81,6 +91,7 @@ export function toPublicRow(obs: SourceObservation, opts: TransformOptions): Pub
   const species = plant?.species_id ?? null;
   const treatment = obs.treatments?.[0] ?? null;
   const measurement = obs.measurements?.[0] ?? null;
+  const geo = exportGeo(plant?.location_id);
 
   const observedMs = Date.parse(obs.observed_at);
   let plantAgeDays: number | null = null;
@@ -105,12 +116,13 @@ export function toPublicRow(obs: SourceObservation, opts: TransformOptions): Pub
     leaf_count: measurement?.leaf_count ?? null,
     soil_moisture_percent: measurement?.soil_moisture_percent ?? null,
     health_score: measurement?.health_score ?? null,
-    // Location features land in Phase 3; precision is already the coarsest tier.
-    country: null,
-    region: null,
-    climate_zone: null,
+    // Geography gated by the location's precision tier (Phase 3); cohort
+    // coarsening in coarsenGeoCohorts still applies on top.
+    country: geo.country,
+    region: geo.region,
+    climate_zone: geo.climate_zone,
     geo_cell: null,
-    geo_precision: 'country',
+    geo_precision: geo.geo_precision,
     environment_source: null,
     outdoor_temperature_c: null,
     relative_humidity_percent: null,
@@ -141,11 +153,15 @@ export function coarsenGeoCohorts(rows: PublicRow[], k: number): PublicRow[] {
       regionCounts.set(key, (regionCounts.get(key) ?? 0) + 1);
     }
   }
+  // Precision label for whatever geography a row has left after stripping.
+  const remainingPrecision = (row: PublicRow): string =>
+    row.climate_zone != null ? 'climate' : 'country';
   const afterRegion = rows.map((row): PublicRow => {
     if (row.region == null) return { ...row };
     const key = `${speciesKey(row)}|${row.country}|${row.region}`;
     if ((regionCounts.get(key) ?? 0) >= k) return { ...row };
-    return { ...row, region: null, geo_precision: 'country' };
+    const stripped = { ...row, region: null };
+    return { ...stripped, geo_precision: remainingPrecision(stripped) };
   });
   for (const row of afterRegion) {
     if (row.country != null) {
@@ -157,7 +173,8 @@ export function coarsenGeoCohorts(rows: PublicRow[], k: number): PublicRow[] {
     if (row.country == null) return row;
     const key = `${speciesKey(row)}|${row.country}`;
     if ((countryCounts.get(key) ?? 0) >= k) return row;
-    return { ...row, country: null, region: null, geo_precision: 'country' };
+    const stripped = { ...row, country: null, region: null };
+    return { ...stripped, geo_precision: remainingPrecision(stripped) };
   });
 }
 

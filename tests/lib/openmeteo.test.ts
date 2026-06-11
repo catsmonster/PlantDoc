@@ -1,0 +1,135 @@
+import { describe, expect, it } from 'vitest';
+import { fetchClimateNormals, fetchDailyWeather, geocodeCity } from '../../src/lib/openmeteo';
+
+type FetchFn = typeof fetch;
+
+function stubFetch(payload: unknown, capture: { url?: string } = {}): FetchFn {
+  return (async (input: Parameters<FetchFn>[0]) => {
+    capture.url = String(input);
+    return {
+      ok: true,
+      json: async () => payload,
+    } as Response;
+  }) as FetchFn;
+}
+
+function failingFetch(): FetchFn {
+  return (async () => {
+    throw new Error('network down');
+  }) as FetchFn;
+}
+
+describe('geocodeCity', () => {
+  it('maps geocoding results to name/region/country/coords', async () => {
+    const capture: { url?: string } = {};
+    const fetchFn = stubFetch(
+      {
+        results: [
+          { name: 'Madrid', latitude: 40.4165, longitude: -3.7026, country: 'Spain', admin1: 'Madrid' },
+          { name: 'Madrid', latitude: 4.73, longitude: -73.99, country: 'Colombia', admin1: 'Cundinamarca' },
+        ],
+      },
+      capture,
+    );
+    const results = await geocodeCity('Madrid', fetchFn);
+    expect(results).toHaveLength(2);
+    expect(results[0]).toEqual({
+      name: 'Madrid',
+      region: 'Madrid',
+      country: 'Spain',
+      latitude: 40.4165,
+      longitude: -3.7026,
+    });
+    expect(capture.url).toContain('geocoding-api.open-meteo.com');
+    expect(capture.url).toContain('name=Madrid');
+  });
+
+  it('returns empty array when there are no results', async () => {
+    expect(await geocodeCity('Xyzzy', stubFetch({}))).toEqual([]);
+  });
+});
+
+describe('fetchClimateNormals', () => {
+  it('requests rounded coordinates over past complete years and aggregates', async () => {
+    const dates: string[] = [];
+    const temps: number[] = [];
+    const precs: number[] = [];
+    for (let month = 1; month <= 12; month++) {
+      dates.push(`2025-${String(month).padStart(2, '0')}-15`);
+      temps.push(15);
+      precs.push(30);
+    }
+    const capture: { url?: string } = {};
+    const fetchFn = stubFetch(
+      { daily: { time: dates, temperature_2m_mean: temps, precipitation_sum: precs } },
+      capture,
+    );
+    const normals = await fetchClimateNormals({ lat: 40.4165, lon: -3.7026 }, fetchFn);
+    expect(normals).not.toBeNull();
+    expect(normals!.tempC).toHaveLength(12);
+    expect(capture.url).toContain('latitude=40.4');
+    expect(capture.url).toContain('longitude=-3.7');
+    expect(capture.url).not.toContain('40.41');
+    expect(capture.url).not.toContain('-3.70');
+    expect(capture.url).toContain('archive-api.open-meteo.com');
+  });
+
+  it('returns null on API failure', async () => {
+    expect(await fetchClimateNormals({ lat: 1, lon: 1 }, failingFetch())).toBeNull();
+  });
+});
+
+describe('fetchDailyWeather', () => {
+  const payload = (date: string) => ({
+    daily: {
+      time: [date],
+      temperature_2m_max: [21],
+      temperature_2m_min: [11],
+      relative_humidity_2m_mean: [64],
+      daylight_duration: [43200],
+      weather_code: [2],
+    },
+  });
+
+  it('uses the archive API for dates older than five days', async () => {
+    const capture: { url?: string } = {};
+    const weather = await fetchDailyWeather(
+      { lat: 52.52, lon: 13.405 },
+      '2026-01-15',
+      stubFetch(payload('2026-01-15'), capture),
+    );
+    expect(capture.url).toContain('archive-api.open-meteo.com');
+    expect(capture.url).toContain('latitude=52.5');
+    expect(weather).toEqual({
+      outdoorTempC: 16,
+      humidityPercent: 64,
+      photoperiodHours: 12,
+      summary: 'partly cloudy',
+    });
+  });
+
+  it('uses the forecast API for recent dates', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const capture: { url?: string } = {};
+    const weather = await fetchDailyWeather(
+      { lat: 52.52, lon: 13.405 },
+      today,
+      stubFetch(payload(today), capture),
+    );
+    expect(capture.url).toContain('api.open-meteo.com/v1/forecast');
+    expect(weather?.outdoorTempC).toBe(16);
+  });
+
+  it('returns null when the requested date is missing from the response', async () => {
+    const weather = await fetchDailyWeather(
+      { lat: 0, lon: 0 },
+      '2026-01-15',
+      stubFetch(payload('2026-01-14')),
+    );
+    expect(weather).toBeNull();
+  });
+
+  it('returns null on API failure', async () => {
+    expect(await fetchDailyWeather({ lat: 0, lon: 0 }, '2026-01-15', failingFetch())).toBeNull();
+  });
+});
