@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { errorMessage } from '../../lib/error';
 import { getPlantWithTimeline, photoUrl } from '../../lib/repo';
+import { InsightsPanel } from '../insights/InsightsPanel';
 import type { Observation, Plant, Profile, TreatmentType, Units } from '../../lib/types';
 import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
 import { Button } from '../../ui/Button';
@@ -254,6 +255,7 @@ export function PlantScreen({
           onError={setError}
         />
       </div>
+      <InsightsPanel plant={plant} userId={userId} units={profile.preferred_units} />
       {observations.length === 0 ? (
         <div className="rounded-xl border border-dashed border-leaf-300 bg-white p-8 text-center">
           <p className="text-sm text-slate-500">
