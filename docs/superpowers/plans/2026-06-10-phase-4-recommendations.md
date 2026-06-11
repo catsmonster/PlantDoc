@@ -14,40 +14,40 @@
 
 **Files:** Create `src/lib/insights.ts`, `tests/lib/insights.test.ts`.
 
-- [ ] **1.1** Tests first: `Insight { kind, severity: 'info'|'suggestion'|'warning', title, detail, evidenceCount }`; `plantInsights(plant, now, units)` —
+- [x] **1.1** Tests first: `Insight { kind, severity: 'info'|'suggestion'|'warning', title, detail, evidenceCount }`; `plantInsights(plant, now, units)` —
   watering: <3 waterings → single info "not enough data"; ≥3 → median interval, days-since-last; `due` (suggestion) at ≥ median; `overdue` (warning) at ≥ 1.5×median; recently watered → info with cadence.
   growth: ≥3 height points spanning ≥14 days → slope per 30 days, growing/stable/declining (dead-band ±0.5 cm/30d); same for leaf_count (dead-band ±0.5 leaves/30d); fewer points → no growth insight.
   stress: latest health ≤2 → warning; health dropped vs previous → warning; pest_severity_score ≥5 latest → warning; ≥2 pest_control in last 30 days → warning; latest soil_moisture <10 with watering due → warning.
   Sorted warnings → suggestions → info. FAIL.
-- [ ] **1.2** Implement; helpers `medianDays`, `slopePer30Days` (least squares on observed_at ms). PASS. Commit.
+- [x] **1.2** Implement; helpers `medianDays`, `slopePer30Days` (least squares on observed_at ms). PASS. Commit.
 
 ### Task 2: insight_feedback schema + live migration
 
 **Files:** Modify `appwrite/schema.ts`, `tests/appwrite/schema.test.ts`.
 
-- [ ] **2.1** Add table: id `insight_feedback`, `create:users`, rowSecurity true, columns user_id, plant_id (relationship → plants, manyToOne, twoWay true, twoWayKey `insight_feedback`, onDelete cascade), `insight_kind` varchar 32 required, `helpful` boolean required; index `idx_user_id`. Schema test asserts table shape + no `any` grants (existing invariant test covers new table automatically). Test PASS.
-- [ ] **2.2** Live: `npm run appwrite:setup` then `npm run appwrite:check` green. Commit.
+- [x] **2.1** Add table: id `insight_feedback`, `create:users`, rowSecurity true, columns user_id, plant_id (relationship → plants, manyToOne, twoWay true, twoWayKey `insight_feedback`, onDelete cascade), `insight_kind` varchar 32 required, `helpful` boolean required; index `idx_user_id`. Schema test asserts table shape + no `any` grants (existing invariant test covers new table automatically). Test PASS.
+- [x] **2.2** Live: `npm run appwrite:setup` then `npm run appwrite:check` green. Commit.
 
 ### Task 3: Repo + types wiring
 
 **Files:** Modify `src/lib/types.ts`, `src/lib/repo.ts`.
 
-- [ ] **3.1** `InsightFeedback extends RowMeta { user_id; insight_kind; helpful }`; `Plant.insight_feedback?: InsightFeedback[]`. Repo: `setInsightFeedback(userId, plantId, kind, helpful, existing?)` — update row when an existing verdict for the kind is passed, else create with owner perms; `getPlantWithTimeline` select gains `'insight_feedback.*'`. Lint/build/test green. Commit.
+- [x] **3.1** `InsightFeedback extends RowMeta { user_id; insight_kind; helpful }`; `Plant.insight_feedback?: InsightFeedback[]`. Repo: `setInsightFeedback(userId, plantId, kind, helpful, existing?)` — update row when an existing verdict for the kind is passed, else create with owner perms; `getPlantWithTimeline` select gains `'insight_feedback.*'`. Lint/build/test green. Commit.
 
 ### Task 4: InsightsPanel UI
 
 **Files:** Create `src/features/insights/InsightsPanel.tsx`; modify `src/features/timeline/PlantScreen.tsx`.
 
-- [ ] **4.1** Panel: "Care insights" + "Experimental" badge; renders `plantInsights(plant, new Date(), units)`; severity-tinted cards (warning amber, suggestion leaf, info slate); each card shows detail + "based on N entries" + 👍/👎 reflecting stored verdict, calling `setInsightFeedback` and updating local state. Hidden when plant has no observations.
-- [ ] **4.2** Mount in PlantScreen between action buttons and timeline. Lint/build/test green. Commit.
+- [x] **4.1** Panel: "Care insights" + "Experimental" badge; renders `plantInsights(plant, new Date(), units)`; severity-tinted cards (warning clay, suggestion leaf, info slate); each card shows detail + "based on N entries" + 👍/👎 reflecting stored verdict, calling `setInsightFeedback` and updating local state. Hidden when plant has no observations.
+- [x] **4.2** Mount in PlantScreen between action buttons and timeline. Lint/build/test green. Commit.
 
 ### Task 5: Docs, gates, live verification, merge
 
-**Files:** Modify `docs/schema.md`, `docs/roadmap-status` notes if any.
+**Files:** Modify `docs/schema.md`.
 
-- [ ] **5.1** Live browser verification (preview MCP): Valencia Pothos shows watering insight (1 watering → not-enough-data info); add waterings via UI to cross 3, panel shows cadence; tap 👍 → row created owner-only; re-tap 👎 → same row updated (network body check).
-- [ ] **5.2** schema.md: insight_feedback table section + "As implemented (Phase 4)" note (deterministic insights, feedback loop, AI track deferred).
-- [ ] **5.3** All gates (lint, build, test, appwrite:check). Tick checkboxes, merge to master locally, keep unpushed.
+- [x] **5.1** Live browser verification (preview MCP): Valencia Pothos showed the not-enough-data info at 1 watering; two backdated waterings via the UI crossed the threshold and the panel showed "every 5 days; last watered 0 days ago · Based on 3 entries"; 👍 created an owner-only insight_feedback row (network body verified); 👎 updated the same row id; verdict survived a full reload via the plant select.
+- [x] **5.2** schema.md: insight_feedback table section + "As implemented (Phase 4)" note (deterministic insights, feedback loop, AI track deferred) + index list entry.
+- [x] **5.3** All gates green (lint, build, test 111/111, appwrite:check). Ticked checkboxes, merged to master locally, kept unpushed.
 
 ## Self-Review Notes
 

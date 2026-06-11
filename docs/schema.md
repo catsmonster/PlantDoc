@@ -198,6 +198,27 @@ Manual, sensor, inferred, or weather API context near an observation.
 
 **As implemented (Phase 3)**: snapshots are created client-side right after a log entry saves (`src/lib/enrich.ts`), when the plant has a location with coordinates. Daily weather comes from Open-Meteo (archive API for dates older than 5 days, forecast API otherwise) using 1-dp-rounded coordinates; enrichment failures only log a console warning and never block the log save. `observation_id` is a two-way cascade relationship (`twoWayKey: environment_snapshots`), so the timeline reads snapshots through the parent observation and deleting an observation deletes its snapshots. Rows carry owner-only permissions like every private table.
 
+### `insight_feedback`
+
+Added in Phase 4. One verdict per plant × insight kind for the experimental
+care-insights panel ("was this helpful?").
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `user_id` | string | yes | Owner Appwrite user ID. |
+| `plant_id` | relationship/string | yes | Two-way cascade (`plants.insight_feedback`); feedback is read through the plant and dies with it. |
+| `insight_kind` | enum-like string | yes | Insight identifier from `src/lib/insights.ts` (e.g. `watering_ok`, `growth_height`). |
+| `helpful` | boolean | yes | Latest verdict wins; re-tapping updates the row. |
+
+**As implemented (Phase 4)**: insights themselves are never stored — they are
+recomputed deterministically from the timeline on every plant read
+(`src/lib/insights.ts`), so only the user's verdict needs a table. Feedback is
+private (owner-only rows), is not in `PUBLIC_EXPORT_FIELDS`, and never enters
+exports. The roadmap's optional AI features (photo insights, recognition
+labels, embeddings) are deferred pending an AI provider decision; their
+consent requirements are recorded in
+`docs/superpowers/specs/2026-06-10-phase-4-recommendations-design.md`.
+
 ## Public Export Tables
 
 Public data should be generated into a separate table/collection or object-storage export. Do not expose private tables directly.
@@ -313,6 +334,7 @@ Indexes created in Phase 0 (relationship columns are not indexable in Appwrite; 
 - `public_observations.observed_month`
 - `public_observations.climate_zone`
 - `public_observations.source_observation_id` (unique, added Phase 2 — upsert/revocation key for the export builder)
+- `insight_feedback.user_id` (added Phase 4)
 
 Deferred: spatial index on `user_locations.location` until geo queries are introduced (Phase 3).
 
