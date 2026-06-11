@@ -1,0 +1,17 @@
+// Cloudflare Workers config: serves the built Vite SPA as static assets.
+// The custom-domain route only creates the plantdoc.galvando.com record;
+// it never modifies other DNS records on the zone (ADR-009).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "plantdoc",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "directory": "./dist",
+    // Client-side routing: unknown paths fall back to index.html.
+    "not_found_handling": "single-page-application"
+  },
+  // Only serve on the custom domain; the workers.dev origin would not be
+  // registered with Appwrite and would fail CORS anyway.
+  "workers_dev": false,
+  "routes": [{ "pattern": "plantdoc.galvando.com", "custom_domain": true }]
+}

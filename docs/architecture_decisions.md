@@ -215,3 +215,31 @@ Phase 4 calls for care recommendations. AI-generated advice requires a provider 
 
 - docs/superpowers/specs/2026-06-10-phase-4-recommendations-design.md
 - docs/schema.md (`insight_feedback`)
+
+## ADR-009: Serve The Frontend Via Workers Static Assets At plantdoc.galvando.com
+
+- **Status**: Accepted. Amends the "Cloudflare Pages" choice in ADR-001.
+- **Date**: 2026-06-11
+
+### Context
+
+ADR-001 chose Cloudflare Pages for the frontend. Since then Cloudflare has put Pages into maintenance mode and recommends Workers static assets for new projects (it even ships a Pages-to-Workers migration guide). The owner's `galvando.com` zone is active on Cloudflare with the root domain already in use, so PlantDoc must claim only a subdomain and must not modify any existing DNS records.
+
+### Decision
+
+- Deploy the built Vite SPA as an assets-only Worker named `plantdoc` (`wrangler.jsonc`: `assets.directory: ./dist`, `not_found_handling: single-page-application`).
+- Attach the Workers custom domain `plantdoc.galvando.com`. The custom-domain route creates exactly one DNS record and fails rather than overwriting an existing one; nothing else on the zone is touched.
+- Disable the `workers.dev` origin: it would not be registered as an Appwrite web platform and would fail CORS anyway, so the custom domain is the only serving origin.
+- Deploy with `npx wrangler deploy` under the operator's wrangler OAuth login (no API token stored in the repo or `.env`).
+
+### Consequences
+
+- Static asset requests are free and unmetered on the Workers free plan; there is no worker script to bill or cold-start.
+- Every serving origin must be registered as a web platform on the Appwrite project; `plantdoc.galvando.com` was registered on 2026-06-11 (without it, browser requests fail with 403 invalid-origin).
+- ADR-002 (custom Appwrite API domain, e.g. `api.galvando.com`) remains open; until then sessions ride on `sfo.cloud.appwrite.io` as a third-party domain.
+- Unattended CI deploys would need a scoped Cloudflare API token or Workers Builds; out of scope while deploys are operator-run.
+
+### References
+
+- [Workers static assets](https://developers.cloudflare.com/workers/static-assets/)
+- [Workers custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
