@@ -1,8 +1,19 @@
 import { ID, Query } from 'appwrite';
 import { DATABASE_ID, PRIVATE_IMAGES_BUCKET, storage, tablesDB } from './appwrite';
+import { forStorage, type Coords, type LocationPrecision } from './geo';
 import { buildLogPayload, type LogInput } from './log';
 import { ownerPermissions } from './owner';
-import type { Observation, Plant, PlacementType, PlantStatus, Profile, Species, Units } from './types';
+import type {
+  EnvironmentSnapshot,
+  Observation,
+  Plant,
+  PlacementType,
+  PlantStatus,
+  Profile,
+  Species,
+  Units,
+  UserLocation,
+} from './types';
 
 /**
  * All Appwrite reads/writes for the app go through this module. Every row is
@@ -51,6 +62,58 @@ export async function listSpecies(): Promise<Species[]> {
   return result.rows as unknown as Species[];
 }
 
+// ---------- locations ----------
+
+export interface LocationInput {
+  label: string | null;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  coords: Coords | null;
+  location_precision: LocationPrecision;
+  climate_zone: string | null;
+}
+
+export async function listLocations(userId: string): Promise<UserLocation[]> {
+  const result = await tablesDB.listRows({
+    databaseId: db,
+    tableId: 'user_locations',
+    queries: [Query.equal('user_id', userId), Query.orderDesc('$createdAt'), Query.limit(100)],
+  });
+  return result.rows as unknown as UserLocation[];
+}
+
+/** Coordinates are rounded to storage precision (~1.1 km) before the write —
+ * exact GPS never persists (docs/privacy.md). */
+export async function createLocation(userId: string, input: LocationInput): Promise<UserLocation> {
+  const { coords, ...rest } = input;
+  const rounded = coords ? forStorage(coords) : null;
+  const row = await tablesDB.createRow({
+    databaseId: db,
+    tableId: 'user_locations',
+    rowId: ID.unique(),
+    data: {
+      user_id: userId,
+      ...rest,
+      location: rounded ? [rounded.lon, rounded.lat] : null,
+    },
+    permissions: ownerPermissions(userId),
+  });
+  return row as unknown as UserLocation;
+}
+
+/** Plants referencing the location keep working: the relationship is setNull. */
+export async function deleteLocation(locationId: string): Promise<void> {
+  await tablesDB.deleteRow({ databaseId: db, tableId: 'user_locations', rowId: locationId });
+}
+
+/** [lon, lat] storage order (GeoJSON) back to Coords. */
+export function locationCoords(location: UserLocation | null | undefined): Coords | null {
+  if (!location?.location) return null;
+  const [lon, lat] = location.location;
+  return { lat, lon };
+}
+
 // ---------- plants ----------
 
 export interface PlantInput {
@@ -62,6 +125,7 @@ export interface PlantInput {
   acquired_on?: string | null;
   placement_label?: string | null;
   status?: PlantStatus;
+  location_id?: string | null;
 }
 
 /** Scalar-only dashboard list; skips relationship columns so Appwrite does not
@@ -104,10 +168,12 @@ export async function getPlantWithTimeline(plantId: string): Promise<Plant> {
       Query.select([
         '*',
         'species_id.*',
+        'location_id.*',
         'observations.*',
         'observations.treatments.*',
         'observations.measurements.*',
         'observations.photos.*',
+        'observations.environment_snapshots.*',
       ]),
     ],
   });
@@ -171,6 +237,47 @@ export async function createLog(input: LogInput): Promise<Observation> {
     });
   }
   return observation;
+}
+
+// ---------- environment snapshots ----------
+
+export interface SnapshotInput {
+  userId: string;
+  plantId: string;
+  observationId: string;
+  recordedAt: string;
+  outdoorTempC: number | null;
+  humidityPercent: number | null;
+  photoperiodHours: number | null;
+  summary: string | null;
+  climateZone: string | null;
+  geoResolution: string;
+}
+
+/** Weather-API enrichment row for a freshly logged observation. */
+export async function createEnvironmentSnapshot(
+  input: SnapshotInput,
+): Promise<EnvironmentSnapshot> {
+  const row = await tablesDB.createRow({
+    databaseId: db,
+    tableId: 'environment_snapshots',
+    rowId: ID.unique(),
+    data: {
+      user_id: input.userId,
+      plant_id: input.plantId,
+      observation_id: input.observationId,
+      recorded_at: input.recordedAt,
+      source: 'weather_api',
+      outdoor_temperature_c: input.outdoorTempC,
+      relative_humidity_percent: input.humidityPercent,
+      photoperiod_hours: input.photoperiodHours,
+      weather_summary: input.summary,
+      climate_zone: input.climateZone,
+      geo_resolution: input.geoResolution,
+    },
+    permissions: ownerPermissions(input.userId),
+  });
+  return row as unknown as EnvironmentSnapshot;
 }
 
 // ---------- photos ----------

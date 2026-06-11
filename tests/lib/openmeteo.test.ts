@@ -4,7 +4,7 @@ import { fetchClimateNormals, fetchDailyWeather, geocodeCity } from '../../src/l
 type FetchFn = typeof fetch;
 
 function stubFetch(payload: unknown, capture: { url?: string } = {}): FetchFn {
-  return (async (input: RequestInfo | URL) => {
+  return (async (input: Parameters<FetchFn>[0]) => {
     capture.url = String(input);
     return {
       ok: true,

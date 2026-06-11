@@ -3,6 +3,7 @@ import type { Models } from 'appwrite';
 import { AuthProvider } from './features/auth/AuthContext';
 import { useAuth } from './features/auth/auth-context';
 import { SignInScreen } from './features/auth/SignInScreen';
+import { LocationsScreen } from './features/locations/LocationsScreen';
 import { OnboardingScreen } from './features/onboarding/OnboardingScreen';
 import { PlantForm } from './features/plants/PlantForm';
 import { PlantsScreen } from './features/plants/PlantsScreen';
@@ -16,7 +17,8 @@ type View =
   | { name: 'plants' }
   | { name: 'add-plant' }
   | { name: 'edit-plant'; plant: Plant }
-  | { name: 'plant'; plantId: string };
+  | { name: 'plant'; plantId: string }
+  | { name: 'locations' };
 
 function Gate() {
   const { user, loading } = useAuth();
@@ -58,9 +60,18 @@ function SignedIn({ user }: { user: Models.User<Models.Preferences> }) {
             Hi {profile.display_name ?? 'there'}
           </p>
         </button>
-        <Button variant="ghost" className="text-leaf-100" onClick={() => void signOut()}>
-          Sign out
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            className="text-leaf-100"
+            onClick={() => setView({ name: 'locations' })}
+          >
+            Locations
+          </Button>
+          <Button variant="ghost" className="text-leaf-100" onClick={() => void signOut()}>
+            Sign out
+          </Button>
+        </div>
       </header>
       <main className="mx-auto w-full max-w-md px-4 pb-12">
         {view.name === 'plants' && (
@@ -89,6 +100,9 @@ function SignedIn({ user }: { user: Models.User<Models.Preferences> }) {
               )
             }
           />
+        )}
+        {view.name === 'locations' && (
+          <LocationsScreen userId={user.$id} onBack={() => setView({ name: 'plants' })} />
         )}
         {view.name === 'plant' && (
           <PlantScreen

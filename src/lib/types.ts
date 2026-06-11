@@ -1,5 +1,7 @@
 /** Row shapes as the web SDK returns them (system fields prefixed with $). */
 
+import type { LocationPrecision } from './geo';
+
 export type Units = 'metric' | 'imperial';
 
 export interface RowMeta {
@@ -25,6 +27,19 @@ export interface Species extends RowMeta {
 export type PlantStatus = 'active' | 'archived' | 'deceased' | 'gifted';
 export type PlacementType = 'indoor' | 'outdoor' | 'greenhouse' | 'balcony';
 
+export interface UserLocation extends RowMeta {
+  user_id: string;
+  label: string | null;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  postal_code_prefix: string | null;
+  /** GeoJSON order: [longitude, latitude]; rounded to ~1.1 km before write. */
+  location: [number, number] | null;
+  location_precision: LocationPrecision;
+  climate_zone: string | null;
+}
+
 export interface Plant extends RowMeta {
   user_id: string;
   species_id: Species | null;
@@ -35,6 +50,8 @@ export interface Plant extends RowMeta {
   status: PlantStatus;
   placement_type: PlacementType;
   placement_label: string | null;
+  /** String when not hydrated by the read's select. */
+  location_id?: UserLocation | string | null;
   observations?: Observation[];
 }
 
@@ -85,6 +102,22 @@ export interface Photo extends RowMeta {
   allow_public_image: boolean;
 }
 
+export type SnapshotSource = 'manual' | 'weather_api' | 'device_sensor' | 'inferred';
+
+export interface EnvironmentSnapshot extends RowMeta {
+  user_id: string;
+  recorded_at: string;
+  source: SnapshotSource;
+  indoor_temperature_c: number | null;
+  outdoor_temperature_c: number | null;
+  relative_humidity_percent: number | null;
+  light_lux: number | null;
+  photoperiod_hours: number | null;
+  weather_summary: string | null;
+  climate_zone: string | null;
+  geo_resolution: string | null;
+}
+
 export interface Observation extends RowMeta {
   user_id: string;
   observed_at: string;
@@ -94,4 +127,5 @@ export interface Observation extends RowMeta {
   treatments?: Treatment[];
   measurements?: Measurement[];
   photos?: Photo[];
+  environment_snapshots?: EnvironmentSnapshot[];
 }
