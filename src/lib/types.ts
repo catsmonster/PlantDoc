@@ -53,6 +53,13 @@ export interface Plant extends RowMeta {
   /** String when not hydrated by the read's select. */
   location_id?: UserLocation | string | null;
   observations?: Observation[];
+  insight_feedback?: InsightFeedback[];
+}
+
+export interface InsightFeedback extends RowMeta {
+  user_id: string;
+  insight_kind: string;
+  helpful: boolean;
 }
 
 export type ObservationType =

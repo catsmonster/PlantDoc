@@ -5,6 +5,7 @@ import { buildLogPayload, type LogInput } from './log';
 import { ownerPermissions } from './owner';
 import type {
   EnvironmentSnapshot,
+  InsightFeedback,
   Observation,
   Plant,
   PlacementType,
@@ -174,6 +175,7 @@ export async function getPlantWithTimeline(plantId: string): Promise<Plant> {
         'observations.measurements.*',
         'observations.photos.*',
         'observations.environment_snapshots.*',
+        'insight_feedback.*',
       ]),
     ],
   });
@@ -278,6 +280,36 @@ export async function createEnvironmentSnapshot(
     permissions: ownerPermissions(input.userId),
   });
   return row as unknown as EnvironmentSnapshot;
+}
+
+// ---------- insight feedback ----------
+
+/** One verdict per (plant, insight kind): updates the existing row when the
+ * caller passes it, otherwise creates a new owner-only row. */
+export async function setInsightFeedback(
+  userId: string,
+  plantId: string,
+  insightKind: string,
+  helpful: boolean,
+  existing?: InsightFeedback | null,
+): Promise<InsightFeedback> {
+  if (existing) {
+    const row = await tablesDB.updateRow({
+      databaseId: db,
+      tableId: 'insight_feedback',
+      rowId: existing.$id,
+      data: { helpful },
+    });
+    return row as unknown as InsightFeedback;
+  }
+  const row = await tablesDB.createRow({
+    databaseId: db,
+    tableId: 'insight_feedback',
+    rowId: ID.unique(),
+    data: { user_id: userId, plant_id: plantId, insight_kind: insightKind, helpful },
+    permissions: ownerPermissions(userId),
+  });
+  return row as unknown as InsightFeedback;
 }
 
 // ---------- photos ----------

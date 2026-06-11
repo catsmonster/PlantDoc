@@ -349,6 +349,30 @@ export const TABLES: TableDef[] = [
     indexes: [],
   },
   {
+    id: 'insight_feedback',
+    name: 'Insight Feedback',
+    permissions: ['create:users'],
+    rowSecurity: true,
+    columns: [
+      userId,
+      {
+        // Two-way so per-plant feedback hydrates through the plant select
+        // (relationship columns cannot be filtered); cascade so feedback
+        // never outlives its plant.
+        kind: 'relationship',
+        key: 'plant_id',
+        relatedTableId: 'plants',
+        relationType: 'manyToOne',
+        twoWay: true,
+        twoWayKey: 'insight_feedback',
+        onDelete: 'cascade',
+      },
+      { kind: 'varchar', key: 'insight_kind', size: 32, required: true },
+      { kind: 'boolean', key: 'helpful', required: true },
+    ],
+    indexes: [{ key: 'idx_user_id', type: 'key', columns: ['user_id'] }],
+  },
+  {
     id: 'public_observations',
     name: 'Public Observations',
     permissions: [],
