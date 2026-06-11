@@ -1,4 +1,12 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import {
+  clearLogDraft,
+  isDefaultLogDraft,
+  loadLogDraft,
+  logDraftKey,
+  saveLogDraft,
+  type LogDraft,
+} from '../../lib/drafts';
 import { enrichObservationWeather } from '../../lib/enrich';
 import { errorMessage } from '../../lib/error';
 import { createLog } from '../../lib/repo';
@@ -43,21 +51,65 @@ export function LogSheet({
   onLogged: () => void;
 }) {
   const imperial = profile.preferred_units === 'imperial';
-  const [mode, setMode] = useState<Mode>('water');
+  const draftKey = logDraftKey(userId, plantId);
+  // Unsaved input from a failed save, dismiss, or reload (src/lib/drafts.ts).
+  const draft = useMemo(() => loadLogDraft(localStorage, draftKey), [draftKey]);
+  const [mode, setMode] = useState<Mode>(draft?.mode ?? 'water');
   const [observedAt, setObservedAt] = useState(nowLocal());
-  const [contribute, setContribute] = useState(profile.public_contribution_default);
-  const [note, setNote] = useState('');
+  const [contribute, setContribute] = useState(
+    draft?.contribute ?? profile.public_contribution_default,
+  );
+  const [note, setNote] = useState(draft?.note ?? '');
   // Watering fast path: 250 ml preset.
-  const [amount, setAmount] = useState('250');
-  const [method, setMethod] = useState(waterMethods[0]);
-  const [careType, setCareType] = useState<TreatmentType>('fertilizing');
-  const [productName, setProductName] = useState('');
-  const [height, setHeight] = useState('');
-  const [leafCount, setLeafCount] = useState('');
-  const [soilMoisture, setSoilMoisture] = useState('');
-  const [healthScore, setHealthScore] = useState('');
+  const [amount, setAmount] = useState(draft?.amount ?? '250');
+  const [method, setMethod] = useState(draft?.method ?? waterMethods[0]);
+  const [careType, setCareType] = useState<TreatmentType>(
+    (draft?.careType as TreatmentType) ?? 'fertilizing',
+  );
+  const [productName, setProductName] = useState(draft?.productName ?? '');
+  const [height, setHeight] = useState(draft?.height ?? '');
+  const [leafCount, setLeafCount] = useState(draft?.leafCount ?? '');
+  const [soilMoisture, setSoilMoisture] = useState(draft?.soilMoisture ?? '');
+  const [healthScore, setHealthScore] = useState(draft?.healthScore ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const restored = draft !== null;
+
+  useEffect(() => {
+    const current: LogDraft = {
+      v: 1,
+      mode,
+      amount,
+      method,
+      careType,
+      productName,
+      height,
+      leafCount,
+      soilMoisture,
+      healthScore,
+      note,
+      contribute,
+    };
+    if (isDefaultLogDraft(current, profile.public_contribution_default)) {
+      clearLogDraft(localStorage, draftKey);
+    } else {
+      saveLogDraft(localStorage, draftKey, current);
+    }
+  }, [
+    mode,
+    amount,
+    method,
+    careType,
+    productName,
+    height,
+    leafCount,
+    soilMoisture,
+    healthScore,
+    note,
+    contribute,
+    draftKey,
+    profile.public_contribution_default,
+  ]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -117,6 +169,7 @@ export function LogSheet({
       } catch (enrichError) {
         console.warn('weather enrichment failed', enrichError);
       }
+      clearLogDraft(localStorage, draftKey);
       onLogged();
     } catch (e) {
       setError(errorMessage(e));
@@ -134,6 +187,11 @@ export function LogSheet({
         <div className="mx-auto max-w-md space-y-4">
           <div className="mx-auto h-1 w-10 rounded-full bg-leaf-100" />
           <h2 className="text-lg font-semibold text-slate-800">Log care</h2>
+          {restored && (
+            <p className="rounded-lg bg-leaf-50 px-3 py-2 text-xs text-leaf-700">
+              Draft restored from your last unsaved entry.
+            </p>
+          )}
           <Segmented
             label="What happened?"
             value={mode}
