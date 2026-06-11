@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { errorMessage } from '../../lib/error';
 import { getPlantWithTimeline, photoUrl } from '../../lib/repo';
 import type { Observation, Plant, Profile, TreatmentType, Units } from '../../lib/types';
-import { formatHeight, formatVolume } from '../../lib/units';
+import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
 import { Button } from '../../ui/Button';
 import { ErrorText } from '../../ui/Field';
 import { Spinner } from '../../ui/Spinner';
@@ -78,6 +78,21 @@ function detailLine(obs: Observation, units: Units): string | null {
   return obs.observation_type.replace('_', ' ');
 }
 
+/** "18°C · 64% RH · partly cloudy" from the entry's weather snapshot. */
+function environmentLine(obs: Observation, units: Units): string | null {
+  const snapshot = obs.environment_snapshots?.[0];
+  if (!snapshot) return null;
+  const parts: string[] = [];
+  if (snapshot.outdoor_temperature_c != null) {
+    parts.push(formatTemperature(snapshot.outdoor_temperature_c, units));
+  }
+  if (snapshot.relative_humidity_percent != null) {
+    parts.push(`${Math.round(snapshot.relative_humidity_percent)}% RH`);
+  }
+  if (snapshot.weather_summary) parts.push(snapshot.weather_summary);
+  return parts.length ? parts.join(' · ') : null;
+}
+
 function PhotoThumb({ fileId }: { fileId: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) {
@@ -100,6 +115,7 @@ function PhotoThumb({ fileId }: { fileId: string }) {
 
 function TimelineEntry({ obs, units }: { obs: Observation; units: Units }) {
   const detail = detailLine(obs, units);
+  const environment = environmentLine(obs, units);
   const time = new Date(obs.observed_at).toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit',
@@ -117,6 +133,7 @@ function TimelineEntry({ obs, units }: { obs: Observation; units: Units }) {
         {obs.notes_private && (
           <p className="mt-1 text-sm leading-relaxed text-slate-500">{obs.notes_private}</p>
         )}
+        {environment && <p className="mt-1 text-xs text-slate-400">🌤️ {environment}</p>}
         {obs.photos?.[0] && (
           <div className="mt-2">
             <PhotoThumb fileId={obs.photos[0].private_file_id} />
@@ -264,6 +281,7 @@ export function PlantScreen({
           userId={userId}
           plantId={plantId}
           profile={profile}
+          location={typeof plant.location_id === 'object' ? plant.location_id : null}
           onClose={() => setLogOpen(false)}
           onLogged={refresh}
         />
