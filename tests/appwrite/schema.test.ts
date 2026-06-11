@@ -11,6 +11,7 @@ const REQUIRED_TABLES = [
   'measurements',
   'photos',
   'environment_snapshots',
+  'insight_feedback',
   'public_observations',
 ];
 
@@ -53,6 +54,7 @@ describe('schema coverage', () => {
       'measurements',
       'photos',
       'environment_snapshots',
+      'insight_feedback',
     ];
     for (const id of privateTables) {
       expect(TABLES.find((t) => t.id === id)!.permissions, id).toEqual(['create:users']);
@@ -115,6 +117,18 @@ describe('schema coverage', () => {
     if (rel.kind === 'relationship') {
       expect(rel.twoWay).toBe(true);
       expect(rel.twoWayKey).toBe('environment_snapshots');
+      expect(rel.onDelete).toBe('cascade');
+    }
+  });
+
+  it('insight_feedback.plant_id is two-way with cascade delete', () => {
+    const feedback = TABLES.find((t) => t.id === 'insight_feedback')!;
+    const rel = feedback.columns.find((c) => c.key === 'plant_id')!;
+    expect(rel.kind).toBe('relationship');
+    if (rel.kind === 'relationship') {
+      expect(rel.relatedTableId).toBe('plants');
+      expect(rel.twoWay).toBe(true);
+      expect(rel.twoWayKey).toBe('insight_feedback');
       expect(rel.onDelete).toBe('cascade');
     }
   });
