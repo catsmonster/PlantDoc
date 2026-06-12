@@ -243,3 +243,61 @@ ADR-001 chose Cloudflare Pages for the frontend. Since then Cloudflare has put P
 
 - [Workers static assets](https://developers.cloudflare.com/workers/static-assets/)
 - [Workers custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
+
+## ADR-010: Gemini AI Preview Through A Worker Proxy
+
+- **Status**: Accepted.
+- **Date**: 2026-06-11
+
+### Context
+
+Phase 4 intentionally deferred AI advice until a provider key, consent/provenance rules, and image-handling boundaries existed. A Gemini free-tier key is now available, and the requested first slice is a preview-only plant-detail insight that can use both structured text context and the latest plant photo. The key must not ship in the browser bundle, and the feature must not create a new persistence surface for generated advice.
+
+### Decision
+
+- Add a narrow Cloudflare Worker API route, `/api/gemini-insights`, alongside Workers static assets. `wrangler.jsonc` now binds `ASSETS` and routes only `/api/*` through the Worker script.
+- Keep `GEMINI_API_KEY` server-side only. Local development may keep it in ignored `.env`; production must install it with `npx wrangler secret put GEMINI_API_KEY`. `GEMINI_MODEL` defaults to `gemini-3.5-flash`.
+- Build Gemini prompts from a sanitized structured plant summary. The summary excludes private notes, user IDs, row IDs, raw storage file IDs, exact coordinates, city/postal fields, and public-export data. Treatment product names are omitted from the preview prompt until there is a stronger consent story.
+- Support optional image context by attaching only the latest photo the user can already view, resized client-side when needed, capped at 750 KB before base64 encoding, and sent only after the user presses the preview button.
+- Keep outputs transient: display them in the browser, do not store them, do not feed them to public exports, and do not replace deterministic insights.
+- Add aggressive preview controls: 3 local previews per user/plant/day, 1.2 MB maximum Worker request body, and 384 maximum output tokens. The UI warns that Gemini 3.5 Flash preview quality and availability may vary based on provider load and rate limits.
+
+### Consequences
+
+- PlantDoc is no longer strictly an assets-only Worker, but Worker compute is limited to one secret-backed preview route. Appwrite remains the primary backend.
+- The local daily cap reduces accidental usage but is not an abuse-proof billing control. A public launch should add a durable server-side limiter, Turnstile, or account-gated quota before widening access.
+- Free-tier or prepaid account settings are an operational guardrail, not a code guarantee. Billing alerts and provider-console quota controls still need owner review.
+- AI preview behavior is testable without calling Gemini: tests assert prompt sanitization, request caps, model/request shape, and missing-key failure.
+
+### References
+
+- [Gemini API vision docs](https://ai.google.dev/gemini-api/docs/vision)
+- [Workers static assets](https://developers.cloudflare.com/workers/static-assets/)
+
+## ADR-011: Store Optional Plant Summary Fields in Databases to Resolve Dashboard Scale Bottleneck
+
+- **Status**: Accepted.
+- **Date**: 2026-06-12
+
+### Context
+
+The mobile redesign dashboard needs to display status indications like thirst state and last watered days, and show the latest photo preview for each plant. Previously, this was done by hydrating the full timeline of observations and treatments for all plants (`listPlantsWithTimeline`) on the home screen. However, this approach does not scale well as the number of plants and historical log entries increases, causing severe client-side performance issues and large network payloads.
+
+### Decision
+
+- Add 5 optional, private summary columns to the `plants` table:
+  - `last_watered_at` (datetime)
+  - `watering_count` (integer)
+  - `watering_cadence_days` (float)
+  - `latest_photo_file_id` (varchar)
+  - `latest_photo_observed_at` (datetime)
+- Query scalar `plants` data on the dashboard (`listPlants`) instead of querying full timelines (`listPlantsWithTimeline`).
+- Update summary fields asynchronously (best-effort) when care logs are created or photos are uploaded.
+- Add a one-time migration/backfill script to compute and populate the summary fields for existing plants.
+- Ensure these summary fields are treated as private columns and are excluded from public open data exports.
+
+### Consequences
+
+- Dashboard database queries and network payloads are scaled down significantly, loading only O(1) scalar fields per plant rather than O(N) timeline entries.
+- UI elements (thirst indicator, last watered date, latest photo) are rendered directly from these scalar summary fields.
+- Thirst calculation is simplified using pure summary helper functions, allowing easy offline unit testing.

@@ -27,17 +27,19 @@ interface PlantImageSlotProps {
 }
 
 export function PlantImageSlot({ plant, height, radius, caption, isDark }: PlantImageSlotProps) {
-  // Check if plant has any uploaded photos in observations
-  const latestPhoto = plant.observations?.find(
-    (obs) => obs.photos && obs.photos.length > 0
-  )?.photos?.[0];
+  // Prefer the cached summary field; fall back to scanning observations
+  const latestPhotoFileId =
+    plant.latest_photo_file_id ??
+    plant.observations?.find((obs) => obs.photos && obs.photos.length > 0)?.photos?.[0]
+      ?.private_file_id ??
+    null;
 
   const tint = getPlantTint(plant.$id);
 
-  if (latestPhoto) {
+  if (latestPhotoFileId) {
     return (
       <img
-        src={photoUrl(latestPhoto.private_file_id)}
+        src={photoUrl(latestPhotoFileId)}
         alt={plant.nickname}
         loading="lazy"
         style={{

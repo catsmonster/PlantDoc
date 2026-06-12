@@ -54,6 +54,11 @@ export interface Plant extends RowMeta {
   location_id?: UserLocation | string | null;
   observations?: Observation[];
   insight_feedback?: InsightFeedback[];
+  last_watered_at?: string | null;
+  watering_count?: number | null;
+  watering_cadence_days?: number | null;
+  latest_photo_file_id?: string | null;
+  latest_photo_observed_at?: string | null;
 }
 
 export interface InsightFeedback extends RowMeta {

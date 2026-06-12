@@ -30,6 +30,12 @@ const PRIVATE_FIELDS = [
   'observed_at',
   'label',
   'city',
+  // Plant dashboard summary fields — private, never exported
+  'last_watered_at',
+  'watering_count',
+  'watering_cadence_days',
+  'latest_photo_file_id',
+  'latest_photo_observed_at',
 ];
 
 describe('public export privacy', () => {

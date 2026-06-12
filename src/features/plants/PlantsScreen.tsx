@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { errorMessage } from '../../lib/error';
-import { listPlantsWithTimeline } from '../../lib/repo';
-import { isPlantThirsty } from '../../lib/insights';
+import { listPlants } from '../../lib/repo';
+import { isPlantThirstyFromSummary } from '../../lib/insights';
 import type { Plant, Profile } from '../../lib/types';
 import { ErrorText } from '../../ui/Field';
 import { Spinner } from '../../ui/Spinner';
@@ -10,7 +10,7 @@ import { Icon } from '../../ui/Icon';
 import { PlantImageSlot } from '../../ui/PlantImageSlot';
 import { useAuth } from '../auth/auth-context';
 
-const initialNow = Date.now();
+
 
 // Helper to format today's date like "Wednesday · 11 June"
 function formatToday() {
@@ -43,11 +43,18 @@ export function PlantsScreen({
   const [showArchived, setShowArchived] = useState(false);
 
   const isDark = theme === 'dark';
-  const now = initialNow;
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 60 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    listPlantsWithTimeline(userId)
+    listPlants(userId)
       .then((rows) => {
         if (!cancelled) setPlants(rows);
       })
@@ -81,7 +88,7 @@ export function PlantsScreen({
   const visible = plants.filter((p) => (showArchived ? true : p.status === 'active'));
   const hiddenCount = plants.length - activePlants.length;
 
-  const thirsty = activePlants.filter((p) => isPlantThirsty(p));
+  const thirsty = activePlants.filter((p) => isPlantThirstyFromSummary(p, now));
 
   // Get display name or default
   const displayName = profile?.display_name ?? 'there';
@@ -172,12 +179,8 @@ export function PlantsScreen({
               <p className="b-kicker" style={{ padding: '0 22px 10px' }}>Needs water · {thirsty.length}</p>
               <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 22px 4px' }}>
                 {thirsty.map((p, i) => {
-                  // Get days since last watering
-                  const lastWateredObs = p.observations?.find(
-                    (obs) => obs.observation_type === 'treatment' && obs.treatments?.[0]?.treatment_type === 'watering'
-                  );
-                  const lastWateredDays = lastWateredObs
-                    ? Math.round((now - Date.parse(lastWateredObs.observed_at)) / (24 * 60 * 60 * 1000))
+                  const lastWateredDays = p.last_watered_at
+                    ? Math.max(0, Math.round((now.getTime() - Date.parse(p.last_watered_at)) / (24 * 60 * 60 * 1000)))
                     : 0;
 
                   return (
@@ -204,7 +207,7 @@ export function PlantsScreen({
                       <span style={{ textAlign: 'left' }}>
                         <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: '#F2F6EF' }}>{p.nickname}</span>
                         <span className="mono" style={{ display: 'block', fontSize: 10.5, color: '#67766A', letterSpacing: '.05em' }}>
-                          {lastWateredObs ? `${lastWateredDays}D AGO` : 'NEVER'}
+                          {p.last_watered_at ? `${lastWateredDays}D AGO` : 'NEVER'}
                         </span>
                       </span>
                     </button>
@@ -217,13 +220,10 @@ export function PlantsScreen({
           {/* Plants Cards list */}
           <div style={{ padding: '22px 22px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
             {visible.map((p, i) => {
-              const lastWateredObs = p.observations?.find(
-                (obs) => obs.observation_type === 'treatment' && obs.treatments?.[0]?.treatment_type === 'watering'
-              );
-              const lastWateredDays = lastWateredObs
-                ? Math.round((now - Date.parse(lastWateredObs.observed_at)) / (24 * 60 * 60 * 1000))
+              const lastWateredDays = p.last_watered_at
+                ? Math.max(0, Math.round((now.getTime() - Date.parse(p.last_watered_at)) / (24 * 60 * 60 * 1000)))
                 : 0;
-              const isThirsty = isPlantThirsty(p);
+              const isThirsty = isPlantThirstyFromSummary(p, now);
               const speciesLine = p.common_name ?? p.species_text ?? '';
 
               return (
@@ -248,9 +248,16 @@ export function PlantsScreen({
                   <PlantImageSlot plant={p} height={210} radius={22} caption=" " isDark />
                   <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(8,12,9,.85) 4%, rgba(8,12,9,.15) 48%, transparent)', pointerEvents: 'none' }}></div>
                   <div style={{ position: 'absolute', top: 14, left: 14, right: 14, display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: 'rgba(255,255,255,.12)', color: '#F2F6EF', backdropFilter: 'blur(6px)' }}>
-                      {p.placement_label || p.placement_type}
-                    </span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: 'rgba(255,255,255,.12)', color: '#F2F6EF', backdropFilter: 'blur(6px)' }}>
+                        {p.placement_label || p.placement_type}
+                      </span>
+                      {p.status !== 'active' && (
+                        <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: 'rgba(255, 68, 68, 0.2)', color: '#FF6b6b', backdropFilter: 'blur(6px)' }}>
+                          {p.status}
+                        </span>
+                      )}
+                    </div>
                     {isThirsty && (
                       <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: '#C7F24A', color: '#0E140F', backdropFilter: 'blur(6px)' }}>
                         <Icon name="droplet" size={11} stroke={2.6} /> Water
@@ -262,7 +269,7 @@ export function PlantsScreen({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 7 }}>
                       <span className="mono" style={{ fontSize: 11.5, color: 'rgba(255,255,255,.78)', letterSpacing: '.02em' }}>{speciesLine}</span>
                       <span className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>
-                        {lastWateredObs ? `${String(lastWateredDays).padStart(2, '0')}d` : '--'}
+                        {p.last_watered_at ? `${String(lastWateredDays).padStart(2, '0')}d` : '--'}
                       </span>
                     </div>
                   </div>
@@ -446,13 +453,10 @@ export function PlantsScreen({
         {/* Plant Cards List */}
         <div style={{ padding: '8px 22px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {visible.map((p, i) => {
-            const lastWateredObs = p.observations?.find(
-              (obs) => obs.observation_type === 'treatment' && obs.treatments?.[0]?.treatment_type === 'watering'
-            );
-            const lastWateredDays = lastWateredObs
-              ? Math.round((now - Date.parse(lastWateredObs.observed_at)) / (24 * 60 * 60 * 1000))
+            const lastWateredDays = p.last_watered_at
+              ? Math.max(0, Math.round((now.getTime() - Date.parse(p.last_watered_at)) / (24 * 60 * 60 * 1000)))
               : 0;
-            const isThirsty = isPlantThirsty(p);
+            const isThirsty = isPlantThirstyFromSummary(p, now);
             const speciesLine = p.common_name ?? p.species_text ?? '';
 
             return (
@@ -482,6 +486,11 @@ export function PlantsScreen({
                     <h3 className="serif" style={{ fontSize: 21, fontWeight: 600, color: '#23302A', margin: 0, letterSpacing: '-.01em' }}>
                       {p.nickname}
                     </h3>
+                    {p.status !== 'active' && (
+                      <span className="a-chip" style={{ background: '#F5ECE1', color: '#A06D3B', padding: '3px 8px', fontSize: 11.5 }}>
+                        {p.status}
+                      </span>
+                    )}
                     {isThirsty && (
                       <span className="a-chip" style={{ background: '#EAF1F6', color: '#2E6E8E', padding: '3px 8px', fontSize: 11.5 }}>
                         <Icon name="droplet" size={12} stroke={2.4} /> Thirsty
@@ -496,7 +505,7 @@ export function PlantsScreen({
                     {p.placement_label || p.placement_type}
                     <span style={{ width: 3, height: 3, borderRadius: 9, background: '#9AA294', margin: '0 1px' }}></span>
                     <Icon name="droplet" size={13} stroke={2} />
-                    {lastWateredObs ? `${lastWateredDays}d ago` : 'never'}
+                    {p.last_watered_at ? `${lastWateredDays}d ago` : 'never'}
                   </div>
                 </div>
               </button>

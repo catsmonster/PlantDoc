@@ -2,16 +2,24 @@ import { useEffect, useState, useRef } from 'react';
 import { errorMessage } from '../../lib/error';
 import { getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
 import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback } from '../../lib/types';
-import { formatHeight, formatVolume } from '../../lib/units';
+import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon, healthLabel, type IconName } from '../../ui/Icon';
 import { LogSheet } from './LogSheet';
 import { plantInsights } from '../../lib/insights';
 import { ErrorText } from '../../ui/Field';
+import {
+  AI_PREVIEW_DAILY_LIMIT,
+  AI_PREVIEW_IMAGE_MAX_BYTES,
+  AI_PREVIEW_WARNING,
+  buildPlantGeminiPreviewPayload,
+  canUseAiPreview,
+  recordAiPreviewUse,
+  type GeminiPreviewImage,
+} from '../../lib/gemini-preview';
 
-const initialNow = Date.now();
-const initialNowDate = new Date(initialNow);
+
 
 const treatmentLabels: Record<TreatmentType, string> = {
   watering: 'Watered',
@@ -80,12 +88,12 @@ function detailLine(obs: Observation, units: Units): string | null {
   return obs.observation_type.replace('_', ' ');
 }
 
-function environmentLine(obs: Observation): string | null {
+function environmentLine(obs: Observation, units: Units): string | null {
   const snapshot = obs.environment_snapshots?.[0];
   if (!snapshot) return null;
   const parts: string[] = [];
   if (snapshot.outdoor_temperature_c != null) {
-    parts.push(`${Math.round(snapshot.outdoor_temperature_c)}°C`);
+    parts.push(formatTemperature(snapshot.outdoor_temperature_c, units));
   }
   if (snapshot.relative_humidity_percent != null) {
     parts.push(`${Math.round(snapshot.relative_humidity_percent)}% RH`);
@@ -187,6 +195,169 @@ function PhotoButton({ userId, plantId, profile, onUploaded, onError, isDark }: 
   );
 }
 
+interface AiPreviewState {
+  loading: boolean;
+  text: string | null;
+  error: string | null;
+  imageIncluded: boolean;
+  imageSkipped: string | null;
+  remaining: number | null;
+}
+
+const initialAiPreview: AiPreviewState = {
+  loading: false,
+  text: null,
+  error: null,
+  imageIncluded: false,
+  imageSkipped: null,
+  remaining: null,
+};
+
+function bytesToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result ?? '');
+      resolve(value.includes(',') ? value.slice(value.indexOf(',') + 1) : value);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read image.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+function canSendImageType(type: string): boolean {
+  return type === 'image/jpeg' || type === 'image/png' || type === 'image/webp';
+}
+
+async function shrinkPreviewImage(blob: Blob): Promise<Blob | null> {
+  if (blob.size <= AI_PREVIEW_IMAGE_MAX_BYTES && canSendImageType(blob.type)) return blob;
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Could not load latest photo for AI preview.'));
+      element.src = objectUrl;
+    });
+    const maxSide = 768;
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    context.drawImage(img, 0, 0, canvas.width, canvas.height);
+    for (const quality of [0.72, 0.58, 0.45]) {
+      const candidate = await canvasToBlob(canvas, 'image/jpeg', quality);
+      if (candidate && candidate.size <= AI_PREVIEW_IMAGE_MAX_BYTES) return candidate;
+    }
+    return null;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function readGeminiPreviewImage(url: string): Promise<{
+  image?: GeminiPreviewImage;
+  skipped?: string;
+}> {
+  try {
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response.ok) return { skipped: 'Latest photo could not be attached.' };
+    const sourceBlob = await response.blob();
+    if (!sourceBlob.type.startsWith('image/')) return { skipped: 'Latest file is not an image.' };
+    const previewBlob = await shrinkPreviewImage(sourceBlob);
+    if (!previewBlob) {
+      const kb = Math.round(AI_PREVIEW_IMAGE_MAX_BYTES / 1000);
+      return { skipped: `Latest photo was skipped to keep the preview under ${kb} KB.` };
+    }
+    return {
+      image: {
+        mimeType: previewBlob.type || 'image/jpeg',
+        base64: await bytesToBase64(previewBlob),
+        byteLength: previewBlob.size,
+      },
+    };
+  } catch {
+    return { skipped: 'Latest photo could not be attached.' };
+  }
+}
+
+function AiPreviewBlock({
+  isDark,
+  state,
+  onGenerate,
+}: {
+  isDark: boolean;
+  state: AiPreviewState;
+  onGenerate: () => void;
+}) {
+  const border = isDark ? '1px solid rgba(255,255,255,.09)' : '1px solid #E7E0D2';
+  const background = isDark ? '#111912' : '#FFFDF8';
+  const muted = isDark ? '#9BAA98' : '#6B7568';
+  const text = isDark ? '#F2F6EF' : '#23302A';
+  const accent = isDark ? '#C7F24A' : '#3C7140';
+  const buttonDisabled = state.loading || state.remaining === 0;
+
+  return (
+    <div style={{ marginTop: 14, padding: 12, borderRadius: isDark ? 14 : 16, border, background }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: text }}>Gemini AI preview</p>
+          <p style={{ margin: '3px 0 0', fontSize: 11.5, lineHeight: 1.35, color: muted }}>
+            {AI_PREVIEW_WARNING}
+          </p>
+        </div>
+        <button
+          type="button"
+          className={isDark ? 'b-tap' : 'a-tap'}
+          disabled={buttonDisabled}
+          onClick={onGenerate}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            border: 'none',
+            borderRadius: 12,
+            padding: '9px 11px',
+            background: buttonDisabled ? (isDark ? '#243024' : '#DDE5D7') : accent,
+            color: isDark ? '#0E140F' : '#fff',
+            cursor: buttonDisabled ? 'not-allowed' : 'pointer',
+            fontSize: 12,
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <Icon name="sparkle" size={14} stroke={2.2} />
+          {state.loading ? 'Checking' : 'Generate'}
+        </button>
+      </div>
+      {state.text && (
+        <p style={{ margin: '10px 0 0', whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5, color: text }}>
+          {state.text}
+        </p>
+      )}
+      {state.error && (
+        <p style={{ margin: '9px 0 0', fontSize: 12.5, lineHeight: 1.4, color: isDark ? '#E0A36B' : '#B07F57' }}>
+          {state.error}
+        </p>
+      )}
+      {(state.imageIncluded || state.imageSkipped || state.remaining != null) && (
+        <p className="mono" style={{ margin: '9px 0 0', fontSize: 10, letterSpacing: '.05em', color: muted }}>
+          {state.imageIncluded ? 'LATEST PHOTO INCLUDED' : state.imageSkipped ? state.imageSkipped.toUpperCase() : 'TEXT ONLY'}
+          {state.remaining != null ? ` · ${state.remaining}/${AI_PREVIEW_DAILY_LIMIT} PREVIEWS LEFT TODAY` : ''}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function PlantScreen({
   plantId,
   userId,
@@ -206,10 +377,17 @@ export function PlantScreen({
   const [logOpen, setLogOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [verdicts, setVerdicts] = useState<Map<string, InsightFeedback>>(new Map());
+  const [aiPreview, setAiPreview] = useState<AiPreviewState>(initialAiPreview);
 
   const isDark = theme === 'dark';
-  const now = initialNow;
-  const nowDate = initialNowDate;
+  const [now, setNow] = useState(() => Date.now());
+  const nowDate = new Date(now);
+
+  // Refresh 'now' every hour so "X days ago" stays accurate while mounted
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -313,6 +491,58 @@ export function PlantScreen({
   const latestPhotoObs = observations.find((obs) => obs.photos && obs.photos.length > 0);
   const heroPhotoUrl = latestPhotoObs ? photoUrl(latestPhotoObs.photos![0].private_file_id) : null;
 
+  const handleAiPreview = async () => {
+    const quota = canUseAiPreview(localStorage, userId, plant.$id);
+    if (!quota.allowed) {
+      setAiPreview((prev) => ({
+        ...prev,
+        loading: false,
+        error: 'AI preview limit reached for this plant today.',
+        remaining: 0,
+      }));
+      return;
+    }
+
+    setAiPreview((prev) => ({ ...prev, loading: true, error: null }));
+    const imageResult = heroPhotoUrl ? await readGeminiPreviewImage(heroPhotoUrl) : {};
+    const payload = buildPlantGeminiPreviewPayload(
+      plant,
+      profile.preferred_units,
+      imageResult.image,
+    );
+    recordAiPreviewUse(localStorage, userId, plant.$id);
+    const afterRecord = canUseAiPreview(localStorage, userId, plant.$id);
+
+    try {
+      const response = await fetch('/api/gemini-insights', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = (await response.json()) as { text?: string; error?: string };
+      if (!response.ok || !body.text) {
+        throw new Error(body.error ?? 'AI preview is unavailable right now.');
+      }
+      setAiPreview({
+        loading: false,
+        text: body.text,
+        error: null,
+        imageIncluded: Boolean(imageResult.image),
+        imageSkipped: imageResult.skipped ?? null,
+        remaining: afterRecord.remaining,
+      });
+    } catch (e) {
+      setAiPreview({
+        loading: false,
+        text: null,
+        error: errorMessage(e),
+        imageIncluded: Boolean(imageResult.image),
+        imageSkipped: imageResult.skipped ?? null,
+        remaining: afterRecord.remaining,
+      });
+    }
+  };
+
   const heroBg = isDark
     ? `linear-gradient(160deg, ${tint[0]}, ${tint[1]}), radial-gradient(120% 80% at 75% 15%, rgba(255,255,255,.18), transparent 55%)`
     : `linear-gradient(150deg, ${tint[0]}22, ${tint[1]}3a 70%), radial-gradient(120% 90% at 78% 12%, ${tint[1]}33, transparent 60%)`;
@@ -334,7 +564,7 @@ export function PlantScreen({
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #0E140F 2%, rgba(14,20,15,.2) 45%, rgba(14,20,15,.35))', pointerEvents: 'none' }}></div>
             
             {/* Back Button */}
-            <button className="b-tap" onClick={onBack} style={{ position: 'absolute', top: 58, left: 18, width: 42, height: 42, borderRadius: 99, background: 'rgba(14,20,15,.55)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F2F6EF', cursor: 'pointer' }}>
+            <button type="button" aria-label="Back to plants" className="b-tap" onClick={onBack} style={{ position: 'absolute', top: 58, left: 18, width: 42, height: 42, borderRadius: 99, background: 'rgba(14,20,15,.55)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F2F6EF', cursor: 'pointer' }}>
               <Icon name="chevronLeft" size={22} stroke={2.4} />
             </button>
 
@@ -379,9 +609,8 @@ export function PlantScreen({
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
                   <span style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-.02em', color: '#fff' }}>
-                    {latestHeight != null ? latestHeight : '--'}
+                    {latestHeight != null ? formatHeight(latestHeight, profile.preferred_units) : '--'}
                   </span>
-                  <span className="mono" style={{ fontSize: 12, color: '#67766A' }}>cm</span>
                 </div>
                 <p className="b-kicker" style={{ margin: '5px 0 0', fontSize: 10 }}>Height</p>
               </div>
@@ -428,7 +657,7 @@ export function PlantScreen({
             </div>
 
             {/* Care Insights */}
-            {insights.length > 0 && (
+            {observations.length > 0 && (
               <div style={{ marginTop: 30 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                   <span className="b-kicker">Care insights</span>
@@ -470,6 +699,7 @@ export function PlantScreen({
                     </div>
                   );
                 })}
+                <AiPreviewBlock isDark state={aiPreview} onGenerate={() => void handleAiPreview()} />
               </div>
             )}
 
@@ -492,7 +722,7 @@ export function PlantScreen({
                       {entries.map((obs, idx) => {
                         const icon = getIconName(obs);
                         const detail = detailLine(obs, profile.preferred_units);
-                        const env = environmentLine(obs);
+                        const env = environmentLine(obs, profile.preferred_units);
                         const time = new Date(obs.observed_at).toLocaleTimeString(undefined, {
                           hour: '2-digit',
                           minute: '2-digit',
@@ -577,7 +807,7 @@ export function PlantScreen({
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(20,28,22,.62), rgba(20,28,22,.05) 55%)', pointerEvents: 'none' }}></div>
           
           {/* Back button */}
-          <button className="a-tap" onClick={onBack} style={{ position: 'absolute', top: 56, left: 18, width: 42, height: 42, borderRadius: 99, background: 'rgba(255,255,255,.85)', backdropFilter: 'blur(8px)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#23302A', cursor: 'pointer' }}>
+          <button type="button" aria-label="Back to plants" className="a-tap" onClick={onBack} style={{ position: 'absolute', top: 56, left: 18, width: 42, height: 42, borderRadius: 99, background: 'rgba(255,255,255,.85)', backdropFilter: 'blur(8px)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#23302A', cursor: 'pointer' }}>
             <Icon name="chevronLeft" size={22} stroke={2.4} />
           </button>
 
@@ -650,9 +880,8 @@ export function PlantScreen({
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                 <span className="serif" style={{ fontSize: 24, fontWeight: 600, color: '#23302A' }}>
-                  {latestHeight != null ? latestHeight : '--'}
+                  {latestHeight != null ? formatHeight(latestHeight, profile.preferred_units) : '--'}
                 </span>
-                <span style={{ fontSize: 12, color: '#9AA294', fontWeight: 600 }}>cm</span>
               </div>
               <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#9AA294', fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase' }}>Height</p>
             </div>
@@ -689,7 +918,7 @@ export function PlantScreen({
           </div>
 
           {/* Care Insights Panel */}
-          {insights.length > 0 && (
+          {observations.length > 0 && (
             <div className="a-card a-rise" style={{ animationDelay: '60ms', marginTop: 16, borderRadius: 22, padding: '6px 18px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '15px 0 4px' }}>
                 <Icon name="sparkle" size={18} stroke={2} style={{ color: '#B07F57' }} />
@@ -731,6 +960,7 @@ export function PlantScreen({
                   </div>
                 );
               })}
+              <AiPreviewBlock isDark={false} state={aiPreview} onGenerate={() => void handleAiPreview()} />
             </div>
           )}
 
@@ -750,7 +980,7 @@ export function PlantScreen({
                     {entries.map((obs, idx) => {
                       const icon = getIconName(obs);
                       const detail = detailLine(obs, profile.preferred_units);
-                      const env = environmentLine(obs);
+                      const env = environmentLine(obs, profile.preferred_units);
                       const time = new Date(obs.observed_at).toLocaleTimeString(undefined, {
                         hour: '2-digit',
                         minute: '2-digit',

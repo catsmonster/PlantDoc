@@ -1,12 +1,16 @@
-// Cloudflare Workers config: serves the built Vite SPA as static assets.
+// Cloudflare Workers config: serves the built Vite SPA as static assets plus
+// the narrow API routes that need server-side secrets.
 // The custom-domain route only creates the plantdoc.galvando.com record;
 // it never modifies other DNS records on the zone (ADR-009).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "plantdoc",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-06-01",
   "assets": {
+    "binding": "ASSETS",
     "directory": "./dist",
+    "run_worker_first": ["/api/*"],
     // Client-side routing: unknown paths fall back to index.html.
     "not_found_handling": "single-page-application"
   },

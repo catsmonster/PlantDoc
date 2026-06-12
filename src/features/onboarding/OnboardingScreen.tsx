@@ -88,7 +88,6 @@ export function OnboardingScreen({ onComplete }: { onComplete: (profile: Profile
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="How should we greet you?"
-                required
                 disabled={busy}
               />
             </label>
@@ -239,7 +238,6 @@ export function OnboardingScreen({ onComplete }: { onComplete: (profile: Profile
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="How should we greet you?"
-                required
                 disabled={busy}
               />
             </label>

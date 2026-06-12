@@ -317,3 +317,64 @@ export function isPlantThirsty(plant: Plant, now: Date = new Date()): boolean {
   return sinceLast >= cadence;
 }
 
+export function isPlantThirstyFromSummary(plant: Plant, now: Date = new Date()): boolean {
+  if (plant.status !== 'active') return false;
+  if (!plant.last_watered_at) return false;
+
+  const lastWateredMs = Date.parse(plant.last_watered_at);
+  if (isNaN(lastWateredMs)) return false;
+
+  const sinceLast = daysBetween(lastWateredMs, now.getTime());
+  const count = plant.watering_count ?? 0;
+
+  if (count < MIN_WATERINGS) {
+    return sinceLast >= 8;
+  }
+  return sinceLast >= (plant.watering_cadence_days ?? 8);
+}
+
+export function getUpdatedWateringSummary(
+  current: {
+    last_watered_at?: string | null;
+    watering_count?: number | null;
+    watering_cadence_days?: number | null;
+  },
+  newWateringDate: string,
+) {
+  const currentCount = current.watering_count ?? 0;
+  const newCount = currentCount + 1;
+
+  let last_watered_at = current.last_watered_at || newWateringDate;
+  if (current.last_watered_at && newWateringDate > current.last_watered_at) {
+    last_watered_at = newWateringDate;
+  }
+
+  return {
+    last_watered_at,
+    watering_count: newCount,
+    watering_cadence_days: current.watering_cadence_days ?? null,
+  };
+}
+
+export function getUpdatedPhotoSummary(
+  current: {
+    latest_photo_file_id?: string | null;
+    latest_photo_observed_at?: string | null;
+  },
+  newPhotoFileId: string,
+  newPhotoObservedAt: string,
+) {
+  let latest_photo_file_id = current.latest_photo_file_id || newPhotoFileId;
+  let latest_photo_observed_at = current.latest_photo_observed_at || newPhotoObservedAt;
+
+  if (current.latest_photo_observed_at && newPhotoObservedAt > current.latest_photo_observed_at) {
+    latest_photo_file_id = newPhotoFileId;
+    latest_photo_observed_at = newPhotoObservedAt;
+  }
+
+  return {
+    latest_photo_file_id,
+    latest_photo_observed_at,
+  };
+}
+

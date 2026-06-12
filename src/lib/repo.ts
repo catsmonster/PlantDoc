@@ -127,6 +127,11 @@ export interface PlantInput {
   placement_label?: string | null;
   status?: PlantStatus;
   location_id?: string | null;
+  last_watered_at?: string | null;
+  watering_count?: number | null;
+  watering_cadence_days?: number | null;
+  latest_photo_file_id?: string | null;
+  latest_photo_observed_at?: string | null;
 }
 
 /** Scalar-only dashboard list; skips relationship columns so Appwrite does not
@@ -151,6 +156,11 @@ export async function listPlants(userId: string): Promise<Plant[]> {
         'status',
         'placement_type',
         'placement_label',
+        'last_watered_at',
+        'watering_count',
+        'watering_cadence_days',
+        'latest_photo_file_id',
+        'latest_photo_observed_at',
       ]),
     ],
   });
@@ -232,6 +242,51 @@ export async function updatePlant(plantId: string, input: Partial<PlantInput>): 
   return row as unknown as Plant;
 }
 
+export async function updatePlantSummaryFields(plantId: string): Promise<Plant> {
+  const plant = await getPlantWithTimeline(plantId);
+
+  // Compute last_watered_at, watering_count, watering_cadence_days
+  const waterings = (plant.observations ?? [])
+    .filter((obs) => obs.treatments?.some((t) => t.treatment_type === 'watering'))
+    .sort((a, b) => a.observed_at.localeCompare(b.observed_at));
+
+  const wateringCount = waterings.length;
+  const lastWateredAt = wateringCount > 0 ? waterings[wateringCount - 1].observed_at : null;
+
+  let wateringCadenceDays: number | null = null;
+  if (wateringCount >= 3) {
+    const times = waterings.map((w) => Date.parse(w.observed_at));
+    const intervals = times.slice(1).map((t, i) => (t - times[i]) / (24 * 60 * 60 * 1000));
+    const sorted = [...intervals].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    wateringCadenceDays = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+
+  // Compute latest_photo_file_id, latest_photo_observed_at
+  const photos = (plant.observations ?? [])
+    .filter((obs) => obs.observation_type === 'photo' && obs.photos && obs.photos.length > 0)
+    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+
+  const latestPhoto = photos[0];
+  const latestPhotoFileId = latestPhoto ? latestPhoto.photos![0].private_file_id : null;
+  const latestPhotoObservedAt = latestPhoto ? latestPhoto.observed_at : null;
+
+  const updated = await tablesDB.updateRow({
+    databaseId: db,
+    tableId: 'plants',
+    rowId: plantId,
+    data: {
+      last_watered_at: lastWateredAt,
+      watering_count: wateringCount,
+      watering_cadence_days: wateringCadenceDays,
+      latest_photo_file_id: latestPhotoFileId,
+      latest_photo_observed_at: latestPhotoObservedAt,
+    },
+  });
+
+  return updated as unknown as Plant;
+}
+
 // ---------- logging ----------
 
 /** Creates the observation row, then its treatment/measurement child. */
@@ -263,6 +318,10 @@ export async function createLog(input: LogInput): Promise<Observation> {
       permissions: perms,
     });
   }
+  // Best-effort update of plant summary fields
+  updatePlantSummaryFields(input.plantId).catch((err) => {
+    console.error('Failed to update plant summary fields:', err);
+  });
   return observation;
 }
 
@@ -385,6 +444,10 @@ export async function uploadPhoto(input: PhotoInput, file: File): Promise<Observ
       allow_public_image: false,
     },
     permissions: perms,
+  });
+  // Best-effort update of plant summary fields
+  updatePlantSummaryFields(input.plantId).catch((err) => {
+    console.error('Failed to update plant summary fields:', err);
   });
   return observation;
 }
