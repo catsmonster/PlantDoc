@@ -240,11 +240,12 @@ export function buildGeminiGenerateContentRequest(
     model,
     contents: [{ role: 'user', parts }],
     generationConfig: {
-      maxOutputTokens: 384,
+      // Thinking tokens count against maxOutputTokens (a 384-token cap once
+      // truncated the answer mid-sentence: thinking alone used 364 of it).
+      // Bound thinking so at least 512 tokens always remain for the answer.
+      maxOutputTokens: 1536,
       temperature: 0.35,
-      // Without this, Flash thinking consumes most of the 384-token budget
-      // (observed 364/384) and the visible answer truncates mid-sentence.
-      thinkingConfig: { thinkingBudget: 0 },
+      thinkingConfig: { thinkingBudget: 1024 },
     },
   };
 }
