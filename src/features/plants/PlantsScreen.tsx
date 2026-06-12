@@ -116,9 +116,46 @@ export function PlantsScreen({
                 >
                   <Icon name="sun" size={17} stroke={1.9} />
                 </button>
-                <span style={{ width: 38, height: 38, borderRadius: 99, border: '1px solid rgba(255,255,255,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9BAA98' }} className="b-tap">
-                  <Icon name="bell" size={18} stroke={1.8} />
-                </span>
+                <button
+                  type="button"
+                  className="b-tap"
+                  onClick={onOpenLocations}
+                  aria-label="Locations"
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 99,
+                    cursor: 'pointer',
+                    background: 'transparent',
+                    border: '1px solid rgba(255,255,255,.09)',
+                    color: '#F2F6EF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icon name="pin" size={17} stroke={1.9} />
+                </button>
+                <button
+                  type="button"
+                  className="b-tap"
+                  onClick={signOut}
+                  aria-label="Sign out"
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 99,
+                    cursor: 'pointer',
+                    background: 'transparent',
+                    border: '1px solid rgba(255,255,255,.09)',
+                    color: '#9BAA98',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+                </button>
               </div>
             </div>
             <h1 style={{ margin: '14px 0 0', fontSize: 46, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 0.92, color: '#fff' }}>
@@ -212,7 +249,7 @@ export function PlantsScreen({
                   <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(8,12,9,.85) 4%, rgba(8,12,9,.15) 48%, transparent)', pointerEvents: 'none' }}></div>
                   <div style={{ position: 'absolute', top: 14, left: 14, right: 14, display: 'flex', justifyContent: 'space-between' }}>
                     <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: 'rgba(255,255,255,.12)', color: '#F2F6EF', backdropFilter: 'blur(6px)' }}>
-                      {p.placement_type}
+                      {p.placement_label || p.placement_type}
                     </span>
                     {isThirsty && (
                       <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: '#C7F24A', color: '#0E140F', backdropFilter: 'blur(6px)' }}>
@@ -323,9 +360,46 @@ export function PlantsScreen({
               >
                 <Icon name="moon" size={18} stroke={2} />
               </button>
-              <div className="a-tap" style={{ width: 44, height: 44, borderRadius: 99, background: '#2F5934', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Spectral',serif", fontSize: 18, fontWeight: 600 }}>
-                {displayName.charAt(0).toUpperCase()}
-              </div>
+              <button
+                type="button"
+                className="a-tap"
+                onClick={onOpenLocations}
+                aria-label="Locations"
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 99,
+                  cursor: 'pointer',
+                  background: '#FFFDF8',
+                  border: '1px solid #E7E0D2',
+                  color: '#23302A',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name="pin" size={18} stroke={2} />
+              </button>
+              <button
+                type="button"
+                className="a-tap"
+                onClick={signOut}
+                aria-label="Sign out"
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 99,
+                  cursor: 'pointer',
+                  background: '#FFFDF8',
+                  border: '1px solid #E7E0D2',
+                  color: '#B07F57',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+              </button>
             </div>
           </div>
         </div>
