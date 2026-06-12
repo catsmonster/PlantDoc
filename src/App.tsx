@@ -10,8 +10,8 @@ import { PlantsScreen } from './features/plants/PlantsScreen';
 import { PlantScreen } from './features/timeline/PlantScreen';
 import { getProfile } from './lib/repo';
 import type { Plant, Profile } from './lib/types';
-import { Button } from './ui/Button';
 import { FullScreenSpinner } from './ui/Spinner';
+import { ThemeProvider } from './features/theme/ThemeContext';
 
 type View =
   | { name: 'plants' }
@@ -29,7 +29,6 @@ function Gate() {
 }
 
 function SignedIn({ user }: { user: Models.User<Models.Preferences> }) {
-  const { signOut } = useAuth();
   // undefined = still loading; null = no profile yet (needs onboarding).
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [view, setView] = useState<View>({ name: 'plants' });
@@ -48,37 +47,15 @@ function SignedIn({ user }: { user: Models.User<Models.Preferences> }) {
   if (profile === null) return <OnboardingScreen onComplete={setProfile} />;
 
   return (
-    <div className="min-h-dvh bg-leaf-50">
-      <header className="flex items-center justify-between bg-leaf-700 px-4 py-4 text-white">
-        <button
-          type="button"
-          className="text-left"
-          onClick={() => setView({ name: 'plants' })}
-        >
-          <h1 className="text-xl font-semibold tracking-tight">PlantDoc</h1>
-          <p className="mt-0.5 text-sm text-leaf-100">
-            Hi {profile.display_name ?? 'there'}
-          </p>
-        </button>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            className="text-leaf-100"
-            onClick={() => setView({ name: 'locations' })}
-          >
-            Locations
-          </Button>
-          <Button variant="ghost" className="text-leaf-100" onClick={() => void signOut()}>
-            Sign out
-          </Button>
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-md px-4 pb-12">
+    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-transparent shadow-2xl">
+      <main className="w-full">
         {view.name === 'plants' && (
           <PlantsScreen
             userId={user.$id}
+            profile={profile}
             onAdd={() => setView({ name: 'add-plant' })}
             onSelect={(plant) => setView({ name: 'plant', plantId: plant.$id })}
+            onOpenLocations={() => setView({ name: 'locations' })}
           />
         )}
         {(view.name === 'add-plant' || view.name === 'edit-plant') && (
@@ -120,10 +97,13 @@ function SignedIn({ user }: { user: Models.User<Models.Preferences> }) {
 
 function App() {
   return (
-    <AuthProvider>
-      <Gate />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
 export default App;
+

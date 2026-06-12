@@ -157,6 +157,31 @@ export async function listPlants(userId: string): Promise<Plant[]> {
   return result.rows as unknown as Plant[];
 }
 
+export async function listPlantsWithTimeline(userId: string): Promise<Plant[]> {
+  const result = await tablesDB.listRows({
+    databaseId: db,
+    tableId: 'plants',
+    queries: [
+      Query.equal('user_id', userId),
+      Query.orderDesc('$createdAt'),
+      Query.limit(100),
+      Query.select([
+        '*',
+        'observations.*',
+        'observations.treatments.*',
+      ]),
+    ],
+  });
+  const plants = result.rows as unknown as Plant[];
+  for (const plant of plants) {
+    plant.observations = [...(plant.observations ?? [])].sort((a, b) =>
+      b.observed_at.localeCompare(a.observed_at),
+    );
+  }
+  return plants;
+}
+
+
 /** Full plant read with the timeline embedded. Appwrite does not hydrate
  * relationships unless selected, and relationship columns are not queryable,
  * so the nested select below IS the timeline read. */

@@ -302,3 +302,18 @@ export function plantInsights(plant: Plant, now: Date, units: Units): Insight[] 
 
   return out.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }
+
+export function isPlantThirsty(plant: Plant, now: Date = new Date()): boolean {
+  const timeline = buildTimeline(plant);
+  const times = timeline.wateringTimes;
+  if (times.length === 0) return false;
+  const sinceLast = daysBetween(times[times.length - 1], now.getTime());
+  if (times.length < MIN_WATERINGS) {
+    // default baseline of 8 days if not enough data
+    return sinceLast >= 8;
+  }
+  const intervals = times.slice(1).map((t, i) => daysBetween(times[i], t));
+  const cadence = median(intervals);
+  return sinceLast >= cadence;
+}
+

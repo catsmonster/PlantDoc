@@ -5,8 +5,9 @@ import { koppenZone } from '../../lib/koppen';
 import { fetchClimateNormals, geocodeCity, type GeocodeResult } from '../../lib/openmeteo';
 import { createLocation } from '../../lib/repo';
 import type { UserLocation } from '../../lib/types';
-import { Button } from '../../ui/Button';
-import { ErrorText, SelectField, TextField } from '../../ui/Field';
+import { ErrorText } from '../../ui/Field';
+import { useTheme } from '../theme/ThemeContext';
+import { Icon } from '../../ui/Icon';
 
 const PRECISION_OPTIONS: { value: LocationPrecision; label: string }[] = [
   { value: 'exact', label: 'Exact (~1 km) — best weather accuracy' },
@@ -33,6 +34,7 @@ export function LocationForm({
   onSaved: (location: UserLocation) => void;
   onCancel: () => void;
 }) {
+  const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeocodeResult[] | null>(null);
   const [selected, setSelected] = useState<GeocodeResult | null>(null);
@@ -40,6 +42,8 @@ export function LocationForm({
   const [precision, setPrecision] = useState<LocationPrecision>('climate');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const isDark = theme === 'dark';
 
   async function search() {
     setError(null);
@@ -78,84 +82,213 @@ export function LocationForm({
     }
   }
 
+  const hint = PRECISION_EXPORT_HINT[precision];
+
+  if (isDark) {
+    // Direction B — Atlas (Dark Mode Location Form)
+    return (
+      <div className="b-root relative min-h-dvh overflow-hidden bg-[#0E140F]">
+        <form onSubmit={save} className="b-scroll">
+          {/* Top Bar */}
+          <div style={{ padding: '56px 18px 6px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button type="button" className="b-tap" onClick={onCancel} aria-label="Back" style={{ width: 42, height: 42, borderRadius: 99, flexShrink: 0, background: '#19231B', border: '1px solid rgba(255,255,255,.09)', color: '#F2F6EF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <Icon name="chevronLeft" size={22} stroke={2.4} />
+            </button>
+            <h2 style={{ flex: 1, margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#F2F6EF' }}>
+              Add a location
+            </h2>
+            <button
+              type="button"
+              className="b-tap"
+              onClick={toggleTheme}
+              aria-label="Switch to light mode"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 99,
+                cursor: 'pointer',
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,.09)',
+                color: '#F2F6EF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon name="sun" size={17} stroke={1.9} />
+            </button>
+          </div>
+
+          <div style={{ padding: '8px 22px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <p style={{ margin: 0, fontSize: 13, color: '#9BAA98', lineHeight: 1.5 }}>
+              City search uses the free Open-Meteo API. Coordinates are rounded before any lookup — your exact position is never stored.
+            </p>
+
+            {/* City search input row */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block' }}>
+                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>City</span>
+                  <input className="b-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Lisbon" disabled={busy} maxLength={128} />
+                </label>
+              </div>
+              <button type="button" className="b-tap" onClick={() => void search()} disabled={busy || !query.trim()} style={{ borderRadius: 13, border: 'none', background: query.trim() ? '#C7F24A' : '#19231B', color: query.trim() ? '#0E140F' : '#67766A', padding: '13px 18px', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 14.5, cursor: query.trim() ? 'pointer' : 'default', height: '48px' }}>
+                Search
+              </button>
+            </div>
+
+            {/* Search results */}
+            {results && results.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {results.map((r, i) => {
+                  const active = selected === r;
+                  return (
+                    <button key={i} type="button" className="b-tap" onClick={() => setSelected(r)} style={{ textAlign: 'left', borderRadius: 13, border: '1px solid ' + (active ? '#C7F24A' : 'rgba(255,255,255,.09)'), background: active ? 'rgba(199,242,74,.12)' : '#19231B', color: active ? '#C7F24A' : '#F2F6EF', padding: '13px 14px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>
+                      {r.name}{r.region ? `, ${r.region}` : ''} — {r.country}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {selected && (
+              <>
+                {/* Location label input */}
+                <label style={{ display: 'block' }}>
+                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Label</span>
+                  <input className="b-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Home" disabled={busy} maxLength={128} />
+                </label>
+
+                {/* Precision select */}
+                <label style={{ display: 'block' }}>
+                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Location precision</span>
+                  <select className="b-input" value={precision} onChange={(e) => setPrecision(e.target.value as LocationPrecision)} disabled={busy}>
+                    {PRECISION_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p style={{ margin: '-6px 0 0', fontSize: 12, color: '#67766A', lineHeight: 1.45 }}>{hint}</p>
+              </>
+            )}
+
+            <ErrorText>{error}</ErrorText>
+
+            {/* Save & Cancel buttons */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button type="button" className="b-tap" onClick={onCancel} disabled={busy} style={{ width: 96, borderRadius: 14, border: '1px solid rgba(255,255,255,.09)', background: 'transparent', color: '#9BAA98', padding: '15px 0', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 15, cursor: 'pointer' }}>Cancel</button>
+              <button type="submit" disabled={busy || !selected} style={{ flex: 1, borderRadius: 14, border: 'none', background: selected ? '#C7F24A' : '#19231B', color: selected ? '#0E140F' : '#67766A', padding: '15px 0', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 15.5, cursor: selected ? 'pointer' : 'default' }}>
+                {busy ? 'Save location...' : 'Save location'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // Direction A — Greenhouse (Light Mode Location Form)
   return (
-    <form onSubmit={save} className="space-y-4 py-4">
-      <h2 className="text-lg font-semibold text-slate-800">Add a location</h2>
-      <p className="text-sm text-slate-500">
-        City search and weather lookups use the free Open-Meteo API. Coordinates are rounded to
-        about 11 km before any lookup and about 1 km before saving — your exact position is never
-        stored or sent.
-      </p>
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
-          <TextField
-            label="City"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="e.g. Lisbon"
-            maxLength={128}
-          />
-        </div>
-        <Button type="button" disabled={busy || !query.trim()} onClick={() => void search()}>
-          Search
-        </Button>
-      </div>
-      {results && results.length > 0 && (
-        <ul className="space-y-1">
-          {results.map((r, i) => {
-            const active = selected === r;
-            return (
-              <li key={`${r.latitude},${r.longitude},${i}`}>
-                <button
-                  type="button"
-                  onClick={() => setSelected(r)}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
-                    active
-                      ? 'border-leaf-600 bg-leaf-50 text-leaf-900'
-                      : 'border-slate-200 bg-white text-slate-700'
-                  }`}
-                >
-                  {r.name}
-                  {r.region ? `, ${r.region}` : ''}
-                  {r.country ? ` — ${r.country}` : ''}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {selected && (
-        <>
-          <TextField
-            label="Label"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="e.g. Home"
-            maxLength={128}
-          />
-          <SelectField
-            label="Location precision"
-            value={precision}
-            onChange={(e) => setPrecision(e.target.value as LocationPrecision)}
+    <div className="a-root relative min-h-dvh overflow-hidden bg-[#F4EFE4]">
+      <form onSubmit={save} className="a-scroll">
+        {/* Top Bar */}
+        <div style={{ padding: '56px 18px 6px', display: 'flex', alignItems: 'center', gap: 12, background: '#F4EFE4' }}>
+          <button type="button" className="a-tap" onClick={onCancel} aria-label="Back" style={{ width: 42, height: 42, borderRadius: 99, flexShrink: 0, background: '#FFFDF8', border: '1px solid #E7E0D2', color: '#23302A', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <Icon name="chevronLeft" size={22} stroke={2.4} />
+          </button>
+          <h2 className="serif" style={{ flex: 1, margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#23302A' }}>
+            Add a location
+          </h2>
+          <button
+            type="button"
+            className="a-tap"
+            onClick={toggleTheme}
+            aria-label="Switch to dark mode"
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 99,
+              cursor: 'pointer',
+              background: '#FFFDF8',
+              border: '1px solid #E7E0D2',
+              color: '#23302A',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            {PRECISION_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </SelectField>
-          <p className="text-xs text-slate-500">{PRECISION_EXPORT_HINT[precision]}</p>
-        </>
-      )}
-      <ErrorText>{error}</ErrorText>
-      <div className="flex gap-2">
-        <Button type="submit" disabled={busy || !selected} className="flex-1">
-          {busy ? 'Looking up climate…' : 'Save location'}
-        </Button>
-        <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>
-          Cancel
-        </Button>
-      </div>
-    </form>
+            <Icon name="moon" size={18} stroke={2} />
+          </button>
+        </div>
+
+        <div style={{ padding: '8px 22px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#6B7568', lineHeight: 1.5 }}>
+            City search uses the free Open-Meteo API. Coordinates are rounded before any lookup — your exact position is never stored.
+          </p>
+
+          {/* City search input row */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block' }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>City</span>
+                <input className="a-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Lisbon" disabled={busy} maxLength={128} />
+              </label>
+            </div>
+            <button type="button" className="a-tap" onClick={() => void search()} disabled={busy || !query.trim()} style={{ borderRadius: 14, border: 'none', background: query.trim() ? '#3C7140' : '#9CC49A', color: '#fff', padding: '13px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14.5, cursor: query.trim() ? 'pointer' : 'default', height: '48px' }}>
+              Search
+            </button>
+          </div>
+
+          {/* Search results */}
+          {results && results.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {results.map((r, i) => {
+                const active = selected === r;
+                return (
+                  <button key={i} type="button" className="a-tap" onClick={() => setSelected(r)} style={{ textAlign: 'left', borderRadius: 14, border: '1px solid ' + (active ? '#3C7140' : '#E7E0D2'), background: active ? '#EBF1E7' : '#fff', color: active ? '#3C7140' : '#23302A', padding: '13px 14px', fontFamily: 'inherit', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>
+                    {r.name}{r.region ? `, ${r.region}` : ''} — {r.country}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {selected && (
+            <>
+              {/* Location label input */}
+              <label style={{ display: 'block' }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Label</span>
+                <input className="a-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Home" disabled={busy} maxLength={128} />
+              </label>
+
+              {/* Precision select */}
+              <label style={{ display: 'block' }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Location precision</span>
+                <select className="a-input" value={precision} onChange={(e) => setPrecision(e.target.value as LocationPrecision)} disabled={busy}>
+                  {PRECISION_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p style={{ margin: '-6px 0 0', fontSize: 12, color: '#9AA294', lineHeight: 1.45 }}>{hint}</p>
+            </>
+          )}
+
+          <ErrorText>{error}</ErrorText>
+
+          {/* Save & Cancel buttons */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button type="button" className="a-tap" onClick={onCancel} disabled={busy} style={{ width: 100, borderRadius: 16, border: '1px solid #E7E0D2', background: '#fff', color: '#6B7568', padding: '15px 0', fontFamily: 'inherit', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}>Cancel</button>
+            <button type="submit" disabled={busy || !selected} style={{ flex: 1, borderRadius: 16, border: 'none', background: selected ? '#3C7140' : '#9CC49A', color: '#fff', padding: '15px 0', fontFamily: 'inherit', fontWeight: 700, fontSize: 15.5, cursor: selected ? 'pointer' : 'default' }}>
+              {busy ? 'Save location...' : 'Save location'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
