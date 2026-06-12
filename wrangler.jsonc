@@ -5,6 +5,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "plantdoc",
+  // Pinned so non-interactive deploys (CI) don't depend on account discovery.
+  "account_id": "5a9a924d1d273d7c6805c55309314e97",
   "main": "src/worker.ts",
   "compatibility_date": "2026-06-01",
   "assets": {

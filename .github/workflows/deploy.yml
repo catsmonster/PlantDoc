@@ -1,0 +1,48 @@
+# Deploys the Worker (static SPA + /api routes) to Cloudflare on every master
+# update, after the same gates that run locally (lint, tests, build).
+#
+# Required repository configuration (Settings → Secrets and variables → Actions):
+#   secrets.CLOUDFLARE_API_TOKEN  — API token with the "Edit Cloudflare Workers"
+#                                   template, scoped to the PlantDoc account.
+#   vars.VITE_APPWRITE_PROJECT_ID — public client value (ships in the JS bundle).
+#   vars.VITE_APPWRITE_ENDPOINT   — public client value (ships in the JS bundle).
+#
+# GEMINI_API_KEY is a Worker secret managed with `wrangler secret put`; it
+# persists across deploys and is never part of this workflow.
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-master
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm test
+
+      - run: npm run build
+        env:
+          VITE_APPWRITE_PROJECT_ID: ${{ vars.VITE_APPWRITE_PROJECT_ID }}
+          VITE_APPWRITE_ENDPOINT: ${{ vars.VITE_APPWRITE_ENDPOINT }}
+          VITE_APPWRITE_PROJECT_NAME: PlantDoc
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
