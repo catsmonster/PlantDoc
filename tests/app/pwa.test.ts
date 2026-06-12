@@ -11,10 +11,17 @@ function readText(path: string): string {
 
 interface RuntimeRequest {
   method: string;
+  mode?: string;
   url: string;
 }
 
+interface FetchDispatchResult {
+  response?: Promise<Response | undefined>;
+  responded: boolean;
+}
+
 interface ServiceWorkerTestContext {
+  dispatchFetch(request: RuntimeRequest): FetchDispatchResult;
   isRuntimeCacheableRequest(request: RuntimeRequest): boolean;
   isShellNavigationRequest(request: RuntimeRequest): boolean;
   isShellResponse(response: Response): boolean;
@@ -22,20 +29,43 @@ interface ServiceWorkerTestContext {
 }
 
 function loadServiceWorker(): ServiceWorkerTestContext {
+  const listeners = new Map<string, Array<(event: unknown) => void>>();
   const context = createContext({
     URL,
     Response,
-    caches: {},
-    fetch: () => Promise.reject(new Error('not used')),
+    caches: {
+      match: () => Promise.resolve(new Response('<!doctype html>')),
+    },
+    fetch: () => Promise.reject(new Error('offline')),
     self: {
       clients: { claim: () => Promise.resolve() },
       location: { origin: 'https://plantdoc.test' },
       skipWaiting: () => Promise.resolve(),
-      addEventListener: () => {},
+      addEventListener: (type: string, listener: (event: unknown) => void) => {
+        const existing = listeners.get(type) ?? [];
+        existing.push(listener);
+        listeners.set(type, existing);
+      },
     },
   });
   new Script(readText('public/sw.js')).runInContext(context);
-  return context as unknown as ServiceWorkerTestContext;
+  return Object.assign(context, {
+    dispatchFetch(request: RuntimeRequest): FetchDispatchResult {
+      let responded = false;
+      let response: Promise<Response | undefined> | undefined;
+      const event = {
+        request,
+        respondWith(nextResponse: Promise<Response | undefined>) {
+          responded = true;
+          response = nextResponse;
+        },
+      };
+      for (const listener of listeners.get('fetch') ?? []) {
+        listener(event);
+      }
+      return { responded, response };
+    },
+  }) as unknown as ServiceWorkerTestContext;
 }
 
 describe('PWA install surface', () => {
@@ -171,6 +201,25 @@ describe('PWA install surface', () => {
       serviceWorker.isShellResponse(
         new Response('{"ok":true}', { headers: { 'Content-Type': 'application/json' } }),
       ),
+    ).toBe(false);
+  });
+
+  it('does not intercept API navigations with the app shell fallback', () => {
+    const serviceWorker = loadServiceWorker();
+
+    expect(
+      serviceWorker.dispatchFetch({
+        method: 'GET',
+        mode: 'navigate',
+        url: 'https://plantdoc.test/plants',
+      }).responded,
+    ).toBe(true);
+    expect(
+      serviceWorker.dispatchFetch({
+        method: 'GET',
+        mode: 'navigate',
+        url: 'https://plantdoc.test/api/profile',
+      }).responded,
     ).toBe(false);
   });
 });

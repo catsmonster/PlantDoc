@@ -76,7 +76,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
+  if (event.request.mode === 'navigate' && isShellNavigationRequest(event.request)) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
