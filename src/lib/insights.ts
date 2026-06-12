@@ -5,6 +5,7 @@
  * entries; nothing here is a model prediction.
  */
 
+import { careProfileForPlant, type SpeciesCareProfile } from './knowledge/care-profiles';
 import type { Observation, Plant } from './types';
 import { formatHeight, type Units } from './units';
 
@@ -86,7 +87,19 @@ interface WateringStatus {
   due: boolean;
 }
 
-function wateringInsight(timeline: Timeline, nowMs: number): WateringStatus | null {
+/** Reference cadence sentence from the starter care pack, when the species matches. */
+function referenceCadenceHint(profile: SpeciesCareProfile | null): string {
+  if (!profile) return '';
+  const { min, max } = profile.waterCadenceDays.value;
+  const range = min === max ? plural(min, 'day') : `${min}-${max} days`;
+  return ` Typical for ${profile.scientificName} is about every ${range} (PlantDoc starter guide), but your plant's own rhythm wins.`;
+}
+
+function wateringInsight(
+  timeline: Timeline,
+  nowMs: number,
+  careProfile: SpeciesCareProfile | null,
+): WateringStatus | null {
   const times = timeline.wateringTimes;
   if (times.length === 0) return null;
   if (times.length < MIN_WATERINGS) {
@@ -96,7 +109,9 @@ function wateringInsight(timeline: Timeline, nowMs: number): WateringStatus | nu
         kind: 'watering_data',
         severity: 'info',
         title: 'Building a watering baseline',
-        detail: `Log ${MIN_WATERINGS}+ waterings and PlantDoc can estimate this plant's cadence.`,
+        detail:
+          `Log ${MIN_WATERINGS}+ waterings and PlantDoc can estimate this plant's cadence.` +
+          referenceCadenceHint(careProfile),
         evidenceCount: times.length,
       },
     };
@@ -274,7 +289,8 @@ export function plantInsights(plant: Plant, now: Date, units: Units): Insight[] 
   const nowMs = now.getTime();
   const out: Insight[] = [];
 
-  const watering = wateringInsight(timeline, nowMs);
+  const careProfile = careProfileForPlant(plant);
+  const watering = wateringInsight(timeline, nowMs, careProfile);
   if (watering) out.push(watering.insight);
 
   const height = trendInsight(metricSeries(timeline, (m) => m.height_cm), {
