@@ -11,6 +11,14 @@ import { enrichObservationWeather } from '../../lib/enrich';
 import { errorMessage } from '../../lib/error';
 import { createLog } from '../../lib/repo';
 import type { Profile, TreatmentType, UserLocation } from '../../lib/types';
+import {
+  normalizeWaterAmountText,
+  parseWaterAmountMl,
+  WATER_AMOUNT_MAX_ML,
+  WATER_AMOUNT_MIN_ML,
+  WATER_AMOUNT_STEP_ML,
+  waterAmountSliderValue,
+} from '../../lib/water-amount';
 import { ErrorText } from '../../ui/Field';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon } from '../../ui/Icon';
@@ -33,6 +41,90 @@ function nowLocal(): string {
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   return now.toISOString().slice(0, 16);
+}
+
+function WaterAmountField({
+  amount,
+  setAmount,
+  busy,
+  tone,
+}: {
+  amount: string;
+  setAmount: (value: string) => void;
+  busy: boolean;
+  tone: 'light' | 'dark';
+}) {
+  const dark = tone === 'dark';
+  const labelStyle = dark
+    ? { display: 'block', marginBottom: 8 }
+    : { display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 };
+  const hintColor = dark ? '#67766A' : '#6B7568';
+  const unitColor = dark ? '#9BAA98' : '#6B7568';
+
+  return (
+    <label style={{ display: 'block' }}>
+      <span className={dark ? 'b-kicker' : undefined} style={labelStyle}>
+        Amount
+      </span>
+      <div style={{ display: 'grid', gap: 10 }}>
+        <div style={{ position: 'relative' }}>
+          <input
+            aria-label="Water amount in milliliters"
+            className={dark ? 'b-input' : 'a-input'}
+            value={amount}
+            onChange={(e) => setAmount(e.currentTarget.value)}
+            onBlur={() => setAmount(normalizeWaterAmountText(amount))}
+            type="number"
+            inputMode="decimal"
+            min={WATER_AMOUNT_MIN_ML}
+            max={WATER_AMOUNT_MAX_ML}
+            step="any"
+            placeholder="250"
+            disabled={busy}
+            style={{ paddingRight: 52 }}
+          />
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              right: 15,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: unitColor,
+              fontSize: 13,
+              fontWeight: 700,
+              pointerEvents: 'none',
+            }}
+          >
+            ml
+          </span>
+        </div>
+        <input
+          aria-label="Water amount slider"
+          type="range"
+          value={waterAmountSliderValue(amount)}
+          min={WATER_AMOUNT_MIN_ML}
+          max={WATER_AMOUNT_MAX_ML}
+          step={WATER_AMOUNT_STEP_ML}
+          onChange={(e) => setAmount(e.currentTarget.value)}
+          disabled={busy}
+          style={{ width: '100%', accentColor: dark ? '#C7F24A' : '#3C7140' }}
+        />
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            color: hintColor,
+            fontSize: 11.5,
+            fontWeight: dark ? 700 : 600,
+          }}
+        >
+          <span>{WATER_AMOUNT_MIN_ML} ml</span>
+          <span>{WATER_AMOUNT_MAX_ML} ml</span>
+        </div>
+      </div>
+    </label>
+  );
 }
 
 export function LogSheet({
@@ -127,12 +219,13 @@ export function LogSheet({
       };
       let observation;
       if (mode === 'water') {
+        const parsedAmount = parseWaterAmountMl(amount);
         observation = await createLog({
           ...base,
           treatment: {
             treatment_type: 'watering',
-            amount_value: amount ? Number(amount) : undefined,
-            amount_unit: amount ? 'ml' : undefined,
+            amount_value: parsedAmount,
+            amount_unit: parsedAmount === undefined ? undefined : 'ml',
             method,
           },
         });
@@ -222,16 +315,7 @@ export function LogSheet({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 20 }}>
               {mode === 'water' && (
                 <>
-                  <label style={{ display: 'block' }}>
-                    <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Amount</span>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {['150', '250', '500'].map((v) => (
-                        <button key={v} type="button" className="b-tap" onClick={() => setAmount(v)} disabled={busy} style={{ flex: 1, padding: '13px 0', borderRadius: 13, border: '1px solid ' + (amount === v ? '#C7F24A' : 'rgba(255,255,255,.09)'), background: amount === v ? 'rgba(199,242,74,.12)' : '#19231B', color: amount === v ? '#C7F24A' : '#9BAA98', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
-                          {v} ml
-                        </button>
-                      ))}
-                    </div>
-                  </label>
+                  <WaterAmountField amount={amount} setAmount={setAmount} busy={busy} tone="dark" />
                   <label style={{ display: 'block' }}>
                     <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Method</span>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -414,16 +498,7 @@ export function LogSheet({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 18 }}>
             {mode === 'water' && (
               <>
-                <label style={{ display: 'block' }}>
-                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Amount</span>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {['150', '250', '500'].map((v) => (
-                      <button key={v} type="button" className="a-tap" onClick={() => setAmount(v)} disabled={busy} style={{ flex: 1, padding: '13px 0', borderRadius: 14, border: '1px solid ' + (amount === v ? '#3C7140' : '#E7E0D2'), background: amount === v ? '#EBF1E7' : '#fff', color: amount === v ? '#3C7140' : '#6B7568', fontFamily: 'inherit', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
-                        {v} ml
-                      </button>
-                    ))}
-                  </div>
-                </label>
+                <WaterAmountField amount={amount} setAmount={setAmount} busy={busy} tone="light" />
                 <label style={{ display: 'block' }}>
                   <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Method</span>
                   <div style={{ display: 'flex', gap: 8 }}>
