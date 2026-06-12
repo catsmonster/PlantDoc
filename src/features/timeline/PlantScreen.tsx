@@ -95,14 +95,21 @@ function environmentLine(obs: Observation): string | null {
 }
 
 function getWeatherIconName(obs: Observation): IconName {
-  const summary = obs.environment_snapshots?.[0]?.weather_summary;
-  if (!summary) return 'thermometer';
+  const snapshot = obs.environment_snapshots?.[0];
+  if (!snapshot) return 'thermometer';
+  const summary = snapshot.weather_summary;
+  if (!summary) {
+    if (snapshot.outdoor_temperature_c != null) {
+      return 'cloud';
+    }
+    return 'thermometer';
+  }
   const clean = summary.toLowerCase();
   if (clean.includes('clear') || clean.includes('sunny') || clean.includes('partly cloudy')) {
     return 'sun';
   }
   if (clean.includes('cloud') || clean.includes('overcast') || clean.includes('fog') || clean.includes('mist')) {
-    return 'mist';
+    return 'cloud';
   }
   if (
     clean.includes('drizzle') ||
@@ -115,7 +122,7 @@ function getWeatherIconName(obs: Observation): IconName {
   ) {
     return 'droplet';
   }
-  return 'thermometer';
+  return 'cloud';
 }
 
 function median(values: number[]): number {

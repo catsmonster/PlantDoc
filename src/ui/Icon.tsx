@@ -15,6 +15,7 @@ export type IconName =
   | 'chevronRight'
   | 'chevronDown'
   | 'sun'
+  | 'cloud'
   | 'thermometer'
   | 'heart'
   | 'sparkle'
@@ -126,6 +127,8 @@ export function Icon({
                 <path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" />
               </>
             );
+          case 'cloud':
+            return <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />;
           case 'thermometer':
             return (
               <>
