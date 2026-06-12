@@ -16,6 +16,8 @@ interface RuntimeRequest {
 
 interface ServiceWorkerTestContext {
   isRuntimeCacheableRequest(request: RuntimeRequest): boolean;
+  isShellNavigationRequest(request: RuntimeRequest): boolean;
+  isShellResponse(response: Response): boolean;
   isStorableResponse(response: Response): boolean;
 }
 
@@ -136,5 +138,39 @@ describe('PWA install surface', () => {
     ).toBe(false);
     expect(serviceWorker.isStorableResponse(new Response('ok'))).toBe(true);
     expect(worker).toContain("cache.put('/', copy)");
+  });
+
+  it('refreshes the cached shell only for same-origin HTML navigations outside API routes', () => {
+    const serviceWorker = loadServiceWorker();
+
+    expect(
+      serviceWorker.isShellNavigationRequest({
+        method: 'GET',
+        url: 'https://plantdoc.test/plants',
+      }),
+    ).toBe(true);
+    expect(
+      serviceWorker.isShellNavigationRequest({
+        method: 'GET',
+        url: 'https://plantdoc.test/api/profile',
+      }),
+    ).toBe(false);
+    expect(
+      serviceWorker.isShellNavigationRequest({
+        method: 'GET',
+        url: 'https://other.test/plants',
+      }),
+    ).toBe(false);
+
+    expect(
+      serviceWorker.isShellResponse(
+        new Response('<!doctype html>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
+      ),
+    ).toBe(true);
+    expect(
+      serviceWorker.isShellResponse(
+        new Response('{"ok":true}', { headers: { 'Content-Type': 'application/json' } }),
+      ),
+    ).toBe(false);
   });
 });
