@@ -276,14 +276,8 @@ export function PlantsScreen({
           </div>
 
           {/* Manage menu links */}
-          <div style={{ padding: '0 22px 130px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button className="b-tap" onClick={onOpenLocations} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '15px 16px', background: '#19231B', border: '1px solid rgba(255,255,255,.09)', borderRadius: 14, cursor: 'pointer', color: '#F2F6EF' }}>
-              <Icon name="pin" size={19} stroke={2} style={{ color: '#C7F24A' }} />
-              <span style={{ flex: 1, textAlign: 'left', fontSize: 15, fontWeight: 600 }}>Locations</span>
-              <Icon name="chevronRight" size={18} stroke={2} style={{ color: '#67766A' }} />
-            </button>
-            
-            {hiddenCount > 0 && (
+          {hiddenCount > 0 && (
+            <div style={{ padding: '0 22px 120px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button
                 className="b-tap text-sm"
                 onClick={() => setShowArchived((v) => !v)}
@@ -305,13 +299,9 @@ export function PlantsScreen({
                   {showArchived ? 'Hide' : 'Show'} archived ({hiddenCount})
                 </span>
               </button>
-            )}
-
-            <button className="b-tap" onClick={signOut} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '15px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,.09)', borderRadius: 14, cursor: 'pointer', color: '#E0A36B' }}>
-              <Icon name="x" size={19} stroke={2.2} />
-              <span style={{ flex: 1, textAlign: 'left', fontSize: 15, fontWeight: 600 }}>Sign out</span>
-            </button>
-          </div>
+            </div>
+          )}
+          {hiddenCount === 0 && <div style={{ height: 120 }}></div>}
 
           {/* Bottom FAB */}
           <button className="b-tap" onClick={onAdd} style={{ position: 'absolute', bottom: 28, left: 22, right: 22, height: 56, borderRadius: 18, background: '#C7F24A', color: '#0E140F', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", fontSize: 16, fontWeight: 700, boxShadow: '0 14px 34px -10px rgba(199,242,74,.5)' }}>
@@ -519,15 +509,9 @@ export function PlantsScreen({
         </div>
 
         {/* Manage Links */}
-        <div style={{ padding: '18px 22px 120px' }}>
-          <div className="a-card" style={{ borderRadius: 18, overflow: 'hidden' }}>
-            <button className="a-tap" onClick={onOpenLocations} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '15px 16px', background: 'transparent', border: 'none', borderBottom: '1px solid #E7E0D2', cursor: 'pointer', fontFamily: 'inherit', color: '#23302A' }}>
-              <Icon name="pin" size={19} stroke={2} style={{ color: '#3C7140' }} />
-              <span style={{ flex: 1, textAlign: 'left', fontSize: 15, fontWeight: 600 }}>Locations</span>
-              <Icon name="chevronRight" size={18} stroke={2} style={{ color: '#9AA294' }} />
-            </button>
-
-            {hiddenCount > 0 && (
+        {hiddenCount > 0 && (
+          <div style={{ padding: '18px 22px 120px' }}>
+            <div className="a-card" style={{ borderRadius: 18, overflow: 'hidden' }}>
               <button
                 className="a-tap"
                 onClick={() => setShowArchived((v) => !v)}
@@ -539,7 +523,6 @@ export function PlantsScreen({
                   padding: '15px 16px',
                   background: 'transparent',
                   border: 'none',
-                  borderBottom: '1px solid #E7E0D2',
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                   color: '#6B7568',
@@ -551,14 +534,10 @@ export function PlantsScreen({
                 </span>
                 <Icon name="chevronRight" size={18} stroke={2} style={{ color: '#9AA294' }} />
               </button>
-            )}
-
-            <button className="a-tap" onClick={signOut} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '15px 16px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: '#B07F57' }}>
-              <Icon name="x" size={19} stroke={2.2} />
-              <span style={{ flex: 1, textAlign: 'left', fontSize: 15, fontWeight: 600 }}>Sign out</span>
-            </button>
+            </div>
           </div>
-        </div>
+        )}
+        {hiddenCount === 0 && <div style={{ height: 120 }}></div>}
 
         {/* Floating Add Button */}
         <button className="a-tap" onClick={onAdd} style={{ position: 'absolute', bottom: 30, right: 22, height: 56, borderRadius: 999, background: '#3C7140', color: '#fff', border: 'none', boxShadow: '0 12px 30px -8px rgba(60,113,64,.6)', display: 'flex', alignItems: 'center', gap: 9, padding: '0 22px 0 18px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15.5, fontWeight: 600 }}>
