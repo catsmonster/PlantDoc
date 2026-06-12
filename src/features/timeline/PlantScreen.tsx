@@ -338,7 +338,7 @@ export function PlantScreen({
               <Icon name="chevronLeft" size={22} stroke={2.4} />
             </button>
 
-            {/* Edit Button, Theme Toggle & Health Dot */}
+            {/* Edit Button & Theme Toggle */}
             <div style={{ position: 'absolute', top: 58, right: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
               <button className="b-tap" onClick={() => onEdit(plant)} aria-label="Edit plant" style={{ width: 42, height: 42, borderRadius: 99, background: 'rgba(14,20,15,.55)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F2F6EF', cursor: 'pointer' }}>
                 <Icon name="pencil" size={18} stroke={2} />
@@ -350,9 +350,6 @@ export function PlantScreen({
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="sun" size={19} stroke={1.9} />
               </button>
-              <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: '#C7F24A', color: '#0E140F', backdropFilter: 'blur(6px)' }}>
-                {healthLabel(measurements.find(m => m.health_score != null)?.health_score ?? 4)}
-              </span>
             </div>
 
             {/* Plant Meta Details */}
@@ -360,9 +357,14 @@ export function PlantScreen({
               <span className="b-kicker" style={{ color: 'rgba(255,255,255,.7)' }}>
                 {plant.placement_label || plant.placement_type}
               </span>
-              <h1 style={{ margin: '6px 0 0', fontSize: 44, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 0.92, color: '#fff' }}>
-                {plant.nickname}
-              </h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
+                <h1 style={{ margin: 0, fontSize: 44, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 0.92, color: '#fff' }}>
+                  {plant.nickname}
+                </h1>
+                <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: '#C7F24A', color: '#0E140F', backdropFilter: 'blur(6px)' }}>
+                  {healthLabel(measurements.find(m => m.health_score != null)?.health_score ?? 4)}
+                </span>
+              </div>
               <p className="mono" style={{ margin: '6px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,.78)' }}>
                 {speciesLine}
               </p>
