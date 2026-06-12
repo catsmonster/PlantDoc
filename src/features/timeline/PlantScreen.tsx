@@ -8,6 +8,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { Icon, healthLabel, type IconName } from '../../ui/Icon';
 import { LogSheet } from './LogSheet';
 import { plantInsights } from '../../lib/insights';
+import { careProfileForPlant } from '../../lib/knowledge/care-profiles';
+import { CareProfilePanel } from '../knowledge/CareProfilePanel';
 import { ErrorText } from '../../ui/Field';
 import {
   AI_PREVIEW_DAILY_LIMIT,
@@ -470,6 +472,9 @@ export function PlantScreen({
   // Compute insights
   const insights = plantInsights(plant, nowDate, profile.preferred_units);
 
+  // Sourced reference facts from the open knowledge layer (null if no match)
+  const careProfile = careProfileForPlant(plant);
+
   // Group timeline observations by day
   const groupedTimeline: [string, Observation[]][] = [];
   const dayGroups = new Map<string, Observation[]>();
@@ -656,6 +661,11 @@ export function PlantScreen({
               </button>
               <PhotoButton userId={userId} plantId={plant.$id} profile={profile} onUploaded={refresh} onError={setError} isDark />
             </div>
+
+            {/* Species care guide — sourced reference facts */}
+            {careProfile && (
+              <CareProfilePanel profile={careProfile} units={profile.preferred_units} isDark />
+            )}
 
             {/* Care Insights */}
             {observations.length > 0 && (
@@ -917,6 +927,11 @@ export function PlantScreen({
               <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#9AA294', fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase' }}>Every</p>
             </div>
           </div>
+
+          {/* Species care guide — sourced reference facts */}
+          {careProfile && (
+            <CareProfilePanel profile={careProfile} units={profile.preferred_units} isDark={false} />
+          )}
 
           {/* Care Insights Panel */}
           {observations.length > 0 && (

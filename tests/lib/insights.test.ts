@@ -123,6 +123,20 @@ describe('watering cadence', () => {
     );
   });
 
+  it('omits the species reference hint when the species is unknown', () => {
+    const out = plantInsights(plant([watering(3), watering(8)]), NOW, 'metric');
+    const insight = byKind(out, 'watering_data');
+    expect(insight!.detail).not.toContain('starter guide');
+  });
+
+  it('adds the sourced reference cadence to the baseline when the species matches', () => {
+    const matched = { ...plant([watering(3), watering(8)]), species_text: 'Monstera deliciosa' };
+    const insight = byKind(plantInsights(matched, NOW, 'metric'), 'watering_data');
+    expect(insight!.detail).toContain('Monstera deliciosa');
+    expect(insight!.detail).toContain('7-10 days');
+    expect(insight!.detail).toContain('starter guide');
+  });
+
   it('reports cadence as info when watering is not yet due', () => {
     // Waterings 2, 7, 12, 17 days ago: median interval 5, last 2 days ago.
     const out = plantInsights(
