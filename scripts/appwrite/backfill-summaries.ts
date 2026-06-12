@@ -13,7 +13,7 @@
  * Requires APPWRITE_API_KEY and the other env vars in .env.
  */
 
-import { Query } from 'node-appwrite';
+import { Query, type TablesDB } from 'node-appwrite';
 import { createAdminContext } from './client';
 import { DATABASE_ID } from '../../appwrite/schema';
 
@@ -24,6 +24,8 @@ const PHOTOS_TABLE = 'photos';
 const PAGE_SIZE = 100;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+type Row = { $id: string } & Record<string, unknown>;
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -39,10 +41,16 @@ interface PlantSummary {
   latest_photo_observed_at: string | null;
 }
 
-async function computeSummary(
-  tablesDB: ReturnType<typeof import('node-appwrite').TablesDB extends new () => infer R ? new () => R : never>,
-  plantId: string,
-): Promise<PlantSummary> {
+async function listRowsPage(
+  tablesDB: TablesDB,
+  tableId: string,
+  queries: string[],
+): Promise<Row[]> {
+  const result = await tablesDB.listRows({ databaseId: DATABASE_ID, tableId, queries });
+  return result.rows as unknown as Row[];
+}
+
+async function computeSummary(tablesDB: TablesDB, plantId: string): Promise<PlantSummary> {
   // Fetch all watering observations for this plant
   const wateringTimes: number[] = [];
   let lastWateredAt: string | null = null;
@@ -58,17 +66,15 @@ async function computeSummary(
     ];
     if (cursor) queries.push(Query.cursorAfter(cursor));
 
-    // @ts-expect-error — node-appwrite TablesDB signature
-    const page = await tablesDB.listDocuments(DATABASE_ID, OBSERVATIONS_TABLE, queries);
-    for (const obs of page.documents) {
+    const page = await listRowsPage(tablesDB, OBSERVATIONS_TABLE, queries);
+    for (const obs of page) {
       // Fetch treatments for this observation to check treatment_type
-      // @ts-expect-error — node-appwrite TablesDB types differ from web SDK
-      const treats = await tablesDB.listDocuments(DATABASE_ID, TREATMENTS_TABLE, [
+      const treats = await listRowsPage(tablesDB, TREATMENTS_TABLE, [
         Query.equal('observation_id', obs.$id),
         Query.equal('treatment_type', 'watering'),
         Query.limit(1),
       ]);
-      if (treats.total > 0) {
+      if (treats.length > 0) {
         const ms = Date.parse(obs.observed_at as string);
         wateringTimes.push(ms);
         if (!lastWateredAt || (obs.observed_at as string) > lastWateredAt) {
@@ -76,8 +82,8 @@ async function computeSummary(
         }
       }
     }
-    if (page.documents.length < PAGE_SIZE) break;
-    cursor = page.documents[page.documents.length - 1].$id;
+    if (page.length < PAGE_SIZE) break;
+    cursor = page[page.length - 1].$id;
   }
 
   // Compute cadence
@@ -102,25 +108,23 @@ async function computeSummary(
     ];
     if (cursor) queries.push(Query.cursorAfter(cursor));
 
-    // @ts-expect-error — node-appwrite TablesDB types differ from web SDK
-    const page = await tablesDB.listDocuments(DATABASE_ID, OBSERVATIONS_TABLE, queries);
-    for (const obs of page.documents) {
-      // @ts-expect-error — node-appwrite TablesDB types differ from web SDK
-      const photos = await tablesDB.listDocuments(DATABASE_ID, PHOTOS_TABLE, [
+    const page = await listRowsPage(tablesDB, OBSERVATIONS_TABLE, queries);
+    for (const obs of page) {
+      const photos = await listRowsPage(tablesDB, PHOTOS_TABLE, [
         Query.equal('observation_id', obs.$id),
         Query.limit(1),
       ]);
-      if (photos.total > 0) {
+      if (photos.length > 0) {
         const candidateAt = obs.observed_at as string;
         if (!latestPhotoObservedAt || candidateAt > latestPhotoObservedAt) {
-          latestPhotoFileId = photos.documents[0].private_file_id as string;
+          latestPhotoFileId = photos[0].private_file_id as string;
           latestPhotoObservedAt = candidateAt;
         }
         break; // descending order, first photo observation is the most recent
       }
     }
-    if (page.documents.length < PAGE_SIZE) break;
-    cursor = page.documents[page.documents.length - 1].$id;
+    if (page.length < PAGE_SIZE) break;
+    cursor = page[page.length - 1].$id;
     if (latestPhotoFileId) break; // already found the latest
   }
 
@@ -146,17 +150,19 @@ async function main() {
     const queries = [Query.limit(PAGE_SIZE), Query.orderAsc('$id')];
     if (plantCursor) queries.push(Query.cursorAfter(plantCursor));
 
-    // @ts-expect-error — node-appwrite TablesDB types differ from web SDK
-    const page = await tablesDB.listDocuments(DATABASE_ID, PLANTS_TABLE, queries);
-    if (page.documents.length === 0) break;
+    const page = await listRowsPage(tablesDB, PLANTS_TABLE, queries);
+    if (page.length === 0) break;
 
-    for (const plant of page.documents) {
+    for (const plant of page) {
       total += 1;
       try {
-        // @ts-expect-error — node-appwrite TablesDB types differ from web SDK
         const summary = await computeSummary(tablesDB, plant.$id);
-        // @ts-expect-error — node-appwrite TablesDB types differ from web SDK
-        await tablesDB.updateDocument(DATABASE_ID, PLANTS_TABLE, plant.$id, summary);
+        await tablesDB.updateRow({
+          databaseId: DATABASE_ID,
+          tableId: PLANTS_TABLE,
+          rowId: plant.$id,
+          data: summary,
+        });
         console.log(
           `  ✓ ${plant.$id} (${plant.nickname ?? 'unnamed'}): ` +
             `${summary.watering_count} waterings, cadence=${summary.watering_cadence_days ?? 'N/A'}d, ` +
@@ -169,8 +175,8 @@ async function main() {
       }
     }
 
-    if (page.documents.length < PAGE_SIZE) break;
-    plantCursor = page.documents[page.documents.length - 1].$id;
+    if (page.length < PAGE_SIZE) break;
+    plantCursor = page[page.length - 1].$id;
   }
 
   console.log(`\nDone. ${total} plants processed: ${updated} updated, ${failed} failed.`);
