@@ -150,6 +150,9 @@ describe('Gemini preview payload', () => {
     const request = buildGeminiGenerateContentRequest(payload);
 
     expect(request.generationConfig.maxOutputTokens).toBeLessThanOrEqual(384);
+    // Flash models spend maxOutputTokens on hidden thinking by default, which
+    // truncates the visible answer mid-sentence; the preview disables thinking.
+    expect(request.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
     expect(request.contents[0].parts[0]).toHaveProperty('text');
     expect(request.contents[0].parts[1]).toEqual({
       inline_data: { mime_type: 'image/jpeg', data: 'abc123' },

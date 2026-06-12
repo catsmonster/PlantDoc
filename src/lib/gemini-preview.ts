@@ -97,6 +97,9 @@ export interface GeminiGenerateContentRequest {
   generationConfig: {
     maxOutputTokens: number;
     temperature: number;
+    thinkingConfig: {
+      thinkingBudget: number;
+    };
   };
 }
 
@@ -239,6 +242,9 @@ export function buildGeminiGenerateContentRequest(
     generationConfig: {
       maxOutputTokens: 384,
       temperature: 0.35,
+      // Without this, Flash thinking consumes most of the 384-token budget
+      // (observed 364/384) and the visible answer truncates mid-sentence.
+      thinkingConfig: { thinkingBudget: 0 },
     },
   };
 }
