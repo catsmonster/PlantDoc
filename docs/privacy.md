@@ -17,7 +17,8 @@ Private data must never appear in public exports.
 - private notes,
 - original image files,
 - image EXIF metadata,
-- raw storage paths for private files.
+- raw storage paths for private files,
+- plant summary fields (last_watered_at, watering_count, watering_cadence_days, latest_photo_file_id, latest_photo_observed_at).
 
 ### App-Internal Derived Data
 
@@ -73,11 +74,19 @@ Public exports should prefer climate zone and coarse region over exact city. Add
 
 ## Third-Party Services
 
-Geocoding (location setup) and weather enrichment (log entries) call **Open-Meteo** directly from the browser. These requests are keyless, carry no account identity, and include only coordinates rounded to 1 decimal place (~11 km) plus dates. No other third-party service receives user data. The location form discloses this in-app at the point of entry. If a provider is added or replaced, this section and the in-app disclosure must be updated first.
+Geocoding (location setup) and weather enrichment (log entries) call **Open-Meteo** directly from the browser. These requests are keyless, carry no account identity, and include only coordinates rounded to 1 decimal place (~11 km) plus dates. The location form discloses this in-app at the point of entry.
+
+The optional **Gemini AI preview** calls Google Gemini 3.5 Flash through PlantDoc's `/api/gemini-insights` Worker route. The API key is server-side only and must never use a `VITE_` prefix. The preview is user-triggered from the plant detail screen and sends:
+
+- a sanitized structured summary of the plant and recent timeline entries,
+- no private notes, user IDs, row IDs, raw storage file IDs, exact coordinates, city/postal fields, or public-export data,
+- an optional resized latest photo payload when the user asks for the preview and the image fits the aggressive preview cap.
+
+Gemini preview outputs are displayed transiently in the browser. They are not stored in Appwrite, not synced, not used in public exports, and not treated as deterministic care recommendations. The UI must warn that Gemini 3.5 Flash preview quality and availability may vary based on provider load and rate limits. If this provider is replaced, expanded, or made persistent, this section and the in-app disclosure must be updated first.
 
 ## Device-Local Data
 
-Unsaved log-entry drafts are kept in browser `localStorage` (keyed per user and plant) so a failed save or reload does not lose typed input. Drafts never sync, never reach Appwrite or any third party, and are deleted on successful save or when the form returns to its pristine state. Insight feedback (thumbs up/down on care insights) is stored server-side as owner-only rows and is excluded from public exports.
+Unsaved log-entry drafts are kept in browser `localStorage` (keyed per user and plant) so a failed save or reload does not lose typed input. Drafts never sync, never reach Appwrite or any third party, and are deleted on successful save or when the form returns to its pristine state. The Gemini preview also keeps a small per-user, per-plant, per-day local counter in `localStorage` to reduce accidental free-tier usage. Insight feedback (thumbs up/down on care insights) is stored server-side as owner-only rows and is excluded from public exports.
 
 ## Image Policy
 
@@ -86,6 +95,7 @@ Unsaved log-entry drafts are kept in browser `localStorage` (keyed per user and 
 - Generate sanitized derivatives for any public image use.
 - Require explicit consent for public image publication.
 - Avoid publishing images that include people, addresses, mail, documents, or other identifying background details.
+- For Gemini AI preview, send only a transient resized latest-photo payload after the user explicitly requests a preview; do not store AI image payloads or outputs.
 
 ## Deletion And Revocation
 

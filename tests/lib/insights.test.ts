@@ -359,3 +359,128 @@ describe('ordering and formatting', () => {
     expect(plantInsights(plant([]), NOW, 'metric')).toEqual([]);
   });
 });
+
+// ─── Summary helper tests ────────────────────────────────────────────────────
+import {
+  isPlantThirstyFromSummary,
+  getUpdatedWateringSummary,
+  getUpdatedPhotoSummary,
+} from '../../src/lib/insights';
+import type { Plant as PlantType } from '../../src/lib/types';
+
+function summaryPlant(overrides: Partial<PlantType> = {}): PlantType {
+  return {
+    $id: 'plant_s',
+    $createdAt: daysAgo(120),
+    $updatedAt: daysAgo(0),
+    user_id: 'user_1',
+    species_id: null,
+    species_text: null,
+    nickname: 'Summary',
+    common_name: null,
+    acquired_on: null,
+    status: 'active',
+    placement_type: 'indoor',
+    placement_label: null,
+    observations: [],
+    ...overrides,
+  };
+}
+
+describe('isPlantThirstyFromSummary', () => {
+  it('returns false when last_watered_at is absent', () => {
+    expect(isPlantThirstyFromSummary(summaryPlant(), NOW)).toBe(false);
+  });
+
+  it('uses 8-day baseline for fewer than 3 waterings — not thirsty yet', () => {
+    // Watered 6 days ago, only 2 waterings recorded → 8-day baseline → NOT thirsty
+    const p = summaryPlant({
+      last_watered_at: daysAgo(6),
+      watering_count: 2,
+      watering_cadence_days: null,
+    });
+    expect(isPlantThirstyFromSummary(p, NOW)).toBe(false);
+  });
+
+  it('uses 8-day baseline — thirsty when 8+ days since last watering', () => {
+    const p = summaryPlant({
+      last_watered_at: daysAgo(9),
+      watering_count: 1,
+      watering_cadence_days: null,
+    });
+    expect(isPlantThirstyFromSummary(p, NOW)).toBe(true);
+  });
+
+  it('uses cadence when 3+ waterings recorded', () => {
+    // Cadence 7 days, watered 7 days ago → due
+    const p = summaryPlant({
+      last_watered_at: daysAgo(7),
+      watering_count: 5,
+      watering_cadence_days: 7,
+    });
+    expect(isPlantThirstyFromSummary(p, NOW)).toBe(true);
+  });
+
+  it('returns false for non-active plants regardless of watering state', () => {
+    const archived = summaryPlant({
+      status: 'archived',
+      last_watered_at: daysAgo(30),
+      watering_count: 5,
+      watering_cadence_days: 7,
+    });
+    expect(isPlantThirstyFromSummary(archived, NOW)).toBe(false);
+  });
+});
+
+describe('getUpdatedWateringSummary', () => {
+  it('sets last_watered_at when there is no prior watering', () => {
+    const result = getUpdatedWateringSummary({}, daysAgo(0));
+    expect(result.last_watered_at).toBe(daysAgo(0));
+    expect(result.watering_count).toBe(1);
+  });
+
+  it('updates last_watered_at when new date is more recent', () => {
+    const result = getUpdatedWateringSummary(
+      { last_watered_at: daysAgo(3), watering_count: 2 },
+      daysAgo(0),
+    );
+    expect(result.last_watered_at).toBe(daysAgo(0));
+    expect(result.watering_count).toBe(3);
+  });
+
+  it('does NOT replace last_watered_at for a backdated watering', () => {
+    const existing = daysAgo(1);
+    const result = getUpdatedWateringSummary(
+      { last_watered_at: existing, watering_count: 3 },
+      daysAgo(5), // older date
+    );
+    expect(result.last_watered_at).toBe(existing);
+    expect(result.watering_count).toBe(4);
+  });
+});
+
+describe('getUpdatedPhotoSummary', () => {
+  it('sets photo fields when none existed before', () => {
+    const result = getUpdatedPhotoSummary({}, 'file_new', daysAgo(0));
+    expect(result.latest_photo_file_id).toBe('file_new');
+    expect(result.latest_photo_observed_at).toBe(daysAgo(0));
+  });
+
+  it('replaces photo when new observation is newer', () => {
+    const result = getUpdatedPhotoSummary(
+      { latest_photo_file_id: 'file_old', latest_photo_observed_at: daysAgo(10) },
+      'file_new',
+      daysAgo(2),
+    );
+    expect(result.latest_photo_file_id).toBe('file_new');
+  });
+
+  it('keeps existing photo when new observation is older', () => {
+    const result = getUpdatedPhotoSummary(
+      { latest_photo_file_id: 'file_recent', latest_photo_observed_at: daysAgo(1) },
+      'file_old',
+      daysAgo(30),
+    );
+    expect(result.latest_photo_file_id).toBe('file_recent');
+  });
+});

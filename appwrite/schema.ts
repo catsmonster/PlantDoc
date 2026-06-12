@@ -169,6 +169,11 @@ export const TABLES: TableDef[] = [
         twoWay: false,
         onDelete: 'setNull',
       },
+      { kind: 'datetime', key: 'last_watered_at' },
+      { kind: 'integer', key: 'watering_count' },
+      { kind: 'float', key: 'watering_cadence_days' },
+      { kind: 'varchar', key: 'latest_photo_file_id', size: 64 },
+      { kind: 'datetime', key: 'latest_photo_observed_at' },
     ],
     indexes: [
       { key: 'idx_user_id', type: 'key', columns: ['user_id'] },

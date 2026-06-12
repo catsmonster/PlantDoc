@@ -302,3 +302,79 @@ export function plantInsights(plant: Plant, now: Date, units: Units): Insight[] 
 
   return out.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }
+
+export function isPlantThirsty(plant: Plant, now: Date = new Date()): boolean {
+  const timeline = buildTimeline(plant);
+  const times = timeline.wateringTimes;
+  if (times.length === 0) return false;
+  const sinceLast = daysBetween(times[times.length - 1], now.getTime());
+  if (times.length < MIN_WATERINGS) {
+    // default baseline of 8 days if not enough data
+    return sinceLast >= 8;
+  }
+  const intervals = times.slice(1).map((t, i) => daysBetween(times[i], t));
+  const cadence = median(intervals);
+  return sinceLast >= cadence;
+}
+
+export function isPlantThirstyFromSummary(plant: Plant, now: Date = new Date()): boolean {
+  if (plant.status !== 'active') return false;
+  if (!plant.last_watered_at) return false;
+
+  const lastWateredMs = Date.parse(plant.last_watered_at);
+  if (isNaN(lastWateredMs)) return false;
+
+  const sinceLast = daysBetween(lastWateredMs, now.getTime());
+  const count = plant.watering_count ?? 0;
+
+  if (count < MIN_WATERINGS) {
+    return sinceLast >= 8;
+  }
+  return sinceLast >= (plant.watering_cadence_days ?? 8);
+}
+
+export function getUpdatedWateringSummary(
+  current: {
+    last_watered_at?: string | null;
+    watering_count?: number | null;
+    watering_cadence_days?: number | null;
+  },
+  newWateringDate: string,
+) {
+  const currentCount = current.watering_count ?? 0;
+  const newCount = currentCount + 1;
+
+  let last_watered_at = current.last_watered_at || newWateringDate;
+  if (current.last_watered_at && newWateringDate > current.last_watered_at) {
+    last_watered_at = newWateringDate;
+  }
+
+  return {
+    last_watered_at,
+    watering_count: newCount,
+    watering_cadence_days: current.watering_cadence_days ?? null,
+  };
+}
+
+export function getUpdatedPhotoSummary(
+  current: {
+    latest_photo_file_id?: string | null;
+    latest_photo_observed_at?: string | null;
+  },
+  newPhotoFileId: string,
+  newPhotoObservedAt: string,
+) {
+  let latest_photo_file_id = current.latest_photo_file_id || newPhotoFileId;
+  let latest_photo_observed_at = current.latest_photo_observed_at || newPhotoObservedAt;
+
+  if (current.latest_photo_observed_at && newPhotoObservedAt > current.latest_photo_observed_at) {
+    latest_photo_file_id = newPhotoFileId;
+    latest_photo_observed_at = newPhotoObservedAt;
+  }
+
+  return {
+    latest_photo_file_id,
+    latest_photo_observed_at,
+  };
+}
+

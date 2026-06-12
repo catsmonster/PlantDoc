@@ -19,11 +19,11 @@ Houseplant care advice is often generic and brittle. PlantDoc helps users record
 Use the recommendations in [docs/tech_stack.md](docs/tech_stack.md) unless the user explicitly asks for another stack.
 
 - Frontend: React, TypeScript, and Vite for a lightweight PWA-style web app.
-- Hosting and DNS: Cloudflare Pages plus subdomains on the user's Cloudflare-managed domain. The apex/root domain is already in use and must not be repointed for PlantDoc.
+- Hosting and DNS: Cloudflare Workers static assets plus subdomains on the user's Cloudflare-managed domain. The apex/root domain is already in use and must not be repointed for PlantDoc.
 - Backend: Appwrite Cloud as the default backend-as-a-service while the student pack/free tier is available.
 - Database: Appwrite Databases/TablesDB for product data.
 - Auth/storage: Appwrite Auth and Appwrite Storage.
-- Server work: Appwrite Functions for climate enrichment, anonymized exports, image processing, and future recommendation jobs.
+- Server work: Appwrite Functions or trusted server jobs for anonymized exports, image processing, and future recommendation jobs. Climate enrichment is browser-direct Open-Meteo per ADR-007 while no server secret is involved.
 - API domain: use an Appwrite custom API endpoint on a sibling subdomain, such as `api.galvando.com`, to keep auth cookies first-party.
 - Analytics migration path: if PlantDoc outgrows Appwrite's database model for research/geo analytics, add a Supabase/Postgres/PostGIS read model or warehouse without replacing the app backend immediately.
 - Codex Sites: appropriate for prototypes, demos, and internal dashboards, not as the canonical public production home unless the user explicitly chooses it.

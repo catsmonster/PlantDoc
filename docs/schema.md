@@ -100,6 +100,11 @@ User-owned plant profiles.
 | `placement_type` | enum/string | yes | `indoor`, `outdoor`, `greenhouse`, `balcony`. |
 | `placement_label` | string | no | Private room/location label. |
 | `location_id` | relationship/string | no | Link to `user_locations`. |
+| `last_watered_at` | datetime | no | Private summary field: timestamp of the last watering. |
+| `watering_count` | integer | no | Private summary field: total count of waterings. |
+| `watering_cadence_days` | float | no | Private summary field: computed or default watering interval in days. |
+| `latest_photo_file_id` | string | no | Private summary field: Appwrite file ID of the most recent photo. |
+| `latest_photo_observed_at` | datetime | no | Private summary field: timestamp of the most recent photo observation. |
 | `created_at` | datetime | yes | Server generated. |
 | `updated_at` | datetime | yes | Server generated. |
 
