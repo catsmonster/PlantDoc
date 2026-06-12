@@ -94,37 +94,6 @@ function environmentLine(obs: Observation): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 
-function getWeatherIconName(obs: Observation): IconName {
-  const snapshot = obs.environment_snapshots?.[0];
-  if (!snapshot) return 'thermometer';
-  const summary = snapshot.weather_summary;
-  if (!summary) {
-    if (snapshot.outdoor_temperature_c != null) {
-      return 'cloud';
-    }
-    return 'thermometer';
-  }
-  const clean = summary.toLowerCase();
-  if (clean.includes('clear') || clean.includes('sunny') || clean.includes('partly cloudy')) {
-    return 'sun';
-  }
-  if (clean.includes('cloud') || clean.includes('overcast') || clean.includes('fog') || clean.includes('mist')) {
-    return 'cloud';
-  }
-  if (
-    clean.includes('drizzle') ||
-    clean.includes('rain') ||
-    clean.includes('shower') ||
-    clean.includes('thunderstorm') ||
-    clean.includes('snow') ||
-    clean.includes('hail') ||
-    clean.includes('drop')
-  ) {
-    return 'droplet';
-  }
-  return 'cloud';
-}
-
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -555,7 +524,7 @@ export function PlantScreen({
                               {obs.notes_private && <p style={{ margin: '5px 0 0', fontSize: 13.5, color: '#9BAA98', lineHeight: 1.5 }}>“{obs.notes_private}”</p>}
                               {env && (
                                 <p className="mono" style={{ margin: '7px 0 0', display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: '#67766A', letterSpacing: '.04em' }}>
-                                  <Icon name={getWeatherIconName(obs)} size={12} stroke={2} /> {env.toUpperCase()}
+                                  🌤️ {env.toUpperCase()}
                                 </p>
                               )}
                               {obs.photos?.[0] && (
@@ -813,7 +782,7 @@ export function PlantScreen({
                             )}
                             {env && (
                               <p style={{ margin: '7px 0 0', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: '#9AA294' }}>
-                                <Icon name={getWeatherIconName(obs)} size={13} stroke={2} /> {env}
+                                🌤️ {env}
                               </p>
                             )}
                             {obs.photos?.[0] && (
