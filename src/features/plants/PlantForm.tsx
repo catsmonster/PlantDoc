@@ -12,6 +12,7 @@ import { ErrorText } from '../../ui/Field';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon } from '../../ui/Icon';
 import { PlantImageSlot } from '../../ui/PlantImageSlot';
+import { SpeciesNameResolver } from '../knowledge/SpeciesNameResolver';
 
 function speciesIdOf(plant: Plant | undefined): string {
   if (!plant?.species_id) return '';
@@ -180,10 +181,13 @@ export function PlantForm({
 
             {/* Free text species input */}
             {!speciesId && (
-              <label style={{ display: 'block' }}>
-                <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Species (free text)</span>
-                <input className="b-input" value={speciesText} onChange={(e) => setSpeciesText(e.target.value)} placeholder="Whatever the label said" disabled={busy} maxLength={255} />
-              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ display: 'block' }}>
+                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Species (free text)</span>
+                  <input className="b-input" value={speciesText} onChange={(e) => setSpeciesText(e.target.value)} placeholder="Whatever the label said" disabled={busy} maxLength={255} />
+                </label>
+                <SpeciesNameResolver query={speciesText} isDark onAdopt={setSpeciesText} />
+              </div>
             )}
 
             {/* Placement Segment Options */}
@@ -349,10 +353,13 @@ export function PlantForm({
 
           {/* Free text species input */}
           {!speciesId && (
-            <label style={{ display: 'block' }}>
-              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Species (free text)</span>
-              <input className="a-input" value={speciesText} onChange={(e) => setSpeciesText(e.target.value)} placeholder="Whatever the label said" disabled={busy} maxLength={255} />
-            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ display: 'block' }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Species (free text)</span>
+                <input className="a-input" value={speciesText} onChange={(e) => setSpeciesText(e.target.value)} placeholder="Whatever the label said" disabled={busy} maxLength={255} />
+              </label>
+              <SpeciesNameResolver query={speciesText} isDark={false} onAdopt={setSpeciesText} />
+            </div>
           )}
 
           {/* Placement segment button option */}

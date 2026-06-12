@@ -17,6 +17,8 @@ import {
   buildGbifMatchUrl,
   matchGbifSpecies,
   parseGbifMatch,
+  summarizeGbifMatch,
+  type GbifMatch,
 } from '../../src/lib/knowledge/gbif';
 
 function allSourcedFields(profile: SpeciesCareProfile): Sourced<unknown>[] {
@@ -175,5 +177,56 @@ describe('GBIF taxonomy resolution', () => {
     expect(match?.usageKey).toBe(2868095);
     expect(fetcher).toHaveBeenCalledOnce();
     expect(String(fetcher.mock.calls[0][0])).toContain('strict=false');
+  });
+});
+
+describe('GBIF match summary for onboarding display', () => {
+  const accepted: GbifMatch = {
+    scientificName: 'Monstera deliciosa Liebm.',
+    canonicalName: 'Monstera deliciosa',
+    rank: 'SPECIES',
+    status: 'ACCEPTED',
+    usageKey: 2868095,
+    confidence: 97,
+    family: 'Araceae',
+    genus: 'Monstera',
+  };
+
+  it('summarizes an accepted match with a human headline and the canonical name', () => {
+    const summary = summarizeGbifMatch('monstera deliciosa', accepted);
+    expect(summary.canonicalName).toBe('Monstera deliciosa');
+    expect(summary.statusLabel).toBe('Accepted name');
+    expect(summary.family).toBe('Araceae');
+    expect(summary.headline).toBe('Accepted name · Araceae · 97% match');
+  });
+
+  it('flags when the canonical name differs from what the user typed (so we can offer to adopt it)', () => {
+    // User typed a legacy synonym; GBIF resolves to the current accepted name.
+    const synonym: GbifMatch = {
+      ...accepted,
+      scientificName: 'Dracaena trifasciata (Prain) Mabb.',
+      canonicalName: 'Dracaena trifasciata',
+      status: 'SYNONYM',
+      family: 'Asparagaceae',
+    };
+    const differs = summarizeGbifMatch('Sansevieria trifasciata', synonym);
+    expect(differs.differsFromQuery).toBe(true);
+    expect(differs.statusLabel).toBe('Synonym');
+
+    // Same name (ignoring case/whitespace) → nothing to adopt.
+    const same = summarizeGbifMatch('  monstera   deliciosa ', accepted);
+    expect(same.differsFromQuery).toBe(false);
+  });
+
+  it('omits missing family and zero confidence from the headline', () => {
+    const sparse: GbifMatch = {
+      ...accepted,
+      status: 'DOUBTFUL',
+      family: null,
+      confidence: 0,
+    };
+    const summary = summarizeGbifMatch('mystery plant', sparse);
+    expect(summary.headline).toBe('Doubtful match');
+    expect(summary.family).toBeNull();
   });
 });
