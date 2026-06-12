@@ -258,6 +258,42 @@ export function parseGeminiPreviewText(response: unknown): string | null {
   return text || null;
 }
 
+export interface AiPreviewResponseBody {
+  text?: string;
+  error?: string;
+  warning?: string;
+}
+
+/**
+ * Reads the /api/gemini-insights response without assuming it is JSON.
+ * Stale deployments and dev servers without the worker answer /api/* with
+ * empty or HTML bodies; those must degrade to {} so the caller can show its
+ * own error copy instead of a raw JSON-parse exception.
+ */
+export async function readAiPreviewResponseBody(response: {
+  text(): Promise<string>;
+}): Promise<AiPreviewResponseBody> {
+  let raw: string;
+  try {
+    raw = await response.text();
+  } catch {
+    return {};
+  }
+  if (!raw.trim()) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const record = parsed as Record<string, unknown>;
+    return compactObject({
+      text: typeof record.text === 'string' ? record.text : undefined,
+      error: typeof record.error === 'string' ? record.error : undefined,
+      warning: typeof record.warning === 'string' ? record.warning : undefined,
+    });
+  } catch {
+    return {};
+  }
+}
+
 export function aiPreviewQuotaKey(userId: string, plantId: string, now = new Date()): string {
   return `plantdoc:ai-preview:${userId}:${plantId}:${now.toISOString().slice(0, 10)}`;
 }

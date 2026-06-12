@@ -6,6 +6,7 @@ import {
   buildPlantGeminiPreviewPayload,
   canUseAiPreview,
   parseGeminiPreviewText,
+  readAiPreviewResponseBody,
   recordAiPreviewUse,
 } from '../../src/lib/gemini-preview';
 import type { Plant } from '../../src/lib/types';
@@ -163,6 +164,38 @@ describe('Gemini preview payload', () => {
       }),
     ).toBe('Check leaves before watering.');
     expect(parseGeminiPreviewText({ candidates: [{ content: { parts: [] } }] })).toBeNull();
+  });
+});
+
+describe('AI preview response body reading', () => {
+  it('parses a JSON body from the preview endpoint', async () => {
+    const response = new Response(JSON.stringify({ text: 'Check the soil.', warning: 'w' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+    await expect(readAiPreviewResponseBody(response)).resolves.toEqual({
+      text: 'Check the soil.',
+      warning: 'w',
+    });
+  });
+
+  it('returns an empty body instead of throwing on empty responses', async () => {
+    // A stale assets-only deployment answers POST /api/* with an empty 405 body;
+    // dev servers without the worker answer with an empty 404.
+    await expect(readAiPreviewResponseBody(new Response(null, { status: 405 }))).resolves.toEqual(
+      {},
+    );
+  });
+
+  it('returns an empty body instead of throwing on non-JSON responses', async () => {
+    const html = new Response('<!doctype html><html></html>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    });
+    await expect(readAiPreviewResponseBody(html)).resolves.toEqual({});
+    await expect(
+      readAiPreviewResponseBody(new Response('[1,2,3]', { status: 200 })),
+    ).resolves.toEqual({});
   });
 });
 

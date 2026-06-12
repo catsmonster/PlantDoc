@@ -15,6 +15,7 @@ import {
   AI_PREVIEW_WARNING,
   buildPlantGeminiPreviewPayload,
   canUseAiPreview,
+  readAiPreviewResponseBody,
   recordAiPreviewUse,
   type GeminiPreviewImage,
 } from '../../lib/gemini-preview';
@@ -519,7 +520,7 @@ export function PlantScreen({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const body = (await response.json()) as { text?: string; error?: string };
+      const body = await readAiPreviewResponseBody(response);
       if (!response.ok || !body.text) {
         throw new Error(body.error ?? 'AI preview is unavailable right now.');
       }

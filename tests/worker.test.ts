@@ -71,6 +71,24 @@ describe('Worker Gemini preview route', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it('returns a JSON 502 when Gemini responds OK with an unparsable body', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status: 200 }));
+    const response = await handleRequest(
+      new Request('https://plantdoc.example/api/gemini-insights', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+      env(fetcher),
+    );
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('Gemini preview'),
+    });
+  });
+
   it('rejects oversized preview requests before reading the body', async () => {
     const fetcher = vi.fn<typeof fetch>();
     const response = await handleRequest(

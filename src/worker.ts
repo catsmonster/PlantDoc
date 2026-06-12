@@ -89,7 +89,8 @@ async function handleGeminiInsights(request: Request, env: WorkerEnv): Promise<R
     return jsonResponse({ error: 'Invalid Gemini preview payload.' }, 400);
   }
 
-  const requestBody = buildGeminiGenerateContentRequest(payload, env.GEMINI_MODEL?.trim());
+  // `|| undefined` so a blank var falls back to the default model instead of ''.
+  const requestBody = buildGeminiGenerateContentRequest(payload, env.GEMINI_MODEL?.trim() || undefined);
   const { model, ...generateContentBody } = requestBody;
   const headers = new Headers({
     'content-type': 'application/json',
@@ -119,7 +120,12 @@ async function handleGeminiInsights(request: Request, env: WorkerEnv): Promise<R
     );
   }
 
-  const geminiJson = await geminiResponse.json();
+  let geminiJson: unknown;
+  try {
+    geminiJson = await geminiResponse.json();
+  } catch {
+    return jsonResponse({ error: 'Gemini preview returned an unreadable response.' }, 502);
+  }
   const text = parseGeminiPreviewText(geminiJson);
   if (!text) {
     return jsonResponse({ error: 'Gemini preview returned no text.' }, 502);
