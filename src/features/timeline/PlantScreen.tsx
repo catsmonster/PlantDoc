@@ -338,21 +338,17 @@ export function PlantScreen({
               <Icon name="chevronLeft" size={22} stroke={2.4} />
             </button>
 
-            {/* Theme Toggle */}
-            <div style={{ position: 'absolute', top: 58, left: 68 }}>
+            {/* Edit Button, Theme Toggle & Health Dot */}
+            <div style={{ position: 'absolute', top: 58, right: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button className="b-tap" onClick={() => onEdit(plant)} aria-label="Edit plant" style={{ width: 42, height: 42, borderRadius: 99, background: 'rgba(14,20,15,.55)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F2F6EF', cursor: 'pointer' }}>
+                <Icon name="pencil" size={18} stroke={2} />
+              </button>
               <button className="b-tap" onClick={toggleTheme} aria-label="Switch to light mode"
                 style={{ width: 42, height: 42, borderRadius: 99, cursor: 'pointer',
                   background: 'rgba(14,20,15,.55)', backdropFilter: 'blur(10px)',
                   border: '1px solid rgba(255,255,255,.09)', color: '#F2F6EF',
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="sun" size={19} stroke={1.9} />
-              </button>
-            </div>
-
-            {/* Edit Button & Health Dot */}
-            <div style={{ position: 'absolute', top: 58, right: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button className="b-tap" onClick={() => onEdit(plant)} aria-label="Edit plant" style={{ width: 42, height: 42, borderRadius: 99, background: 'rgba(14,20,15,.55)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F2F6EF', cursor: 'pointer' }}>
-                <Icon name="pencil" size={18} stroke={2} />
               </button>
               <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: '#C7F24A', color: '#0E140F', backdropFilter: 'blur(6px)' }}>
                 {healthLabel(measurements.find(m => m.health_score != null)?.health_score ?? 4)}
