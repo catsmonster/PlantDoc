@@ -94,6 +94,30 @@ function environmentLine(obs: Observation): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 
+function getWeatherIconName(obs: Observation): IconName {
+  const summary = obs.environment_snapshots?.[0]?.weather_summary;
+  if (!summary) return 'thermometer';
+  const clean = summary.toLowerCase();
+  if (clean.includes('clear') || clean.includes('sunny') || clean.includes('partly cloudy')) {
+    return 'sun';
+  }
+  if (clean.includes('cloud') || clean.includes('overcast') || clean.includes('fog') || clean.includes('mist')) {
+    return 'mist';
+  }
+  if (
+    clean.includes('drizzle') ||
+    clean.includes('rain') ||
+    clean.includes('shower') ||
+    clean.includes('thunderstorm') ||
+    clean.includes('snow') ||
+    clean.includes('hail') ||
+    clean.includes('drop')
+  ) {
+    return 'droplet';
+  }
+  return 'thermometer';
+}
+
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -524,7 +548,7 @@ export function PlantScreen({
                               {obs.notes_private && <p style={{ margin: '5px 0 0', fontSize: 13.5, color: '#9BAA98', lineHeight: 1.5 }}>“{obs.notes_private}”</p>}
                               {env && (
                                 <p className="mono" style={{ margin: '7px 0 0', display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: '#67766A', letterSpacing: '.04em' }}>
-                                  <Icon name="thermometer" size={12} stroke={2} /> {env.toUpperCase()}
+                                  <Icon name={getWeatherIconName(obs)} size={12} stroke={2} /> {env.toUpperCase()}
                                 </p>
                               )}
                               {obs.photos?.[0] && (
@@ -782,7 +806,7 @@ export function PlantScreen({
                             )}
                             {env && (
                               <p style={{ margin: '7px 0 0', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: '#9AA294' }}>
-                                <Icon name="thermometer" size={13} stroke={2} /> {env}
+                                <Icon name={getWeatherIconName(obs)} size={13} stroke={2} /> {env}
                               </p>
                             )}
                             {obs.photos?.[0] && (
