@@ -18,6 +18,7 @@ interface RuntimeRequest {
 interface FetchDispatchResult {
   response?: Promise<Response | undefined>;
   responded: boolean;
+  waits: Promise<unknown>[];
 }
 
 interface ServiceWorkerTestContext {
@@ -34,9 +35,22 @@ function loadServiceWorker(): ServiceWorkerTestContext {
     URL,
     Response,
     caches: {
-      match: () => Promise.resolve(new Response('<!doctype html>')),
+      match: (request: RuntimeRequest | string) =>
+        Promise.resolve(request === '/' ? new Response('<!doctype html>') : undefined),
+      open: () =>
+        Promise.resolve({
+          addAll: () => Promise.resolve(),
+          put: () => Promise.resolve(),
+        }),
     },
-    fetch: () => Promise.reject(new Error('offline')),
+    fetch: (request: RuntimeRequest) =>
+      Promise.resolve(
+        new Response(request.mode === 'navigate' ? '<!doctype html>' : 'asset', {
+          headers: {
+            'Content-Type': request.mode === 'navigate' ? 'text/html; charset=utf-8' : 'application/javascript',
+          },
+        }),
+      ),
     self: {
       clients: { claim: () => Promise.resolve() },
       location: { origin: 'https://plantdoc.test' },
@@ -53,17 +67,21 @@ function loadServiceWorker(): ServiceWorkerTestContext {
     dispatchFetch(request: RuntimeRequest): FetchDispatchResult {
       let responded = false;
       let response: Promise<Response | undefined> | undefined;
+      const waits: Promise<unknown>[] = [];
       const event = {
         request,
         respondWith(nextResponse: Promise<Response | undefined>) {
           responded = true;
           response = nextResponse;
         },
+        waitUntil(promise: Promise<unknown>) {
+          waits.push(promise);
+        },
       };
       for (const listener of listeners.get('fetch') ?? []) {
         listener(event);
       }
-      return { responded, response };
+      return { responded, response, waits };
     },
   }) as unknown as ServiceWorkerTestContext;
 }
@@ -120,6 +138,11 @@ describe('PWA install surface', () => {
     expect(worker).toContain("self.addEventListener('install'");
     expect(worker).toContain("self.addEventListener('fetch'");
     expect(worker).toContain("event.request.mode === 'navigate'");
+  });
+
+  it('wires Vite build output into the service worker precache manifest', () => {
+    expect(readText('vite.config.ts')).toContain('plantdocPwaPrecache()');
+    expect(readText('public/sw.js')).toContain('self.__PLANTDOC_PRECACHE_URLS__');
   });
 
   it('only runtime-caches static same-origin assets and never API requests', () => {
@@ -221,5 +244,24 @@ describe('PWA install surface', () => {
         url: 'https://plantdoc.test/api/profile',
       }).responded,
     ).toBe(false);
+  });
+
+  it('extends the service worker lifetime for shell and runtime cache writes', async () => {
+    const serviceWorker = loadServiceWorker();
+    const shellFetch = serviceWorker.dispatchFetch({
+      method: 'GET',
+      mode: 'navigate',
+      url: 'https://plantdoc.test/plants',
+    });
+    const assetFetch = serviceWorker.dispatchFetch({
+      method: 'GET',
+      url: 'https://plantdoc.test/assets/index.js',
+    });
+
+    await shellFetch.response;
+    await assetFetch.response;
+
+    expect(shellFetch.waits).toHaveLength(1);
+    expect(assetFetch.waits).toHaveLength(1);
   });
 });

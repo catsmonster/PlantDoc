@@ -1,5 +1,14 @@
 const CACHE_NAME = 'plantdoc-shell-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const BUILD_ASSETS = Array.isArray(self.__PLANTDOC_PRECACHE_URLS__)
+  ? self.__PLANTDOC_PRECACHE_URLS__
+  : [];
+const APP_SHELL = [
+  '/',
+  '/manifest.webmanifest',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  ...BUILD_ASSETS,
+];
 const RUNTIME_CACHE_PATHS = new Set(['/manifest.webmanifest']);
 const RUNTIME_CACHE_PREFIXES = ['/assets/', '/icons/'];
 
@@ -42,17 +51,17 @@ function isShellResponse(response) {
 }
 
 function updateShellCache(request, response) {
-  if (!isShellNavigationRequest(request) || !isShellResponse(response)) return;
+  if (!isShellNavigationRequest(request) || !isShellResponse(response)) return Promise.resolve();
 
   const copy = response.clone();
-  caches.open(CACHE_NAME).then((cache) => cache.put('/', copy));
+  return caches.open(CACHE_NAME).then((cache) => cache.put('/', copy));
 }
 
 function updateRuntimeCache(request, response) {
-  if (!isStorableResponse(response)) return;
+  if (!isStorableResponse(response)) return Promise.resolve();
 
   const copy = response.clone();
-  caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+  return caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
 }
 
 self.addEventListener('install', (event) => {
@@ -80,7 +89,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          updateShellCache(event.request, response);
+          event.waitUntil(updateShellCache(event.request, response));
           return response;
         })
         .catch(() => caches.match('/')),
@@ -95,7 +104,7 @@ self.addEventListener('fetch', (event) => {
       if (cached) return cached;
 
       return fetch(event.request).then((response) => {
-        updateRuntimeCache(event.request, response);
+        event.waitUntil(updateRuntimeCache(event.request, response));
         return response;
       });
     }),
