@@ -10,6 +10,22 @@
 
 export const GBIF_SPECIES_MATCH_URL = 'https://api.gbif.org/v1/species/match';
 
+export const GBIF_SPECIES_SEARCH_URL = 'https://api.gbif.org/v1/species/search';
+
+/** Vernacular (common-name) search, filtered to accepted Plantae species
+ *  (`highertaxonKey=6` is the GBIF backbone key for kingdom Plantae). */
+export function buildGbifVernacularSearchUrl(query: string): string {
+  const params = new URLSearchParams({
+    q: query.trim(),
+    qField: 'VERNACULAR',
+    rank: 'SPECIES',
+    status: 'ACCEPTED',
+    highertaxonKey: '6',
+    limit: '8',
+  });
+  return `${GBIF_SPECIES_SEARCH_URL}?${params.toString()}`;
+}
+
 export interface GbifMatch {
   scientificName: string;
   canonicalName: string;
