@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { errorMessage } from '../../lib/error';
-import { getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
+import { getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
 import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback } from '../../lib/types';
 import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
@@ -8,7 +8,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { Icon, healthLabel, type IconName } from '../../ui/Icon';
 import { LogSheet } from './LogSheet';
 import { plantInsights } from '../../lib/insights';
-import { careProfileForPlant } from '../../lib/knowledge/care-profiles';
+import { careProfileForPlant, type SpeciesCareProfile } from '../../lib/knowledge/care-profiles';
 import { CareProfilePanel } from '../knowledge/CareProfilePanel';
 import { TrendsCard } from './TrendsCard';
 import { ErrorText } from '../../ui/Field';
@@ -377,6 +377,10 @@ export function PlantScreen({
 }) {
   const { theme, toggleTheme } = useTheme();
   const [plant, setPlant] = useState<Plant | null>(null);
+  const [tableProfile, setTableProfile] = useState<{
+    speciesId: string;
+    profile: SpeciesCareProfile | null;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -409,6 +413,27 @@ export function PlantScreen({
       cancelled = true;
     };
   }, [plantId, reloadKey]);
+
+  // Sourced reference facts (roadmap Phase 4A, slice 1): fetch the table-backed
+  // care profile for a canonical species. The displayed profile is derived at
+  // render (table-or-bundled), so the bundled editorial fallback shows instantly
+  // and a free-text species needs no fetch.
+  const speciesRowId =
+    plant?.species_id && typeof plant.species_id === 'object'
+      ? (plant.species_id as { $id?: string }).$id
+      : typeof plant?.species_id === 'string'
+        ? plant.species_id
+        : undefined;
+  useEffect(() => {
+    if (!speciesRowId) return;
+    let cancelled = false;
+    getCareProfile(speciesRowId).then((profile) => {
+      if (!cancelled) setTableProfile({ speciesId: speciesRowId, profile });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [speciesRowId]);
 
   const refresh = () => {
     setLogOpen(false);
@@ -473,8 +498,11 @@ export function PlantScreen({
   // Compute insights
   const insights = plantInsights(plant, nowDate, profile.preferred_units);
 
-  // Sourced reference facts from the open knowledge layer (null if no match)
-  const careProfile = careProfileForPlant(plant);
+  // Sourced reference facts: table-backed for this species once loaded, else the
+  // bundled editorial fallback (also covers free-text species).
+  const tableMatch =
+    tableProfile && tableProfile.speciesId === speciesRowId ? tableProfile.profile : null;
+  const careProfile = tableMatch ?? careProfileForPlant(plant);
 
   // Group timeline observations by day
   const groupedTimeline: [string, Observation[]][] = [];
