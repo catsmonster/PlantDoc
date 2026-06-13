@@ -29,6 +29,19 @@ export interface CatalogSpeciesLike {
   common_names: string[];
 }
 
+/**
+ * One-line display label for a catalog species: the scientific name, plus the
+ * primary common name in parentheses when one exists. Used to show a locked-in
+ * species selection in the plant form.
+ */
+export function speciesCatalogLabel(species: {
+  scientific_name: string;
+  common_names: string[];
+}): string {
+  const common = species.common_names[0];
+  return common ? `${species.scientific_name} (${common})` : species.scientific_name;
+}
+
 interface MergedSpecies {
   scientificName: string;
   commonNames: string[];

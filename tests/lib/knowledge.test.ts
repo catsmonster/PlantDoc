@@ -20,7 +20,7 @@ import {
   summarizeGbifMatch,
   type GbifMatch,
 } from '../../src/lib/knowledge/gbif';
-import { suggestSpecies } from '../../src/lib/knowledge/species-suggest';
+import { speciesCatalogLabel, suggestSpecies } from '../../src/lib/knowledge/species-suggest';
 
 function allSourcedFields(profile: SpeciesCareProfile): Sourced<unknown>[] {
   return [
@@ -271,5 +271,19 @@ describe('species suggestions for common-name autocomplete', () => {
     expect(suggestSpecies('   ', catalog)).toEqual([]);
     expect(suggestSpecies('xyzzy', catalog)).toEqual([]);
     expect(suggestSpecies('a', catalog, 1).length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('catalog species label', () => {
+  it('appends the primary common name when present', () => {
+    expect(
+      speciesCatalogLabel({ scientific_name: 'Monstera deliciosa', common_names: ['Swiss cheese plant'] }),
+    ).toBe('Monstera deliciosa (Swiss cheese plant)');
+  });
+
+  it('shows just the scientific name when no common name is known', () => {
+    expect(
+      speciesCatalogLabel({ scientific_name: 'Coffea arabica', common_names: [] }),
+    ).toBe('Coffea arabica');
   });
 });

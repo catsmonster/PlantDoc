@@ -14,7 +14,7 @@ import { Icon } from '../../ui/Icon';
 import { PlantImageSlot } from '../../ui/PlantImageSlot';
 import { SpeciesNameResolver } from '../knowledge/SpeciesNameResolver';
 import { SpeciesAutocomplete } from '../knowledge/SpeciesAutocomplete';
-import type { SpeciesSuggestion } from '../../lib/knowledge/species-suggest';
+import { speciesCatalogLabel, type SpeciesSuggestion } from '../../lib/knowledge/species-suggest';
 
 function speciesIdOf(plant: Plant | undefined): string {
   if (!plant?.species_id) return '';
@@ -56,6 +56,13 @@ export function PlantForm({
   const [busy, setBusy] = useState(false);
 
   const isDark = theme === 'dark';
+
+  // When a catalog species is chosen, show its name from the catalog — or, while
+  // editing before the catalog loads, from the plant's already-hydrated relation.
+  const selectedSpecies =
+    species.find((sp) => sp.$id === speciesId) ??
+    (plant && plant.species_id && typeof plant.species_id === 'object' ? plant.species_id : null);
+  const selectedSpeciesLabel = selectedSpecies ? speciesCatalogLabel(selectedSpecies) : 'Species selected';
 
   useEffect(() => {
     let cancelled = false;
@@ -180,24 +187,24 @@ export function PlantForm({
               <input className="b-input" value={commonName} onChange={(e) => setCommonName(e.target.value)} placeholder="e.g. Swiss cheese plant" disabled={busy} maxLength={128} />
             </label>
 
-            {/* Species Select catalog */}
-            <label style={{ display: 'block' }}>
-              <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Species</span>
-              <select className="b-input" value={speciesId} onChange={(e) => setSpeciesId(e.target.value)} disabled={busy}>
-                <option value="">— Not sure / not listed —</option>
-                {species.map((sp) => (
-                  <option key={sp.$id} value={sp.$id}>
-                    {sp.scientific_name}{sp.common_names.length > 0 ? ` (${sp.common_names[0]})` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {/* Free text species input */}
-            {!speciesId && (
+            {/* Species — type to search the catalog + care pack; pick a match to
+                lock in the relation, or keep free text for GBIF verification. */}
+            {speciesId ? (
+              <div style={{ display: 'block' }}>
+                <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Species</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#19231B', border: '1px solid rgba(255,255,255,.12)', borderRadius: 12, padding: '12px 14px' }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, fontStyle: 'italic', color: '#F2F6EF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {selectedSpeciesLabel}
+                  </span>
+                  <button type="button" className="b-tap" onClick={() => setSpeciesId('')} disabled={busy} aria-label="Change species" style={{ flexShrink: 0, borderRadius: 9, border: '1px solid rgba(255,255,255,.14)', background: 'transparent', color: '#C7F24A', padding: '7px 12px', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                    Change
+                  </button>
+                </div>
+              </div>
+            ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={{ display: 'block' }}>
-                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Species (type to search)</span>
+                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Species</span>
                   <SpeciesAutocomplete
                     value={speciesText}
                     catalog={species}
@@ -360,24 +367,24 @@ export function PlantForm({
             <input className="a-input" value={commonName} onChange={(e) => setCommonName(e.target.value)} placeholder="e.g. Swiss cheese plant" disabled={busy} maxLength={128} />
           </label>
 
-          {/* Species Dropdown catalog */}
-          <label style={{ display: 'block' }}>
-            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Species (from catalog)</span>
-            <select className="a-input" value={speciesId} onChange={(e) => setSpeciesId(e.target.value)} disabled={busy}>
-              <option value="">— Not sure / not listed —</option>
-              {species.map((sp) => (
-                <option key={sp.$id} value={sp.$id}>
-                  {sp.scientific_name}{sp.common_names.length > 0 ? ` (${sp.common_names[0]})` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {/* Free text species input */}
-          {!speciesId && (
+          {/* Species — type to search the catalog + care pack; pick a match to
+              lock in the relation, or keep free text for GBIF verification. */}
+          {speciesId ? (
+            <div style={{ display: 'block' }}>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Species</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#FFFDF8', border: '1px solid #E7E0D2', borderRadius: 14, padding: '12px 14px' }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, fontStyle: 'italic', color: '#23302A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {selectedSpeciesLabel}
+                </span>
+                <button type="button" className="a-tap" onClick={() => setSpeciesId('')} disabled={busy} aria-label="Change species" style={{ flexShrink: 0, borderRadius: 10, border: '1px solid #E7E0D2', background: '#fff', color: '#3C7140', padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                  Change
+                </button>
+              </div>
+            </div>
+          ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{ display: 'block' }}>
-                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Species (type to search)</span>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Species</span>
                 <SpeciesAutocomplete
                   value={speciesText}
                   catalog={species}
