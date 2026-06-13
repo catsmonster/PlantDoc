@@ -20,6 +20,8 @@ export interface SpeciesSuggestion {
   speciesId: string | null;
   /** Care-pack slug when a curated care profile backs this suggestion. */
   slug: string | null;
+  /** Present only on live GBIF vernacular-fallback results, for the "via GBIF" tag. */
+  via?: 'gbif';
 }
 
 /** The subset of an Appwrite species row this module needs. */
@@ -162,4 +164,27 @@ export function suggestSpecies(
     )
     .slice(0, limit)
     .map((s) => s.suggestion);
+}
+
+/** Local hits first, then remote, deduped by scientific name, capped at `limit`. */
+export function mergeSuggestions(
+  local: SpeciesSuggestion[],
+  remote: SpeciesSuggestion[],
+  limit: number,
+): SpeciesSuggestion[] {
+  const seen = new Set(local.map((s) => s.scientificName.trim().toLowerCase()));
+  const merged = [...local];
+  for (const r of remote) {
+    const key = r.scientificName.trim().toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(r);
+    }
+  }
+  return merged.slice(0, limit);
+}
+
+/** Whether to reach out to the live GBIF fallback: only on a local miss for a real query. */
+export function shouldQueryRemote(query: string, local: SpeciesSuggestion[]): boolean {
+  return local.length === 0 && query.trim().length >= 3;
 }
