@@ -61,3 +61,36 @@ The plant detail page deliberately separates, in this order:
 A profile field we cannot source is omitted, never guessed or generated. Adding
 a fact means adding (or reusing) a source row and pointing the field's
 `sourceId` at it.
+
+## Candidate inbound sources (survey 2026-06-13)
+
+Open databases evaluated for growing the knowledge layer beyond the 10-species
+starter pack, so future work doesn't start from zero. Sorted by how cleanly the
+license fits this project (which tracks commercial use via `commercialSources()`).
+
+| Candidate | License | Commercial | Mine for | Status |
+| --- | --- | --- | --- | --- |
+| [Wikidata](https://www.wikidata.org) | CC0 | ✅ | Multilingual common names, toxicity claims, cross-links | Live; already an accepted source |
+| [USDA PLANTS](https://plants.usda.gov/downloads) | Public domain | ✅ | Coarse outdoor traits (shade/moisture/drought tolerance, min temp); US species | Live, bulk download |
+| [EOL TraitBank](https://eol.org/traitbank) | CC BY / CC0 sources | ✅ (attribute) | Coarse biological traits, toxicity, growth habit — well-provenanced | Live, bulk download + search |
+| [OpenFarm](https://github.com/openfarmcc/OpenFarm) | CC BY 4.0 | ✅ (attribute) | Growing guides (sun, sowing, spacing, watering notes); garden-crop heavy | **Servers shut down ~Apr 2025** — recover data from GitHub/archives |
+| [Permapeople](https://permapeople.org/knowledgebase/api-docs/) | CC BY-SA 4.0 | ⚠️ ShareAlike | Cultivation data, tens of thousands of plants; API (request access) | Live, most actively maintained |
+| PFAF / [Practical Plants](https://practicalplants.org) | CC BY-SA | ⚠️ ShareAlike | ~7,000 edible/medicinal/useful plants, cultivation detail | Practical Plants live (Semantic MediaWiki, exportable); upstream of the two above |
+
+ShareAlike (BY-SA) sources are commercial-usable but require any **derived
+dataset** to be published under BY-SA with attribution. Mined BY-SA data must
+therefore live in a clearly-attributed file with its own `sourceId`, kept
+separate from the editorial profiles — stricter than the CC0/PD/BY sources
+above, but still inside policy (unlike the quarantined CC BY-NC tiers).
+
+**The houseplant-care gap remains.** Every candidate skews edible / permaculture
+/ garden-crop and temperate-outdoor. They shrink the "from zero" problem for a
+larger names index, coarse sourced traits, toxicity flags, and herb/veg growing
+guides — but precise **indoor** care (watering cadence, light, humidity for an
+ornamental houseplant) still has no open, citable source and stays editorial.
+
+**Cleared for current work:** the common-plants names index
+(`docs/superpowers/specs/2026-06-13-common-name-species-autocomplete-design.md`)
+pulls from GBIF, already accepted. Wikidata (CC0, already accepted) is available
+for common-name enrichment if we choose to add it — neither carries a ShareAlike
+obligation.
