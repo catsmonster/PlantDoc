@@ -56,6 +56,49 @@ export function parseGbifMatch(response: unknown): GbifMatch | null {
   };
 }
 
+export interface GbifNameSummary {
+  /** Canonical accepted name GBIF resolved to — the name worth adopting. */
+  canonicalName: string;
+  /** True when the canonical name differs from what the user typed (ignoring case/spacing). */
+  differsFromQuery: boolean;
+  /** Short human label for the taxonomic status, e.g. "Accepted name". */
+  statusLabel: string;
+  family: string | null;
+  confidence: number;
+  /** One-line summary for the UI, e.g. "Accepted name · Araceae · 97% match". */
+  headline: string;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  ACCEPTED: 'Accepted name',
+  SYNONYM: 'Synonym',
+  DOUBTFUL: 'Doubtful match',
+};
+
+function normalizeName(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Shapes a raw GBIF match into the fields the onboarding UI shows: a canonical
+ * name to adopt, whether it differs from the user's text, and a one-line
+ * headline. Pure, so it is unit-tested without the network.
+ */
+export function summarizeGbifMatch(query: string, match: GbifMatch): GbifNameSummary {
+  const statusLabel = STATUS_LABELS[match.status.toUpperCase()] ?? 'Matched name';
+  const parts = [statusLabel];
+  if (match.family) parts.push(match.family);
+  if (match.confidence > 0) parts.push(`${match.confidence}% match`);
+  return {
+    canonicalName: match.canonicalName,
+    differsFromQuery: normalizeName(match.canonicalName) !== normalizeName(query),
+    statusLabel,
+    family: match.family,
+    confidence: match.confidence,
+    headline: parts.join(' · '),
+  };
+}
+
 /**
  * Resolves a free-text species string to a GBIF backbone match. Returns null on
  * network error or no match; never throws, so onboarding stays usable offline.

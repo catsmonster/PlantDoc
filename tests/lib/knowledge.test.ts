@@ -17,7 +17,10 @@ import {
   buildGbifMatchUrl,
   matchGbifSpecies,
   parseGbifMatch,
+  summarizeGbifMatch,
+  type GbifMatch,
 } from '../../src/lib/knowledge/gbif';
+import { speciesCatalogLabel, suggestSpecies } from '../../src/lib/knowledge/species-suggest';
 
 function allSourcedFields(profile: SpeciesCareProfile): Sourced<unknown>[] {
   return [
@@ -175,5 +178,112 @@ describe('GBIF taxonomy resolution', () => {
     expect(match?.usageKey).toBe(2868095);
     expect(fetcher).toHaveBeenCalledOnce();
     expect(String(fetcher.mock.calls[0][0])).toContain('strict=false');
+  });
+});
+
+describe('GBIF match summary for onboarding display', () => {
+  const accepted: GbifMatch = {
+    scientificName: 'Monstera deliciosa Liebm.',
+    canonicalName: 'Monstera deliciosa',
+    rank: 'SPECIES',
+    status: 'ACCEPTED',
+    usageKey: 2868095,
+    confidence: 97,
+    family: 'Araceae',
+    genus: 'Monstera',
+  };
+
+  it('summarizes an accepted match with a human headline and the canonical name', () => {
+    const summary = summarizeGbifMatch('monstera deliciosa', accepted);
+    expect(summary.canonicalName).toBe('Monstera deliciosa');
+    expect(summary.statusLabel).toBe('Accepted name');
+    expect(summary.family).toBe('Araceae');
+    expect(summary.headline).toBe('Accepted name · Araceae · 97% match');
+  });
+
+  it('flags when the canonical name differs from what the user typed (so we can offer to adopt it)', () => {
+    // User typed a legacy synonym; GBIF resolves to the current accepted name.
+    const synonym: GbifMatch = {
+      ...accepted,
+      scientificName: 'Dracaena trifasciata (Prain) Mabb.',
+      canonicalName: 'Dracaena trifasciata',
+      status: 'SYNONYM',
+      family: 'Asparagaceae',
+    };
+    const differs = summarizeGbifMatch('Sansevieria trifasciata', synonym);
+    expect(differs.differsFromQuery).toBe(true);
+    expect(differs.statusLabel).toBe('Synonym');
+
+    // Same name (ignoring case/whitespace) → nothing to adopt.
+    const same = summarizeGbifMatch('  monstera   deliciosa ', accepted);
+    expect(same.differsFromQuery).toBe(false);
+  });
+
+  it('omits missing family and zero confidence from the headline', () => {
+    const sparse: GbifMatch = {
+      ...accepted,
+      status: 'DOUBTFUL',
+      family: null,
+      confidence: 0,
+    };
+    const summary = summarizeGbifMatch('mystery plant', sparse);
+    expect(summary.headline).toBe('Doubtful match');
+    expect(summary.family).toBeNull();
+  });
+});
+
+describe('species suggestions for common-name autocomplete', () => {
+  const catalog = [
+    { $id: 'sp-coffee', scientific_name: 'Coffea arabica', common_names: ['Arabica coffee'] },
+    { $id: 'sp-monstera', scientific_name: 'Monstera deliciosa', common_names: ['Swiss cheese plant'] },
+  ];
+
+  it('guesses the species from a common name and surfaces the matched common name', () => {
+    const [top] = suggestSpecies('swiss cheese', []);
+    expect(top.scientificName).toBe('Monstera deliciosa');
+    expect(top.commonName).toBe('Swiss cheese plant');
+    expect(top.slug).toBe('monstera-deliciosa');
+  });
+
+  it('matches catalog rows by common name and carries the species id for the relation', () => {
+    const [top] = suggestSpecies('arabica coffee', catalog);
+    expect(top.scientificName).toBe('Coffea arabica');
+    expect(top.speciesId).toBe('sp-coffee');
+    expect(top.slug).toBeNull();
+  });
+
+  it('merges care pack and catalog into one row carrying both the id and the care slug', () => {
+    const results = suggestSpecies('monstera', catalog);
+    const monstera = results.filter((r) => r.scientificName === 'Monstera deliciosa');
+    expect(monstera).toHaveLength(1);
+    expect(monstera[0].speciesId).toBe('sp-monstera');
+    expect(monstera[0].slug).toBe('monstera-deliciosa');
+  });
+
+  it('matches legacy synonyms and ranks exact common-name hits first', () => {
+    expect(suggestSpecies('sansevieria trifasciata', [])[0].scientificName).toBe('Dracaena trifasciata');
+    const pothos = suggestSpecies('pothos', []);
+    expect(pothos[0].scientificName).toBe('Epipremnum aureum');
+  });
+
+  it('returns nothing for blank or unmatched queries and respects the limit', () => {
+    expect(suggestSpecies('', catalog)).toEqual([]);
+    expect(suggestSpecies('   ', catalog)).toEqual([]);
+    expect(suggestSpecies('xyzzy', catalog)).toEqual([]);
+    expect(suggestSpecies('a', catalog, 1).length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('catalog species label', () => {
+  it('appends the primary common name when present', () => {
+    expect(
+      speciesCatalogLabel({ scientific_name: 'Monstera deliciosa', common_names: ['Swiss cheese plant'] }),
+    ).toBe('Monstera deliciosa (Swiss cheese plant)');
+  });
+
+  it('shows just the scientific name when no common name is known', () => {
+    expect(
+      speciesCatalogLabel({ scientific_name: 'Coffea arabica', common_names: [] }),
+    ).toBe('Coffea arabica');
   });
 });
