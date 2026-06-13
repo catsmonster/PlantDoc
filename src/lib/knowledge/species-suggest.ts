@@ -11,6 +11,7 @@
  */
 
 import { CARE_PROFILES } from './care-profiles';
+import { COMMON_PLANTS } from './common-plants';
 
 export interface SpeciesSuggestion {
   scientificName: string;
@@ -20,6 +21,8 @@ export interface SpeciesSuggestion {
   speciesId: string | null;
   /** Care-pack slug when a curated care profile backs this suggestion. */
   slug: string | null;
+  /** Present only on live GBIF vernacular-fallback results, for the "via GBIF" tag. */
+  via?: 'gbif';
 }
 
 /** The subset of an Appwrite species row this module needs. */
@@ -106,6 +109,9 @@ function mergeCorpus(catalog: CatalogSpeciesLike[]): MergedSpecies[] {
   for (const profile of CARE_PROFILES) {
     upsert(profile.scientificName, profile.commonNames, profile.synonyms, null, profile.slug);
   }
+  for (const plant of COMMON_PLANTS) {
+    upsert(plant.scientificName, plant.commonNames, [], null, null);
+  }
   for (const row of catalog) {
     upsert(row.scientific_name, row.common_names ?? [], [], row.$id, null);
   }
@@ -158,8 +164,62 @@ export function suggestSpecies(
     .sort(
       (a, b) =>
         a.score - b.score ||
+        // At equal relevance, prefer the species we have a curated care guide
+        // for — e.g. "swiss cheese" surfaces care-backed Monstera deliciosa above
+        // the offline-index Monstera adansonii that shares the common name.
+        (b.suggestion.slug ? 1 : 0) - (a.suggestion.slug ? 1 : 0) ||
         a.suggestion.scientificName.localeCompare(b.suggestion.scientificName),
     )
     .slice(0, limit)
     .map((s) => s.suggestion);
+}
+
+/** Local hits first, then remote, deduped by scientific name, capped at `limit`. */
+export function mergeSuggestions(
+  local: SpeciesSuggestion[],
+  remote: SpeciesSuggestion[],
+  limit: number,
+): SpeciesSuggestion[] {
+  const seen = new Set(local.map((s) => s.scientificName.trim().toLowerCase()));
+  const merged = [...local];
+  for (const r of remote) {
+    const key = r.scientificName.trim().toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(r);
+    }
+  }
+  return merged.slice(0, limit);
+}
+
+/** Whether to reach out to the live GBIF fallback: only on a local miss for a real query. */
+export function shouldQueryRemote(query: string, local: SpeciesSuggestion[]): boolean {
+  return local.length === 0 && query.trim().length >= 3;
+}
+
+export interface SuggestionRowView {
+  /** The prominent line: the common name when known, else the scientific name. */
+  lead: string;
+  /** The secondary italic line (scientific name) when the lead is a common name. */
+  sub: string | null;
+  /** 'care' for a curated care-guide row, 'gbif' for a live fallback row, else none. */
+  tag: 'care' | 'gbif' | null;
+}
+
+/** Maps a suggestion to its novice-friendly display: common name leads. */
+export function suggestionRowView(s: SpeciesSuggestion): SuggestionRowView {
+  return {
+    lead: s.commonName ?? s.scientificName,
+    sub: s.commonName ? s.scientificName : null,
+    tag: s.slug ? 'care' : s.via === 'gbif' ? 'gbif' : null,
+  };
+}
+
+/** The species-field updates a chosen suggestion implies: a catalog relation id,
+ *  or free scientific text when the suggestion is not catalog-backed. */
+export function speciesSelectionFromSuggestion(s: SpeciesSuggestion): {
+  speciesId: string;
+  speciesText: string;
+} {
+  return s.speciesId ? { speciesId: s.speciesId, speciesText: '' } : { speciesId: '', speciesText: s.scientificName };
 }

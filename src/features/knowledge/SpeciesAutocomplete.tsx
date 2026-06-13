@@ -7,12 +7,10 @@
  * directions; a thin presenter over the pure suggestSpecies ranking.
  */
 
-import { useId, useMemo, useState } from 'react';
-import {
-  suggestSpecies,
-  type CatalogSpeciesLike,
-  type SpeciesSuggestion,
-} from '../../lib/knowledge/species-suggest';
+import { useEffect, useId, useRef, useState } from 'react';
+import { type CatalogSpeciesLike, type SpeciesSuggestion } from '../../lib/knowledge/species-suggest';
+import { useSpeciesSuggestions } from './useSpeciesSuggestions';
+import { SpeciesSuggestionRow } from './SpeciesSuggestionRow';
 
 export function SpeciesAutocomplete({
   value,
@@ -32,16 +30,72 @@ export function SpeciesAutocomplete({
   onSelect: (suggestion: SpeciesSuggestion) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // -1 = no keyboard-active option; cleared on each new query (see onChange).
+  const [activeIndex, setActiveIndex] = useState(-1);
   const listId = useId();
-  const suggestions = useMemo(() => suggestSpecies(value, catalog), [value, catalog]);
+  const listRef = useRef<HTMLUListElement>(null);
+  const { suggestions, loading } = useSpeciesSuggestions(value, catalog);
 
   // Hide the menu once the field already holds an exact suggestion (just picked).
   const exactlyMatchesTop = suggestions.length === 1 && suggestions[0].scientificName === value.trim();
-  const showMenu = open && suggestions.length > 0 && !exactlyMatchesTop;
+  const showMenu = open && (suggestions.length > 0 || loading) && !exactlyMatchesTop;
+
+  // Effective active option, clamped to the live list so a stale index never
+  // points past the end after the suggestions change.
+  const active = activeIndex >= 0 && activeIndex < suggestions.length ? activeIndex : -1;
+  const optionId = (i: number) => `${listId}-opt-${i}`;
+
+  // Keep the keyboard-active option scrolled into view within the menu.
+  useEffect(() => {
+    if (active < 0) return;
+    (listRef.current?.children[active] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
 
   function pick(suggestion: SpeciesSuggestion) {
     onSelect(suggestion);
     setOpen(false);
+    setActiveIndex(-1);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      setOpen(false);
+      setActiveIndex(-1);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!showMenu) {
+        setOpen(true);
+        return;
+      }
+      setActiveIndex((i) => (i < suggestions.length - 1 ? i + 1 : i));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      if (!showMenu) return;
+      e.preventDefault();
+      setActiveIndex((i) => (i < 0 ? suggestions.length - 1 : Math.max(i - 1, 0)));
+      return;
+    }
+    if (e.key === 'Home') {
+      if (showMenu && suggestions.length) {
+        e.preventDefault();
+        setActiveIndex(0);
+      }
+      return;
+    }
+    if (e.key === 'End') {
+      if (showMenu && suggestions.length) {
+        e.preventDefault();
+        setActiveIndex(suggestions.length - 1);
+      }
+      return;
+    }
+    if (e.key === 'Enter' && showMenu && active >= 0) {
+      e.preventDefault();
+      pick(suggestions[active]);
+    }
   }
 
   const palette = isDark
@@ -56,25 +110,23 @@ export function SpeciesAutocomplete({
         onChange={(e) => {
           onTextChange(e.target.value);
           setOpen(true);
+          setActiveIndex(-1);
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpen(false);
-        }}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
         maxLength={255}
         role="combobox"
         aria-expanded={showMenu}
         aria-controls={listId}
+        aria-activedescendant={active >= 0 ? optionId(active) : undefined}
         aria-autocomplete="list"
         autoComplete="off"
       />
       {showMenu && (
-        <ul
-          id={listId}
-          role="listbox"
+        <div
           // Keep focus on the input so the blur-close doesn't beat the click.
           onMouseDown={(e) => e.preventDefault()}
           style={{
@@ -83,59 +135,41 @@ export function SpeciesAutocomplete({
             left: 0,
             right: 0,
             zIndex: 20,
-            margin: 0,
-            padding: 4,
-            listStyle: 'none',
             background: palette.menuBg,
             border: `1px solid ${palette.border}`,
             borderRadius: 12,
             boxShadow: '0 12px 28px rgba(0,0,0,.18)',
-            maxHeight: 244,
-            overflowY: 'auto',
+            overflow: 'hidden',
           }}
         >
-          {suggestions.map((s) => (
-            <li key={s.scientificName} role="option" aria-selected={false}>
-              <button
-                type="button"
-                className={isDark ? 'b-tap' : 'a-tap'}
-                onClick={() => pick(s)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  width: '100%',
-                  textAlign: 'left',
-                  border: 'none',
-                  background: 'transparent',
-                  borderRadius: 9,
-                  padding: '9px 10px',
-                  cursor: 'pointer',
-                  color: palette.text,
-                  fontFamily: 'inherit',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = palette.hover)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 14, fontWeight: 600, fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {s.scientificName}
-                  </span>
-                  {s.commonName && (
-                    <span style={{ display: 'block', fontSize: 12, color: palette.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {s.commonName}
-                    </span>
-                  )}
-                </span>
-                {s.slug && (
-                  <span style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', background: palette.tag, color: palette.tagText, padding: '3px 6px', borderRadius: 5 }}>
-                    Care guide
-                  </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
+          <ul
+            ref={listRef}
+            id={listId}
+            role="listbox"
+            style={{ margin: 0, padding: 4, listStyle: 'none', maxHeight: 244, overflowY: 'auto' }}
+          >
+            {suggestions.map((s, i) => (
+              <SpeciesSuggestionRow
+                key={s.scientificName}
+                id={optionId(i)}
+                active={i === active}
+                suggestion={s}
+                isDark={isDark}
+                onPick={() => pick(s)}
+              />
+            ))}
+          </ul>
+          {loading && (
+            <div role="status" aria-live="polite" style={{ padding: '9px 10px', fontSize: 12, color: palette.sub }}>
+              Searching…
+            </div>
+          )}
+          {suggestions.some((s) => s.via === 'gbif') && (
+            <div style={{ padding: '5px 10px 7px', fontSize: 10.5, color: palette.sub }}>
+              Matches via GBIF · CC BY
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
