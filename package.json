@@ -13,7 +13,8 @@
     "appwrite:setup": "tsx scripts/appwrite/setup.ts",
     "appwrite:seed": "tsx scripts/appwrite/seed.ts",
     "export:build": "tsx scripts/export/build.ts",
-    "export:publish": "tsx scripts/export/publish.ts"
+    "export:publish": "tsx scripts/export/publish.ts",
+    "knowledge:build-common-plants": "tsx scripts/knowledge/build-common-plants.ts"
   },
   "dependencies": {
     "appwrite": "^26.0.0",
