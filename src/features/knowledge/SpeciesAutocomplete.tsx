@@ -7,12 +7,10 @@
  * directions; a thin presenter over the pure suggestSpecies ranking.
  */
 
-import { useId, useMemo, useState } from 'react';
-import {
-  suggestSpecies,
-  type CatalogSpeciesLike,
-  type SpeciesSuggestion,
-} from '../../lib/knowledge/species-suggest';
+import { useId, useState } from 'react';
+import { type CatalogSpeciesLike, type SpeciesSuggestion } from '../../lib/knowledge/species-suggest';
+import { useSpeciesSuggestions } from './useSpeciesSuggestions';
+import { SpeciesSuggestionRow } from './SpeciesSuggestionRow';
 
 export function SpeciesAutocomplete({
   value,
@@ -33,11 +31,11 @@ export function SpeciesAutocomplete({
 }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
-  const suggestions = useMemo(() => suggestSpecies(value, catalog), [value, catalog]);
+  const { suggestions, loading } = useSpeciesSuggestions(value, catalog);
 
   // Hide the menu once the field already holds an exact suggestion (just picked).
   const exactlyMatchesTop = suggestions.length === 1 && suggestions[0].scientificName === value.trim();
-  const showMenu = open && suggestions.length > 0 && !exactlyMatchesTop;
+  const showMenu = open && (suggestions.length > 0 || loading) && !exactlyMatchesTop;
 
   function pick(suggestion: SpeciesSuggestion) {
     onSelect(suggestion);
@@ -95,46 +93,18 @@ export function SpeciesAutocomplete({
           }}
         >
           {suggestions.map((s) => (
-            <li key={s.scientificName} role="option" aria-selected={false}>
-              <button
-                type="button"
-                className={isDark ? 'b-tap' : 'a-tap'}
-                onClick={() => pick(s)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  width: '100%',
-                  textAlign: 'left',
-                  border: 'none',
-                  background: 'transparent',
-                  borderRadius: 9,
-                  padding: '9px 10px',
-                  cursor: 'pointer',
-                  color: palette.text,
-                  fontFamily: 'inherit',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = palette.hover)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 14, fontWeight: 600, fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {s.scientificName}
-                  </span>
-                  {s.commonName && (
-                    <span style={{ display: 'block', fontSize: 12, color: palette.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {s.commonName}
-                    </span>
-                  )}
-                </span>
-                {s.slug && (
-                  <span style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', background: palette.tag, color: palette.tagText, padding: '3px 6px', borderRadius: 5 }}>
-                    Care guide
-                  </span>
-                )}
-              </button>
-            </li>
+            <SpeciesSuggestionRow key={s.scientificName} suggestion={s} isDark={isDark} onPick={() => pick(s)} />
           ))}
+          {loading && (
+            <li role="option" aria-selected={false} aria-disabled style={{ padding: '9px 10px', fontSize: 12, color: palette.sub }}>
+              Searching…
+            </li>
+          )}
+          {suggestions.some((s) => s.via === 'gbif') && (
+            <li aria-hidden style={{ padding: '5px 10px 3px', fontSize: 10.5, color: palette.sub }}>
+              Matches via GBIF · CC BY
+            </li>
+          )}
         </ul>
       )}
     </div>
