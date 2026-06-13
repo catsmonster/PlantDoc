@@ -164,6 +164,10 @@ export function suggestSpecies(
     .sort(
       (a, b) =>
         a.score - b.score ||
+        // At equal relevance, prefer the species we have a curated care guide
+        // for — e.g. "swiss cheese" surfaces care-backed Monstera deliciosa above
+        // the offline-index Monstera adansonii that shares the common name.
+        (b.suggestion.slug ? 1 : 0) - (a.suggestion.slug ? 1 : 0) ||
         a.suggestion.scientificName.localeCompare(b.suggestion.scientificName),
     )
     .slice(0, limit)
