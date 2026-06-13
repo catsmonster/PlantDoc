@@ -19,6 +19,18 @@ describe('buildSourceRows', () => {
       expect(row.quarantined, row.source_key).toBe(expected);
     }
   });
+
+  it('registers permissive cross-link target catalogs (gbif, wikidata, powo, usda, ipni, eol), none quarantined', () => {
+    const rows = buildSourceRows();
+    const byKey = new Map(rows.map((r) => [r.source_key, r]));
+    for (const key of ['gbif', 'wikidata', 'powo', 'usda', 'ipni', 'eol']) {
+      const row = byKey.get(key);
+      expect(row, key).toBeDefined();
+      expect(row!.quarantined, key).toBe(false);
+      expect(row!.commercial_ok, key).toBe(true);
+    }
+    expect(byKey.get('usda')!.license).toBe('public-domain');
+  });
 });
 
 describe('buildFactRows', () => {

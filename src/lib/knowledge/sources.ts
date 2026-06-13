@@ -10,7 +10,13 @@
  * own logs and feedback refine over time.
  */
 
-export type SourceLicense = 'CC0' | 'CC-BY' | 'CC-BY-SA' | 'editorial';
+export type SourceLicense =
+  | 'CC0'
+  | 'CC-BY'
+  | 'CC-BY-SA'
+  | 'ODbL'
+  | 'public-domain'
+  | 'editorial';
 
 export interface KnowledgeSource {
   id: string;
@@ -55,6 +61,33 @@ export const KNOWLEDGE_SOURCES: readonly KnowledgeSource[] = [
     license: 'CC-BY',
     commercialOk: true,
     attribution: 'GBIF Secretariat: GBIF Backbone Taxonomy (CC BY)',
+  },
+  // Cross-link target catalogs (slice 2): the external registries a species'
+  // stable IDs index into. All permissive, so cross-links inherit no share-alike
+  // obligation. The IDs themselves are mined from Wikidata (CC0) + GBIF (CC BY).
+  {
+    id: 'usda',
+    name: 'USDA PLANTS Database',
+    url: 'https://plants.usda.gov',
+    license: 'public-domain',
+    commercialOk: true,
+    attribution: 'USDA, NRCS PLANTS Database (public domain)',
+  },
+  {
+    id: 'ipni',
+    name: 'International Plant Names Index',
+    url: 'https://www.ipni.org',
+    license: 'CC-BY',
+    commercialOk: true,
+    attribution: 'International Plant Names Index (CC BY)',
+  },
+  {
+    id: 'eol',
+    name: 'Encyclopedia of Life',
+    url: 'https://eol.org',
+    license: 'CC-BY',
+    commercialOk: true,
+    attribution: 'Encyclopedia of Life (CC BY)',
   },
 ] as const;
 
