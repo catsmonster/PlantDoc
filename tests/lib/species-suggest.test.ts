@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   mergeSuggestions,
   shouldQueryRemote,
+  suggestionRowView,
   type SpeciesSuggestion,
 } from '../../src/lib/knowledge/species-suggest';
 
@@ -29,5 +30,20 @@ describe('shouldQueryRemote', () => {
     expect(shouldQueryRemote('ba', [])).toBe(false);
     expect(shouldQueryRemote('basil', [local])).toBe(false);
     expect(shouldQueryRemote('   ', [])).toBe(false);
+  });
+});
+
+describe('suggestionRowView', () => {
+  it('leads with the common name, scientific name as sub, care tag for curated', () => {
+    expect(suggestionRowView({ scientificName: 'Monstera deliciosa', commonName: 'Swiss cheese plant', speciesId: null, slug: 'monstera-deliciosa' }))
+      .toEqual({ lead: 'Swiss cheese plant', sub: 'Monstera deliciosa', tag: 'care' });
+  });
+  it('tags gbif rows and shows no tag for plain local/catalog rows', () => {
+    expect(suggestionRowView({ scientificName: 'Ocimum basilicum', commonName: 'Basil', speciesId: null, slug: null, via: 'gbif' }).tag).toBe('gbif');
+    expect(suggestionRowView({ scientificName: 'Ficus elastica', commonName: 'Rubber plant', speciesId: 'abc', slug: null }).tag).toBeNull();
+  });
+  it('falls back to scientific name as the lead when there is no common name', () => {
+    expect(suggestionRowView({ scientificName: 'Ocimum basilicum', commonName: null, speciesId: null, slug: null }))
+      .toEqual({ lead: 'Ocimum basilicum', sub: null, tag: null });
   });
 });

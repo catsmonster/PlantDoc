@@ -188,3 +188,21 @@ export function mergeSuggestions(
 export function shouldQueryRemote(query: string, local: SpeciesSuggestion[]): boolean {
   return local.length === 0 && query.trim().length >= 3;
 }
+
+export interface SuggestionRowView {
+  /** The prominent line: the common name when known, else the scientific name. */
+  lead: string;
+  /** The secondary italic line (scientific name) when the lead is a common name. */
+  sub: string | null;
+  /** 'care' for a curated care-guide row, 'gbif' for a live fallback row, else none. */
+  tag: 'care' | 'gbif' | null;
+}
+
+/** Maps a suggestion to its novice-friendly display: common name leads. */
+export function suggestionRowView(s: SpeciesSuggestion): SuggestionRowView {
+  return {
+    lead: s.commonName ?? s.scientificName,
+    sub: s.commonName ? s.scientificName : null,
+    tag: s.slug ? 'care' : s.via === 'gbif' ? 'gbif' : null,
+  };
+}
