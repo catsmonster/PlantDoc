@@ -3,6 +3,7 @@ import {
   mergeSuggestions,
   shouldQueryRemote,
   speciesSelectionFromSuggestion,
+  suggestSpecies,
   suggestionRowView,
   type SpeciesSuggestion,
 } from '../../src/lib/knowledge/species-suggest';
@@ -57,5 +58,12 @@ describe('speciesSelectionFromSuggestion', () => {
   it('uses free scientific text for non-catalog picks', () => {
     expect(speciesSelectionFromSuggestion({ scientificName: 'Ocimum basilicum', commonName: 'Basil', speciesId: null, slug: null, via: 'gbif' }))
       .toEqual({ speciesId: '', speciesText: 'Ocimum basilicum' });
+  });
+});
+
+describe('suggestSpecies with the offline common-plants index', () => {
+  it('resolves a common edible by common name with no network', () => {
+    const hits = suggestSpecies('basil');
+    expect(hits.some((s) => s.scientificName === 'Ocimum basilicum')).toBe(true);
   });
 });

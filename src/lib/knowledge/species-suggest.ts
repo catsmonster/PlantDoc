@@ -11,6 +11,7 @@
  */
 
 import { CARE_PROFILES } from './care-profiles';
+import { COMMON_PLANTS } from './common-plants';
 
 export interface SpeciesSuggestion {
   scientificName: string;
@@ -107,6 +108,9 @@ function mergeCorpus(catalog: CatalogSpeciesLike[]): MergedSpecies[] {
 
   for (const profile of CARE_PROFILES) {
     upsert(profile.scientificName, profile.commonNames, profile.synonyms, null, profile.slug);
+  }
+  for (const plant of COMMON_PLANTS) {
+    upsert(plant.scientificName, plant.commonNames, [], null, null);
   }
   for (const row of catalog) {
     upsert(row.scientific_name, row.common_names ?? [], [], row.$id, null);
