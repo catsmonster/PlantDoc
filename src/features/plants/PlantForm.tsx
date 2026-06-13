@@ -14,7 +14,7 @@ import { Icon } from '../../ui/Icon';
 import { PlantImageSlot } from '../../ui/PlantImageSlot';
 import { SpeciesNameResolver } from '../knowledge/SpeciesNameResolver';
 import { SpeciesAutocomplete } from '../knowledge/SpeciesAutocomplete';
-import { speciesCatalogLabel, type SpeciesSuggestion } from '../../lib/knowledge/species-suggest';
+import { speciesCatalogLabel, speciesSelectionFromSuggestion, type SpeciesSuggestion } from '../../lib/knowledge/species-suggest';
 
 function speciesIdOf(plant: Plant | undefined): string {
   if (!plant?.species_id) return '';
@@ -46,6 +46,7 @@ export function PlantForm({
   const [commonName, setCommonName] = useState(plant?.common_name ?? '');
   const [speciesId, setSpeciesId] = useState(speciesIdOf(plant));
   const [speciesText, setSpeciesText] = useState(plant?.species_text ?? '');
+  const [editSpecies, setEditSpecies] = useState(false);
   const [placementType, setPlacementType] = useState<PlacementType>(
     plant?.placement_type ?? 'indoor',
   );
@@ -99,17 +100,30 @@ export function PlantForm({
     }
   }
 
-  function handleSelectSpecies(suggestion: SpeciesSuggestion) {
-    if (suggestion.speciesId) {
-      // Catalog-backed: switch to the species relation (the dropdown reflects it).
-      setSpeciesId(suggestion.speciesId);
-      setSpeciesText('');
-    } else {
-      setSpeciesText(suggestion.scientificName);
-    }
-    // Offer the matched common name when the user hasn't given one.
+  function applySpecies(suggestion: SpeciesSuggestion) {
+    const next = speciesSelectionFromSuggestion(suggestion);
+    setSpeciesId(next.speciesId);
+    setSpeciesText(next.speciesText);
+    setEditSpecies(false);
+  }
+
+  // From the Common-name field: fill the species, and adopt the row's common name
+  // (keep the user's typed text when the row has none — a scientific-only entry).
+  function handleSelectFromCommonName(suggestion: SpeciesSuggestion) {
+    applySpecies(suggestion);
+    if (suggestion.commonName) setCommonName(suggestion.commonName);
+  }
+
+  // From the Species field: fill the species, and back-fill an empty common name.
+  function handleSelectFromSpecies(suggestion: SpeciesSuggestion) {
+    applySpecies(suggestion);
     if (!commonName.trim() && suggestion.commonName) setCommonName(suggestion.commonName);
   }
+
+  const hasSpecies = Boolean(speciesId) || Boolean(speciesText.trim());
+  const speciesChipLabel = speciesId
+    ? selectedSpeciesLabel
+    : speciesText.trim() || 'Species selected';
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -181,22 +195,32 @@ export function PlantForm({
               <input className="b-input" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="e.g. Window monstera" required disabled={busy} maxLength={128} />
             </label>
 
-            {/* Common Name Input */}
+            {/* Common name — the novice entry point: typing suggests species and
+                fills the Species chip below (see Option A). */}
             <label style={{ display: 'block' }}>
-              <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Common name</span>
-              <input className="b-input" value={commonName} onChange={(e) => setCommonName(e.target.value)} placeholder="e.g. Swiss cheese plant" disabled={busy} maxLength={128} />
+              <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>What do you call it?</span>
+              <SpeciesAutocomplete
+                value={commonName}
+                catalog={species}
+                isDark
+                disabled={busy}
+                placeholder="e.g. basil, snake plant, monstera"
+                onTextChange={setCommonName}
+                onSelect={handleSelectFromCommonName}
+              />
             </label>
 
-            {/* Species — type to search the catalog + care pack; pick a match to
-                lock in the relation, or keep free text for GBIF verification. */}
-            {speciesId ? (
+            {/* Species — a derived result of the name above; editable via Change. */}
+            {hasSpecies && !editSpecies ? (
               <div style={{ display: 'block' }}>
-                <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Species</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#19231B', border: '1px solid rgba(255,255,255,.12)', borderRadius: 12, padding: '12px 14px' }}>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, fontStyle: 'italic', color: '#F2F6EF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {selectedSpeciesLabel}
+                <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Species · auto-filled</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#141d16', border: '1px solid rgba(199,242,74,.32)', borderRadius: 12, padding: '11px 13px' }}>
+                  <Icon name="leaf" size={18} stroke={1.9} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, fontStyle: 'italic', color: '#F2F6EF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{speciesChipLabel}</span>
+                    <span style={{ display: 'block', fontSize: 11.5, color: '#67766A' }}>Filled from the name above</span>
                   </span>
-                  <button type="button" className="b-tap" onClick={() => setSpeciesId('')} disabled={busy} aria-label="Change species" style={{ flexShrink: 0, borderRadius: 9, border: '1px solid rgba(255,255,255,.14)', background: 'transparent', color: '#C7F24A', padding: '7px 12px', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                  <button type="button" className="b-tap" onClick={() => setEditSpecies(true)} disabled={busy} aria-label="Change species" style={{ flexShrink: 0, borderRadius: 9, border: '1px solid rgba(255,255,255,.14)', background: 'transparent', color: '#C7F24A', padding: '7px 12px', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
                     Change
                   </button>
                 </div>
@@ -210,9 +234,9 @@ export function PlantForm({
                     catalog={species}
                     isDark
                     disabled={busy}
-                    placeholder="e.g. Swiss cheese plant or Monstera"
-                    onTextChange={setSpeciesText}
-                    onSelect={handleSelectSpecies}
+                    placeholder="e.g. Monstera deliciosa"
+                    onTextChange={(t) => { setSpeciesId(''); setSpeciesText(t); }}
+                    onSelect={handleSelectFromSpecies}
                   />
                 </label>
                 <SpeciesNameResolver query={speciesText} isDark onAdopt={setSpeciesText} />
@@ -361,22 +385,31 @@ export function PlantForm({
             <input className="a-input" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="e.g. Window monstera" required disabled={busy} maxLength={128} />
           </label>
 
-          {/* Common Name Input */}
+          {/* Common name — novice entry point (Option A). */}
           <label style={{ display: 'block' }}>
-            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Common name</span>
-            <input className="a-input" value={commonName} onChange={(e) => setCommonName(e.target.value)} placeholder="e.g. Swiss cheese plant" disabled={busy} maxLength={128} />
+            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>What do you call it?</span>
+            <SpeciesAutocomplete
+              value={commonName}
+              catalog={species}
+              isDark={false}
+              disabled={busy}
+              placeholder="e.g. basil, snake plant, monstera"
+              onTextChange={setCommonName}
+              onSelect={handleSelectFromCommonName}
+            />
           </label>
 
-          {/* Species — type to search the catalog + care pack; pick a match to
-              lock in the relation, or keep free text for GBIF verification. */}
-          {speciesId ? (
+          {/* Species — derived result, editable via Change. */}
+          {hasSpecies && !editSpecies ? (
             <div style={{ display: 'block' }}>
-              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Species</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#FFFDF8', border: '1px solid #E7E0D2', borderRadius: 14, padding: '12px 14px' }}>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, fontStyle: 'italic', color: '#23302A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {selectedSpeciesLabel}
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Species · auto-filled</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#EBF1E7', border: '1px solid #CFE0C2', borderRadius: 14, padding: '11px 13px' }}>
+                <Icon name="leaf" size={18} stroke={1.9} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, fontStyle: 'italic', color: '#23302A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{speciesChipLabel}</span>
+                  <span style={{ display: 'block', fontSize: 11.5, color: '#9AA294' }}>Filled from the name above</span>
                 </span>
-                <button type="button" className="a-tap" onClick={() => setSpeciesId('')} disabled={busy} aria-label="Change species" style={{ flexShrink: 0, borderRadius: 10, border: '1px solid #E7E0D2', background: '#fff', color: '#3C7140', padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                <button type="button" className="a-tap" onClick={() => setEditSpecies(true)} disabled={busy} aria-label="Change species" style={{ flexShrink: 0, borderRadius: 10, border: '1px solid #E7E0D2', background: '#fff', color: '#3C7140', padding: '7px 12px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
                   Change
                 </button>
               </div>
@@ -390,9 +423,9 @@ export function PlantForm({
                   catalog={species}
                   isDark={false}
                   disabled={busy}
-                  placeholder="e.g. Swiss cheese plant or Monstera"
-                  onTextChange={setSpeciesText}
-                  onSelect={handleSelectSpecies}
+                  placeholder="e.g. Monstera deliciosa"
+                  onTextChange={(t) => { setSpeciesId(''); setSpeciesText(t); }}
+                  onSelect={handleSelectFromSpecies}
                 />
               </label>
               <SpeciesNameResolver query={speciesText} isDark={false} onAdopt={setSpeciesText} />
