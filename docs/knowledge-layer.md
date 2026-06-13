@@ -27,6 +27,7 @@ build may use.
 | [GBIF Backbone Taxonomy](https://www.gbif.org) | CC BY | ✅ Yes (attribute) | Name resolution / synonyms, cross-link ID |
 | [USDA PLANTS](https://plants.usda.gov), [IPNI](https://www.ipni.org), [EOL](https://eol.org) | public domain / CC BY | ✅ Yes (attribute) | Cross-link ID targets (slice 2) — catalogs a species' IDs index into |
 | [OpenPlantbook](https://open.plantbook.io) | "free for any purpose" (modeled public-domain) | ✅ Yes | Indoor ranges (temp, humidity, light lux, soil moisture/EC) — **crowd-sourced, `community_unverified`** |
+| [Permapeople](https://permapeople.org) | CC BY-SA 4.0 | ⚠️ ShareAlike (**quarantined**) | Cited cultivation traits (light/water requirement, soil, growth, hardiness zone, edible parts) |
 
 `editorial` means PlantDoc's own human-reviewed baseline — general
 horticultural knowledge, owned by us, deliberately **not** presented as a
@@ -49,7 +50,8 @@ CC BY-NC, no-license, or scraped web content.
 | `src/lib/knowledge/wikidata.ts` | Wikidata cross-link extractor (slice 2). SPARQL URL builder + parser + non-throwing fetch wrapper; maps a taxon name to its QID and its IDs in GBIF/USDA/POWO/IPNI/EOL. CC0, so cross-links inherit no share-alike obligation. Admin-script use only (sets a User-Agent). |
 | `src/lib/knowledge/taxon-refs.ts` + `scripts/knowledge/load-cross-links.ts` | Pure `taxon_references` row builder (deduped by species+source, GBIF match preferred over Wikidata P846) + the `knowledge:cross-links` admin script that resolves each species' cross-links live from Wikidata + GBIF and upserts them (idempotent). |
 | `src/lib/knowledge/openplantbook.ts` + `scripts/knowledge/load-openplantbook.ts` | OpenPlantbook indoor-care extractor (OAuth token → fuzzy search → **exact-match** pick → detail → pure parser) + the `knowledge:mine-openplantbook` admin script. Facts are `community_unverified`, source `openplantbook`; the loader is source-scoped so it composes with `knowledge:mine`. `composeCareProfile` surfaces these as `communityRanges`. |
-| `src/features/knowledge/CareProfilePanel.tsx` | Plant-detail panel rendering sourced reference facts with per-fact provenance, then a separate **"Community indoor ranges · Unverified"** block for OpenPlantbook — distinct from the deterministic insights and the Gemini AI preview. |
+| `src/lib/knowledge/permapeople.ts` + `scripts/knowledge/load-permapeople.ts` | Permapeople cultivation extractor (keyed search → **exact** scientific-name match → detail → pure parser of the key-value `data` array) + the `knowledge:mine-permapeople` admin script. Source `permapeople` is **CC-BY-SA → quarantined**; facts map to distinct cultivation attributes (never the editorial fields) and `composeCareProfile` surfaces them as `cultivationFacts`. Source-scoped loader. |
+| `src/features/knowledge/CareProfilePanel.tsx` | Plant-detail panel rendering sourced reference facts with per-fact provenance, then a separate **"Community indoor ranges · Unverified"** block (OpenPlantbook) and an attributed **"Cultivation"** block (Permapeople, CC BY-SA shown) — distinct from the deterministic insights and the Gemini AI preview. |
 
 **Storage (slice B):** care profiles now live in Appwrite relational tables —
 `care_facts` related to `species` and `source_datasets` (see `docs/schema.md`) —
@@ -61,7 +63,7 @@ separation below is unchanged.
 Tests: `tests/lib/knowledge.test.ts`, `tests/lib/knowledge-facts.test.ts`,
 `tests/lib/knowledge-load-rows.test.ts`, `tests/lib/knowledge-wikidata.test.ts`,
 `tests/lib/knowledge-taxon-refs.test.ts`, `tests/lib/knowledge-openplantbook.test.ts`,
-`tests/ui/CareProfilePanel.test.ts`.
+`tests/lib/knowledge-permapeople.test.ts`, `tests/ui/CareProfilePanel.test.ts`.
 
 ## The three care layers stay distinct
 
