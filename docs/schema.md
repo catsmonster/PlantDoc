@@ -80,6 +80,7 @@ Canonical plant taxonomy when known.
 | `genus` | string | no | Botanical genus. |
 | `cultivar` | string | no | Optional cultivar. |
 | `external_taxon_id` | string | no | External taxonomy reference. |
+| `slug` | string | no | Stable key for known/curated species (unique). Added Phase 4A; the knowledge loader upserts canonical editorial species by this slug. |
 | `created_at` | datetime | yes | Server generated. |
 
 Permissions: readable by any app user; writable only by trusted admin/service workflows.
@@ -224,6 +225,66 @@ labels, embeddings) are deferred pending an AI provider decision; their
 consent requirements are recorded in
 `docs/superpowers/specs/2026-06-10-phase-4-recommendations-design.md`.
 
+## Open Plant Knowledge Tables
+
+Added in Phase 4A (slice B). Inbound open-knowledge reference data that powers the
+species care guide before PlantDoc's own dataset is large enough. Public reference
+data, not user data: **public-read, admin/service-write, no `user_id`, row
+security off** — like `species`. Never a source of public exports. Design:
+`docs/superpowers/specs/2026-06-13-knowledge-mining-pipeline-design.md`; overview:
+`docs/knowledge-layer.md`.
+
+### `source_datasets`
+
+The source registry (promoted from `src/lib/knowledge/sources.ts`). Care facts and
+taxon references *relate* to a row here rather than copying its attribution, so
+licensing lives in one place.
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `source_key` | string | yes | Stable slug, e.g. `plantdoc-editorial`, `powo`, `gbif`. Unique. The loader uses it as the row ID. |
+| `name` | string | yes | Display name. |
+| `url` | string | no | Source homepage. |
+| `license` | enum/string | yes | `editorial`, `CC0`, `CC-BY`, `CC-BY-SA`, `ODbL`, `public-domain`. |
+| `commercial_ok` | boolean | no | Default `true`. False for non-commercial sources. |
+| `quarantined` | boolean | no | Default `false`. True for share-alike (`CC-BY-SA`, `ODbL`); excluded from commercial/export paths. |
+| `attribution` | text | no | Human-readable attribution shown beside sourced facts. |
+
+Index: unique `source_key`.
+
+### `taxon_references`
+
+Cross-link ID map — one row per species × external database, so adding a new
+source is rows, not a new column on `species`.
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `species_id` | relationship | — | → `species`, two-way (`taxon_references`), cascade delete. |
+| `source_id` | relationship | — | → `source_datasets`, one-way, restrict delete. |
+| `external_id` | string | yes | The species' ID in that source (GBIF usageKey, Wikidata QID, USDA symbol, …). |
+| `external_url` | string | no | Deep link into the source. |
+
+Uniqueness of (species, source) is enforced at the loader layer (relationship
+columns are not indexable in Appwrite).
+
+### `care_facts`
+
+Normalized care facts — one row per fact, each related to the source it came
+from, preserving per-field provenance. The care profile is composed at read time
+by `src/lib/knowledge/facts.ts`; facts are read through the species two-way
+relation (`Query.select(['*', 'care_facts.*'])`).
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `species_id` | relationship | — | → `species`, two-way (`care_facts`), cascade delete. |
+| `source_id` | relationship | — | → `source_datasets`, one-way, restrict delete. |
+| `attribute` | string | yes | Open attribute key: `light`, `water_cadence_days`, `temperature_c`, `humidity`, `toxicity`, `stress_sign`, `pest`, … (adding one is rows, not a migration). |
+| `value_min` | float | no | Numeric range minimum (e.g. water cadence days). |
+| `value_max` | float | no | Numeric range maximum. |
+| `value_text` | text | no | Text/categorical value, or one item of a list attribute. |
+| `value_unit` | string | no | `days`, `C`, etc. |
+| `trust` | enum/string | no | `sourced`, `editorial`, `community_unverified`. Default `sourced`; drives read-time precedence (`sourced > editorial > community_unverified`). |
+
 ## Public Export Tables
 
 Public data should be generated into a separate table/collection or object-storage export. Do not expose private tables directly.
@@ -340,6 +401,8 @@ Indexes created in Phase 0 (relationship columns are not indexable in Appwrite; 
 - `public_observations.climate_zone`
 - `public_observations.source_observation_id` (unique, added Phase 2 — upsert/revocation key for the export builder)
 - `insight_feedback.user_id` (added Phase 4)
+- `species.slug` (unique, added Phase 4A)
+- `source_datasets.source_key` (unique, added Phase 4A)
 
 Deferred: spatial index on `user_locations.location` until geo queries are introduced (Phase 3).
 

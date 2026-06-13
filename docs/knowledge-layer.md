@@ -36,12 +36,22 @@ CC BY-NC, no-license, or scraped web content.
 
 | Piece | Role |
 | --- | --- |
-| `src/lib/knowledge/sources.ts` | Source registry + license policy; `getSource`, `commercialSources`. |
-| `src/lib/knowledge/care-profiles.ts` | 10-species starter pack; every field carries a `sourceId`. Lookup (`findCareProfile`, `careProfileForPlant`) and ranked search (`searchCareProfiles`). |
+| `src/lib/knowledge/sources.ts` | Source registry + license policy; `getSource`, `commercialSources`. Seeds the `source_datasets` table and is the client-side source cache. |
+| `src/lib/knowledge/care-profiles.ts` | 10-species editorial starter pack + the synchronous name index (`findCareProfile`, `careProfileForPlant`, `searchCareProfiles`) that keeps onboarding search instant/offline. The loader's editorial dataset; also the bundled fallback when a species has no table facts. |
+| `src/lib/knowledge/facts.ts` | The relational care-fact model (slice B). `composeCareProfile` shapes `care_facts` rows into `SpeciesCareProfile` with read-time precedence; `editorialProfileToFacts` adapts the bundled pack; `careFactsFromSpeciesRow` maps a hydrated Appwrite species row. |
+| `src/lib/knowledge/load-rows.ts` + `scripts/knowledge/load-knowledge.ts` | Pure row builders + the `knowledge:mine` admin script that upserts `source_datasets`, `species`, and `care_facts` for the editorial dataset (idempotent). |
 | `src/lib/knowledge/gbif.ts` | GBIF backbone name resolution (taxonomy only, never care inference). Pure URL builder + parser, plus a non-throwing fetch wrapper. |
 | `src/features/knowledge/CareProfilePanel.tsx` | Plant-detail panel rendering sourced reference facts with per-fact provenance, distinct from the deterministic insights and the Gemini AI preview. |
 
-Tests: `tests/lib/knowledge.test.ts`.
+**Storage (slice B):** care profiles now live in Appwrite relational tables —
+`care_facts` related to `species` and `source_datasets` (see `docs/schema.md`) —
+read through the species relation by `getCareProfile` in `src/lib/repo.ts` and
+composed by `facts.ts`. The bundled `CARE_PROFILES` is retained as the editorial
+seed and as the offline fallback / onboarding name index. The three-care-layers
+separation below is unchanged.
+
+Tests: `tests/lib/knowledge.test.ts`, `tests/lib/knowledge-facts.test.ts`,
+`tests/lib/knowledge-load-rows.test.ts`.
 
 ## The three care layers stay distinct
 
