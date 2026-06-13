@@ -8,6 +8,8 @@
  * taxonomy — accepted scientific names and synonyms — never to infer care.
  */
 
+import type { SpeciesSuggestion } from './species-suggest';
+
 export const GBIF_SPECIES_MATCH_URL = 'https://api.gbif.org/v1/species/match';
 
 export const GBIF_SPECIES_SEARCH_URL = 'https://api.gbif.org/v1/species/search';
@@ -24,6 +26,58 @@ export function buildGbifVernacularSearchUrl(query: string): string {
     limit: '8',
   });
   return `${GBIF_SPECIES_SEARCH_URL}?${params.toString()}`;
+}
+
+interface GbifVernacularName {
+  vernacularName?: unknown;
+  language?: unknown;
+}
+
+/** Pick the English vernacular nearest the query: exact, then prefix, then
+ *  substring, then the first English name; null when there is no English name. */
+function pickEnglishCommonName(names: unknown, query: string): string | null {
+  if (!Array.isArray(names)) return null;
+  const eng = names
+    .filter((n): n is GbifVernacularName => !!n && typeof n === 'object')
+    .filter((n) => n.language === 'eng' && typeof n.vernacularName === 'string')
+    .map((n) => n.vernacularName as string);
+  if (eng.length === 0) return null;
+  const q = query.trim().toLowerCase();
+  return (
+    eng.find((n) => n.toLowerCase() === q) ??
+    eng.find((n) => n.toLowerCase().startsWith(q)) ??
+    eng.find((n) => n.toLowerCase().includes(q)) ??
+    eng[0]
+  );
+}
+
+/** Shapes a GBIF vernacular-search response into typeahead suggestions: accepted
+ *  plant species only, deduped by canonical name, tagged `via: 'gbif'`. Taxonomy
+ *  only — no care guide (`slug: null`) and not catalog-backed (`speciesId: null`). */
+export function parseGbifVernacularResults(response: unknown, query = ''): SpeciesSuggestion[] {
+  if (!response || typeof response !== 'object') return [];
+  const results = (response as { results?: unknown }).results;
+  if (!Array.isArray(results)) return [];
+  const seen = new Set<string>();
+  const out: SpeciesSuggestion[] = [];
+  for (const r of results) {
+    if (!r || typeof r !== 'object') continue;
+    const rec = r as Record<string, unknown>;
+    if (rec.kingdom !== 'Plantae' || rec.rank !== 'SPECIES') continue;
+    const canonical = typeof rec.canonicalName === 'string' ? rec.canonicalName.trim() : '';
+    if (!canonical) continue;
+    const key = canonical.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      scientificName: canonical,
+      commonName: pickEnglishCommonName(rec.vernacularNames, query),
+      speciesId: null,
+      slug: null,
+      via: 'gbif',
+    });
+  }
+  return out;
 }
 
 export interface GbifMatch {
