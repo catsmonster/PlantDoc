@@ -21,25 +21,23 @@ export function useSpeciesSuggestions(
   catalog: CatalogSpeciesLike[],
 ): { suggestions: SpeciesSuggestion[]; loading: boolean } {
   const local = useMemo(() => suggestSpecies(query, catalog), [query, catalog]);
-  const [remote, setRemote] = useState<SpeciesSuggestion[]>([]);
-  const [loading, setLoading] = useState(false);
+  // GBIF results tagged with the query they were fetched for, so render can tell
+  // whether they still apply — no need to sync state back inside the effect.
+  const [remote, setRemote] = useState<{ query: string; results: SpeciesSuggestion[] }>({
+    query: '',
+    results: [],
+  });
+
+  const wantRemote = shouldQueryRemote(query, local);
 
   useEffect(() => {
-    if (!shouldQueryRemote(query, local)) {
-      setRemote([]);
-      setLoading(false);
-      return;
-    }
+    if (!shouldQueryRemote(query, local)) return;
     const controller = new AbortController();
-    setLoading(true);
     const timer = setTimeout(() => {
       void searchGbifVernacular(query, (input, init) =>
         fetch(input, { ...init, signal: controller.signal }),
       ).then((results) => {
-        if (!controller.signal.aborted) {
-          setRemote(results);
-          setLoading(false);
-        }
+        if (!controller.signal.aborted) setRemote({ query, results });
       });
     }, DEBOUNCE_MS);
     return () => {
@@ -48,6 +46,13 @@ export function useSpeciesSuggestions(
     };
   }, [query, local]);
 
-  const suggestions = useMemo(() => mergeSuggestions(local, remote, LIMIT), [local, remote]);
+  // The fetched results count only when we still want them and they match the
+  // current query; otherwise we're either local-only or waiting (loading).
+  const hasFreshRemote = wantRemote && remote.query === query;
+  const suggestions = useMemo(
+    () => mergeSuggestions(local, hasFreshRemote ? remote.results : [], LIMIT),
+    [local, hasFreshRemote, remote.results],
+  );
+  const loading = wantRemote && !hasFreshRemote;
   return { suggestions, loading };
 }
