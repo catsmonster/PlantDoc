@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { COMMON_PLANT_SEED } from '../../scripts/knowledge/common-plants.seed';
 import {
+  commonNamesFor,
   englishVernaculars,
   plantFromMatch,
 } from '../../scripts/knowledge/common-plants-transform';
 
 describe('COMMON_PLANT_SEED', () => {
-  it('is a non-empty list of unique, non-blank names', () => {
+  it('is a non-empty list of unique pairs with non-blank names', () => {
     expect(COMMON_PLANT_SEED.length).toBeGreaterThan(40);
-    const norm = COMMON_PLANT_SEED.map((n) => n.trim().toLowerCase());
-    expect(norm.every((n) => n.length > 0)).toBe(true);
-    expect(new Set(norm).size).toBe(norm.length);
+    const commons = COMMON_PLANT_SEED.map((s) => s.common.trim().toLowerCase());
+    const scientifics = COMMON_PLANT_SEED.map((s) => s.scientific.trim().toLowerCase());
+    expect(commons.every((n) => n.length > 0)).toBe(true);
+    expect(scientifics.every((n) => n.length > 0)).toBe(true);
+    expect(new Set(commons).size).toBe(commons.length);
+    expect(new Set(scientifics).size).toBe(scientifics.length);
   });
 });
 
@@ -40,5 +44,17 @@ describe('englishVernaculars', () => {
   });
   it('returns [] when there is no English name', () => {
     expect(englishVernaculars({ results: [{ vernacularName: 'Basilikum', language: 'deu' }] })).toEqual([]);
+  });
+});
+
+describe('commonNamesFor', () => {
+  it('leads with the curated name, then English vernaculars, deduped case-insensitively', () => {
+    expect(commonNamesFor('tomato', ['Tomato', 'Garden Tomato'])).toEqual(['tomato', 'Garden Tomato']);
+  });
+  it('keeps the curated name even when GBIF has no English vernacular', () => {
+    expect(commonNamesFor('orchid', [])).toEqual(['orchid']);
+  });
+  it('caps at 5 names', () => {
+    expect(commonNamesFor('a', ['b', 'c', 'd', 'e', 'f', 'g'])).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 });

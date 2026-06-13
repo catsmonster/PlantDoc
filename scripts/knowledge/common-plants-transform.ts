@@ -38,3 +38,20 @@ export function englishVernaculars(response: unknown): string[] {
   }
   return out;
 }
+
+/** The index row's common names: the curator's everyday name first (always kept,
+ *  since GBIF often omits the colloquial word), then English vernaculars, deduped
+ *  case-insensitively and capped at 5. */
+export function commonNamesFor(curated: string, vernaculars: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of [curated, ...vernaculars]) {
+    const trimmed = name.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+    if (out.length === 5) break;
+  }
+  return out;
+}
