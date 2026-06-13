@@ -47,3 +47,26 @@ describe('CareProfilePanel community ranges', () => {
     expect(html.toLowerCase()).not.toContain('unverified');
   });
 });
+
+describe('CareProfilePanel cultivation block', () => {
+  it.each([true, false])(
+    'renders the Cultivation block with Permapeople CC-BY-SA attribution (isDark=%s)',
+    (isDark) => {
+      const profile: SpeciesCareProfile = {
+        ...base,
+        communityRanges: undefined,
+        cultivationFacts: [
+          { attribute: 'soil', label: 'Soil type', value: 'Light (sandy), Medium', sourceId: 'permapeople' },
+          { attribute: 'growth_rate', label: 'Growth', value: 'Fast', sourceId: 'permapeople' },
+        ],
+      };
+      const html = renderToStaticMarkup(
+        createElement(CareProfilePanel, { profile, units: 'metric', isDark }),
+      );
+      expect(html).toContain('Cultivation');
+      expect(html).toContain('Light (sandy), Medium');
+      expect(html).toContain('Permapeople');
+      expect(html).toContain('CC-BY-SA');
+    },
+  );
+});

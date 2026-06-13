@@ -13,7 +13,7 @@ import {
   type Sourced,
 } from '../../lib/knowledge/care-profiles';
 import { getSource, type KnowledgeSource } from '../../lib/knowledge/sources';
-import { type CommunityRange } from '../../lib/knowledge/care-profiles';
+import { type CommunityRange, type CultivationFact } from '../../lib/knowledge/care-profiles';
 import { formatTemperature, type Units } from '../../lib/units';
 
 interface Fact {
@@ -33,6 +33,14 @@ function formatRange(r: CommunityRange, units: Units): string {
   }
   const unit = r.unit ? ` ${r.unit}` : '';
   return `${r.min} - ${r.max}${unit}`;
+}
+
+/** Attribution line for a cultivation block, naming each cited source + its license. */
+function cultivationSourceLine(facts: CultivationFact[]): string {
+  const sources = [...new Set(facts.map((c) => c.sourceId))]
+    .map(getSource)
+    .filter((s): s is KnowledgeSource => s !== null);
+  return sources.map((s) => `Source: ${s.name} (${s.license})`).join(' · ');
 }
 
 function buildFacts(profile: SpeciesCareProfile, units: Units): Fact[] {
@@ -80,6 +88,7 @@ function usedSources(profile: SpeciesCareProfile): KnowledgeSource[] {
     profile.nameSourceId,
     ...fields.map((f) => f.sourceId),
     ...(profile.communityRanges ?? []).map((r) => r.sourceId),
+    ...(profile.cultivationFacts ?? []).map((c) => c.sourceId),
   ]);
   return [...ids].map(getSource).filter((s): s is KnowledgeSource => s !== null);
 }
@@ -136,6 +145,20 @@ export function CareProfilePanel({
             <p style={{ margin: '4px 0 0', fontSize: 10.5, color: '#67766A' }}>Source: OpenPlantbook (community-sourced, unverified)</p>
           </div>
         )}
+        {profile.cultivationFacts && profile.cultivationFacts.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span className="mono" style={{ fontSize: 11, letterSpacing: '.05em', textTransform: 'uppercase', color: '#67766A' }}>Cultivation</span>
+            </div>
+            {profile.cultivationFacts.map((c) => (
+              <div key={c.attribute} style={{ display: 'flex', gap: 12, padding: '6px 0' }}>
+                <span className="mono" style={{ width: 120, flexShrink: 0, fontSize: 11, color: '#67766A' }}>{c.label}</span>
+                <span style={{ flex: 1, fontSize: 13.5, color: '#CBD8C6' }}>{c.value}</span>
+              </div>
+            ))}
+            <p style={{ margin: '4px 0 0', fontSize: 10.5, color: '#67766A' }}>{cultivationSourceLine(profile.cultivationFacts)}</p>
+          </div>
+        )}
         <p style={{ margin: '12px 0 0', fontSize: 10.5, lineHeight: 1.6, color: '#67766A' }}>
           {sources.map((s, i) => (
             <span key={s.id}>
@@ -185,6 +208,20 @@ export function CareProfilePanel({
             </div>
           ))}
           <p style={{ margin: '4px 0 0', fontSize: 11, color: '#9AA294' }}>Source: OpenPlantbook (community-sourced, unverified)</p>
+        </div>
+      )}
+      {profile.cultivationFacts && profile.cultivationFacts.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase', color: '#9AA294' }}>Cultivation</span>
+          </div>
+          {profile.cultivationFacts.map((c) => (
+            <div key={c.attribute} style={{ display: 'flex', gap: 12, padding: '7px 0' }}>
+              <span style={{ width: 116, flexShrink: 0, fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', color: '#9AA294' }}>{c.label}</span>
+              <span style={{ flex: 1, fontSize: 14, color: '#23302A' }}>{c.value}</span>
+            </div>
+          ))}
+          <p style={{ margin: '4px 0 0', fontSize: 11, color: '#9AA294' }}>{cultivationSourceLine(profile.cultivationFacts)}</p>
         </div>
       )}
       <p style={{ margin: '12px 0 0', fontSize: 11, lineHeight: 1.6, color: '#9AA294' }}>
