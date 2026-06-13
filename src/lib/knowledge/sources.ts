@@ -89,6 +89,19 @@ export const KNOWLEDGE_SOURCES: readonly KnowledgeSource[] = [
     commercialOk: true,
     attribution: 'Encyclopedia of Life (CC BY)',
   },
+  // Crowd-sourced indoor care (slice 3). Terms (verified 2026-06-13): "Anyone can
+  // use information from the database for any purpose without limitations" — modeled
+  // as public-domain; data quality is conveyed per-fact by the community_unverified
+  // trust, never presented as authoritative.
+  {
+    id: 'openplantbook',
+    name: 'OpenPlantbook',
+    url: 'https://open.plantbook.io',
+    license: 'public-domain',
+    commercialOk: true,
+    attribution:
+      'OpenPlantbook — community-contributed plant database, free for any purpose without limitations (open.plantbook.io); values are crowd-sourced and unverified',
+  },
 ] as const;
 
 const SOURCE_BY_ID = new Map(KNOWLEDGE_SOURCES.map((source) => [source.id, source]));

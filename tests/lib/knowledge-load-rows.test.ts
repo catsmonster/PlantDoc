@@ -31,6 +31,14 @@ describe('buildSourceRows', () => {
     }
     expect(byKey.get('usda')!.license).toBe('public-domain');
   });
+
+  it('registers openplantbook as a non-quarantined community source', () => {
+    const row = buildSourceRows().find((r) => r.source_key === 'openplantbook');
+    expect(row).toBeDefined();
+    expect(row!.quarantined).toBe(false);
+    expect(row!.commercial_ok).toBe(true);
+    expect(row!.license).toBe('public-domain');
+  });
 });
 
 describe('buildFactRows', () => {
