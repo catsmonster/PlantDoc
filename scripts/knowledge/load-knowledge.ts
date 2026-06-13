@@ -14,7 +14,7 @@ import { ID, Query } from 'node-appwrite';
 import { DATABASE_ID } from '../../appwrite/schema';
 import { createAdminContext } from '../appwrite/client';
 import { CARE_PROFILES } from '../../src/lib/knowledge/care-profiles';
-import { buildSourceRows, buildFactRows } from '../../src/lib/knowledge/load-rows';
+import { buildSourceRows, buildFactRows, type FactRow } from '../../src/lib/knowledge/load-rows';
 
 async function main(): Promise<void> {
   const ctx = await createAdminContext();
@@ -48,38 +48,56 @@ async function main(): Promise<void> {
   }
   console.log(`upserted ${CARE_PROFILES.length} species`);
 
-  // 3. care_facts — clear each species' facts, then insert fresh.
+  // 3. care_facts — source-scoped: clear only the facts this loader owns
+  //    (editorial + the POWO family fact), then insert fresh. Facts from other
+  //    loaders (e.g. OpenPlantbook's community_unverified ranges) survive, so the
+  //    care-fact loaders compose and re-run in any order.
+  const factRows = buildFactRows();
+  const bySlug = new Map<string, FactRow[]>();
+  for (const row of factRows) {
+    const list = bySlug.get(row.species_slug) ?? [];
+    list.push(row);
+    bySlug.set(row.species_slug, list);
+  }
+  let inserted = 0;
   for (const p of CARE_PROFILES) {
+    const rows = bySlug.get(p.slug) ?? [];
+    const owned = new Set(rows.map((r) => r.source_key));
     const species = await ctx.tablesDB.getRow({
       databaseId: db,
       tableId: 'species',
       rowId: p.slug,
       queries: [Query.select(['*', 'care_facts.*'])],
     });
-    const existing = (species as unknown as { care_facts?: { $id: string }[] }).care_facts ?? [];
+    const existing =
+      (species as unknown as { care_facts?: { $id: string; source_id?: unknown }[] }).care_facts ?? [];
     for (const f of existing) {
-      await ctx.tablesDB.deleteRow({ databaseId: db, tableId: 'care_facts', rowId: f.$id });
+      const src =
+        typeof f.source_id === 'string' ? f.source_id : String((f.source_id as { $id?: string })?.$id ?? '');
+      if (owned.has(src)) {
+        await ctx.tablesDB.deleteRow({ databaseId: db, tableId: 'care_facts', rowId: f.$id });
+      }
     }
+    for (const row of rows) {
+      await ctx.tablesDB.createRow({
+        databaseId: db,
+        tableId: 'care_facts',
+        rowId: ID.unique(),
+        data: {
+          species_id: row.species_slug,
+          source_id: row.source_key,
+          attribute: row.attribute,
+          value_min: row.value_min,
+          value_max: row.value_max,
+          value_text: row.value_text,
+          value_unit: row.value_unit,
+          trust: row.trust,
+        },
+      });
+    }
+    inserted += rows.length;
   }
-  const facts = buildFactRows();
-  for (const row of facts) {
-    await ctx.tablesDB.createRow({
-      databaseId: db,
-      tableId: 'care_facts',
-      rowId: ID.unique(),
-      data: {
-        species_id: row.species_slug,
-        source_id: row.source_key,
-        attribute: row.attribute,
-        value_min: row.value_min,
-        value_max: row.value_max,
-        value_text: row.value_text,
-        value_unit: row.value_unit,
-        trust: row.trust,
-      },
-    });
-  }
-  console.log(`loaded ${facts.length} care_facts`);
+  console.log(`loaded ${inserted} care_facts`);
 }
 
 void main().catch((error) => {
