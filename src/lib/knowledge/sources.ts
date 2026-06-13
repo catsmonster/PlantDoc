@@ -102,6 +102,17 @@ export const KNOWLEDGE_SOURCES: readonly KnowledgeSource[] = [
     attribution:
       'OpenPlantbook — community-contributed plant database, free for any purpose without limitations (open.plantbook.io); values are crowd-sourced and unverified',
   },
+  // Quarantined cultivation source (slice 4). CC-BY-SA: commercial use permitted
+  // with attribution + share-alike, so derived data stays attributed and out of
+  // unencumbered export/commercial paths (quarantined flag set by buildSourceRows).
+  {
+    id: 'permapeople',
+    name: 'Permapeople',
+    url: 'https://permapeople.org',
+    license: 'CC-BY-SA',
+    commercialOk: true,
+    attribution: 'Permapeople (permapeople.org) — CC BY-SA 4.0',
+  },
 ] as const;
 
 const SOURCE_BY_ID = new Map(KNOWLEDGE_SOURCES.map((source) => [source.id, source]));

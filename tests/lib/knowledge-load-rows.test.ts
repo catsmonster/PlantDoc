@@ -39,6 +39,13 @@ describe('buildSourceRows', () => {
     expect(row!.commercial_ok).toBe(true);
     expect(row!.license).toBe('public-domain');
   });
+
+  it('registers permapeople as a quarantined CC-BY-SA cultivation source', () => {
+    const row = buildSourceRows().find((r) => r.source_key === 'permapeople');
+    expect(row).toBeDefined();
+    expect(row!.license).toBe('CC-BY-SA');
+    expect(row!.quarantined).toBe(true);
+  });
 });
 
 describe('buildFactRows', () => {
