@@ -69,7 +69,12 @@ interface OpenPlantbookCreds {
   secret: string;
 }
 
-async function fetchToken(creds: OpenPlantbookCreds, fetcher: typeof fetch): Promise<string | null> {
+/** OAuth client-credentials token, or null on failure. Exported so a batch
+ *  loader fetches it once and reuses it across many species. */
+export async function fetchOpenPlantbookToken(
+  creds: OpenPlantbookCreds,
+  fetcher: typeof fetch = fetch,
+): Promise<string | null> {
   try {
     const res = await fetcher(`${OPENPLANTBOOK_BASE}/token/`, {
       method: 'POST',
@@ -88,15 +93,17 @@ async function fetchToken(creds: OpenPlantbookCreds, fetcher: typeof fetch): Pro
   }
 }
 
-/** Resolves a species to OpenPlantbook care facts, or [] on any failure / no exact match. */
+/** Resolves a species to OpenPlantbook care facts, or [] on any failure / no
+ *  exact match. Pass a pre-fetched `token` to avoid re-authing across a batch. */
 export async function fetchOpenPlantbookFacts(
   scientificName: string,
   creds: OpenPlantbookCreds,
   fetcher: typeof fetch = fetch,
+  token?: string,
 ): Promise<CareFact[]> {
-  const token = await fetchToken(creds, fetcher);
-  if (!token) return [];
-  const auth = { Authorization: `Bearer ${token}` };
+  const access = token ?? (await fetchOpenPlantbookToken(creds, fetcher));
+  if (!access) return [];
+  const auth = { Authorization: `Bearer ${access}` };
   try {
     const searchRes = await fetcher(
       `${OPENPLANTBOOK_BASE}/plant/search?alias=${encodeURIComponent(scientificName)}`,

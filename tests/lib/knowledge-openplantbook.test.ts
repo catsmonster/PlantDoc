@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   pickOpenPlantbookMatch,
   parseOpenPlantbookCareFacts,
+  fetchOpenPlantbookToken,
 } from '../../src/lib/knowledge/openplantbook';
 
 describe('pickOpenPlantbookMatch', () => {
@@ -50,5 +51,18 @@ describe('parseOpenPlantbookCareFacts', () => {
   });
   it('returns [] for a malformed detail', () => {
     expect(parseOpenPlantbookCareFacts(null)).toEqual([]);
+  });
+});
+
+describe('fetchOpenPlantbookToken', () => {
+  it('returns the access_token from the token endpoint', async () => {
+    const fake = (async () =>
+      new Response(JSON.stringify({ access_token: 'tok123' }), { status: 200 })) as unknown as typeof fetch;
+    const token = await fetchOpenPlantbookToken({ clientId: 'a', secret: 'b' }, fake);
+    expect(token).toBe('tok123');
+  });
+  it('returns null on a non-ok response', async () => {
+    const fake = (async () => new Response('nope', { status: 401 })) as unknown as typeof fetch;
+    expect(await fetchOpenPlantbookToken({ clientId: 'a', secret: 'b' }, fake)).toBeNull();
   });
 });
