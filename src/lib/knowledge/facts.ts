@@ -10,6 +10,7 @@
 
 import {
   type CareRange,
+  type CommunityRange,
   type SpeciesCareProfile,
   type Sourced,
   CARE_PROFILES,
@@ -109,6 +110,41 @@ function listFact(facts: CareFact[], attribute: string): Sourced<string[]> | nul
   return { value: values, sourceId: pickBest(rows)!.sourceId };
 }
 
+/** Numeric indoor metrics surfaced from community_unverified facts, in display order. */
+const INDOOR_RANGE_LABELS: { attribute: string; label: string }[] = [
+  { attribute: 'temperature_c', label: 'Temperature' },
+  { attribute: 'humidity_percent', label: 'Humidity' },
+  { attribute: 'light_lux', label: 'Light' },
+  { attribute: 'soil_moisture_percent', label: 'Soil moisture' },
+  { attribute: 'soil_ec', label: 'Soil fertility (EC)' },
+];
+
+/** Pulls crowd-sourced indoor ranges out of the facts so they render apart from
+ *  the sourced/editorial fields (which keep precedence in the primary display). */
+function extractCommunityRanges(facts: CareFact[]): CommunityRange[] {
+  const ranges: CommunityRange[] = [];
+  for (const { attribute, label } of INDOOR_RANGE_LABELS) {
+    const f = facts.find(
+      (x) =>
+        x.attribute === attribute &&
+        x.trust === 'community_unverified' &&
+        x.valueMin !== undefined &&
+        x.valueMax !== undefined,
+    );
+    if (f) {
+      ranges.push({
+        attribute,
+        label,
+        min: f.valueMin!,
+        max: f.valueMax!,
+        unit: f.valueUnit ?? '',
+        sourceId: f.sourceId,
+      });
+    }
+  }
+  return ranges;
+}
+
 /**
  * Shapes care facts into the SpeciesCareProfile the UI consumes. Returns null
  * when there are no facts. Missing fields fall back to an empty sourced value so
@@ -122,6 +158,7 @@ export function composeCareProfile(
   if (facts.length === 0) return null;
   const empty: Sourced<string> = { value: '', sourceId: identity.nameSourceId };
   const emptyRange: Sourced<CareRange> = { value: { min: 0, max: 0 }, sourceId: identity.nameSourceId };
+  const communityRanges = extractCommunityRanges(facts);
   return {
     slug: identity.slug,
     scientificName,
@@ -136,6 +173,7 @@ export function composeCareProfile(
     toxicity: textFact(facts, 'toxicity') ?? empty,
     commonStressSigns: listFact(facts, 'stress_sign') ?? { value: [], sourceId: identity.nameSourceId },
     likelyPests: listFact(facts, 'pest') ?? { value: [], sourceId: identity.nameSourceId },
+    communityRanges: communityRanges.length ? communityRanges : undefined,
   };
 }
 

@@ -62,6 +62,25 @@ describe('composeCareProfile', () => {
       composeCareProfile('Empty sp.', [], { slug: 'e', commonNames: [], synonyms: [], nameSourceId: 'powo' }),
     ).toBeNull();
   });
+
+  it('exposes community_unverified indoor ranges as communityRanges, separate from sourced fields', () => {
+    const facts: CareFact[] = [
+      { attribute: 'family', valueText: 'Araceae', sourceId: 'powo', trust: 'sourced' },
+      { attribute: 'temperature_c', valueMin: 18, valueMax: 27, valueUnit: 'C', sourceId: 'plantdoc-editorial', trust: 'editorial' },
+      { attribute: 'temperature_c', valueMin: 12, valueMax: 32, valueUnit: 'C', sourceId: 'openplantbook', trust: 'community_unverified' },
+      { attribute: 'light_lux', valueMin: 800, valueMax: 15000, valueUnit: 'lux', sourceId: 'openplantbook', trust: 'community_unverified' },
+    ];
+    const profile = composeCareProfile('Monstera deliciosa', facts, {
+      slug: 'monstera-deliciosa', commonNames: [], synonyms: [], nameSourceId: 'powo',
+    })!;
+    // Sourced/editorial precedence is unchanged: editorial temp still wins the primary field.
+    expect(profile.comfortableTemperatureC.value).toEqual({ min: 18, max: 27 });
+    const ranges = profile.communityRanges ?? [];
+    const byAttr = new Map(ranges.map((r) => [r.attribute, r]));
+    expect(byAttr.get('light_lux')).toMatchObject({ label: 'Light', min: 800, max: 15000, sourceId: 'openplantbook' });
+    expect(byAttr.get('temperature_c')).toMatchObject({ min: 12, max: 32 });
+    expect(ranges.every((r) => r.sourceId === 'openplantbook')).toBe(true);
+  });
 });
 
 describe('careFactsFromSpeciesRow', () => {
