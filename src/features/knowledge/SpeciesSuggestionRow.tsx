@@ -10,24 +10,33 @@ export function SpeciesSuggestionRow({
   suggestion,
   isDark,
   onPick,
+  id,
+  active = false,
 }: {
   suggestion: SpeciesSuggestion;
   isDark: boolean;
   onPick: () => void;
+  /** Stable option id, referenced by the combobox's aria-activedescendant. */
+  id?: string;
+  /** Whether this is the keyboard-active option (drives aria-selected + highlight). */
+  active?: boolean;
 }) {
   const view = suggestionRowView(suggestion);
   const palette = isDark
     ? { text: '#F2F6EF', sub: '#9BAA98', hover: '#22301F', care: '#C7F24A', careText: '#0E140F', gbifBorder: 'rgba(255,255,255,.16)', gbif: '#9BAA98' }
     : { text: '#23302A', sub: '#6B7568', hover: '#F1F5EC', care: '#3C7140', careText: '#FFFFFF', gbifBorder: '#D9D2C3', gbif: '#6B7568' };
   return (
-    <li role="option" aria-selected={false}>
+    <li id={id} role="option" aria-selected={active}>
       <button
         type="button"
         className={isDark ? 'b-tap' : 'a-tap'}
         onClick={onPick}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', border: 'none', background: 'transparent', borderRadius: 9, padding: '9px 10px', cursor: 'pointer', color: palette.text, fontFamily: 'inherit' }}
+        // Selection is driven from the input via aria-activedescendant, so the
+        // rows stay out of the tab order (standard combobox pattern).
+        tabIndex={-1}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', border: 'none', background: active ? palette.hover : 'transparent', borderRadius: 9, padding: '9px 10px', cursor: 'pointer', color: palette.text, fontFamily: 'inherit' }}
         onMouseEnter={(e) => (e.currentTarget.style.background = palette.hover)}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = active ? palette.hover : 'transparent')}
       >
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
