@@ -15,7 +15,8 @@
     "export:build": "tsx scripts/export/build.ts",
     "export:publish": "tsx scripts/export/publish.ts",
     "knowledge:build-common-plants": "tsx scripts/knowledge/build-common-plants.ts",
-    "knowledge:mine": "tsx scripts/knowledge/load-knowledge.ts"
+    "knowledge:mine": "tsx scripts/knowledge/load-knowledge.ts",
+    "knowledge:cross-links": "tsx scripts/knowledge/load-cross-links.ts"
   },
   "dependencies": {
     "appwrite": "^26.0.0",
