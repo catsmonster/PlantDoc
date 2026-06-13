@@ -10,6 +10,7 @@ import { LogSheet } from './LogSheet';
 import { plantInsights } from '../../lib/insights';
 import { careProfileForPlant } from '../../lib/knowledge/care-profiles';
 import { CareProfilePanel } from '../knowledge/CareProfilePanel';
+import { TrendsCard } from './TrendsCard';
 import { ErrorText } from '../../ui/Field';
 import {
   AI_PREVIEW_DAILY_LIMIT,
@@ -667,6 +668,9 @@ export function PlantScreen({
               <CareProfilePanel profile={careProfile} units={profile.preferred_units} isDark />
             )}
 
+            {/* Growth & health trends — charted from the user's own measurements */}
+            <TrendsCard plant={plant} units={profile.preferred_units} isDark />
+
             {/* Care Insights */}
             {observations.length > 0 && (
               <div style={{ marginTop: 30 }}>
@@ -932,6 +936,9 @@ export function PlantScreen({
           {careProfile && (
             <CareProfilePanel profile={careProfile} units={profile.preferred_units} isDark={false} />
           )}
+
+          {/* Growth & health trends — charted from the user's own measurements */}
+          <TrendsCard plant={plant} units={profile.preferred_units} isDark={false} />
 
           {/* Care Insights Panel */}
           {observations.length > 0 && (
