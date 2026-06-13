@@ -11,6 +11,7 @@
 import {
   type CareRange,
   type CommunityRange,
+  type CultivationFact,
   type SpeciesCareProfile,
   type Sourced,
   CARE_PROFILES,
@@ -145,6 +146,27 @@ function extractCommunityRanges(facts: CareFact[]): CommunityRange[] {
   return ranges;
 }
 
+/** Cultivation text attributes surfaced in their own attributed block, in display order. */
+const CULTIVATION_LABELS: { attribute: string; label: string }[] = [
+  { attribute: 'light_requirement', label: 'Light requirement' },
+  { attribute: 'water_requirement', label: 'Water requirement' },
+  { attribute: 'soil', label: 'Soil type' },
+  { attribute: 'growth_rate', label: 'Growth' },
+  { attribute: 'hardiness_zone', label: 'Hardiness zone' },
+  { attribute: 'edibility', label: 'Edible parts' },
+];
+
+/** Pulls cited cultivation traits (e.g. Permapeople) into their own block,
+ *  disjoint from the editorial care fields so neither overwrites the other. */
+function extractCultivationFacts(facts: CareFact[]): CultivationFact[] {
+  const out: CultivationFact[] = [];
+  for (const { attribute, label } of CULTIVATION_LABELS) {
+    const best = pickBest(facts.filter((f) => f.attribute === attribute && f.valueText !== undefined));
+    if (best) out.push({ attribute, label, value: best.valueText!, sourceId: best.sourceId });
+  }
+  return out;
+}
+
 /**
  * Shapes care facts into the SpeciesCareProfile the UI consumes. Returns null
  * when there are no facts. Missing fields fall back to an empty sourced value so
@@ -159,6 +181,7 @@ export function composeCareProfile(
   const empty: Sourced<string> = { value: '', sourceId: identity.nameSourceId };
   const emptyRange: Sourced<CareRange> = { value: { min: 0, max: 0 }, sourceId: identity.nameSourceId };
   const communityRanges = extractCommunityRanges(facts);
+  const cultivationFacts = extractCultivationFacts(facts);
   return {
     slug: identity.slug,
     scientificName,
@@ -174,6 +197,7 @@ export function composeCareProfile(
     commonStressSigns: listFact(facts, 'stress_sign') ?? { value: [], sourceId: identity.nameSourceId },
     likelyPests: listFact(facts, 'pest') ?? { value: [], sourceId: identity.nameSourceId },
     communityRanges: communityRanges.length ? communityRanges : undefined,
+    cultivationFacts: cultivationFacts.length ? cultivationFacts : undefined,
   };
 }
 

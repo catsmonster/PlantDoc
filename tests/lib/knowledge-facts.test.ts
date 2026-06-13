@@ -63,6 +63,23 @@ describe('composeCareProfile', () => {
     ).toBeNull();
   });
 
+  it('exposes cultivation text facts (e.g. Permapeople) as cultivationFacts with labels + source', () => {
+    const facts: CareFact[] = [
+      { attribute: 'family', valueText: 'Araceae', sourceId: 'powo', trust: 'sourced' },
+      { attribute: 'soil', valueText: 'Light (sandy), Medium', sourceId: 'permapeople', trust: 'sourced' },
+      { attribute: 'growth_rate', valueText: 'Fast', sourceId: 'permapeople', trust: 'sourced' },
+      { attribute: 'edibility', valueText: 'Fruit', sourceId: 'permapeople', trust: 'sourced' },
+    ];
+    const profile = composeCareProfile('Monstera deliciosa', facts, {
+      slug: 'm', commonNames: [], synonyms: [], nameSourceId: 'powo',
+    })!;
+    const cult = profile.cultivationFacts ?? [];
+    const byAttr = new Map(cult.map((c) => [c.attribute, c]));
+    expect(byAttr.get('soil')).toMatchObject({ label: 'Soil type', value: 'Light (sandy), Medium', sourceId: 'permapeople' });
+    expect(byAttr.get('growth_rate')).toMatchObject({ label: 'Growth', value: 'Fast' });
+    expect(cult.map((c) => c.attribute)).not.toContain('family'); // primary fields stay out of the block
+  });
+
   it('exposes community_unverified indoor ranges as communityRanges, separate from sourced fields', () => {
     const facts: CareFact[] = [
       { attribute: 'family', valueText: 'Araceae', sourceId: 'powo', trust: 'sourced' },

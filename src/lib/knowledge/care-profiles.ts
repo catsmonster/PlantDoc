@@ -32,6 +32,15 @@ export interface CommunityRange {
   sourceId: string;
 }
 
+/** A cited cultivation trait (e.g. Permapeople, CC-BY-SA), shown in its own
+ *  attributed block — distinct from the editorial care fields. */
+export interface CultivationFact {
+  attribute: string;
+  label: string;
+  value: string;
+  sourceId: string;
+}
+
 export interface SpeciesCareProfile {
   /** Stable slug for keys and feedback. */
   slug: string;
@@ -54,6 +63,8 @@ export interface SpeciesCareProfile {
   likelyPests: Sourced<string[]>;
   /** Crowd-sourced, unverified indoor ranges (e.g. OpenPlantbook), shown apart. */
   communityRanges?: CommunityRange[];
+  /** Cited cultivation traits (e.g. Permapeople, CC-BY-SA), shown apart with attribution. */
+  cultivationFacts?: CultivationFact[];
 }
 
 const EDITORIAL = 'plantdoc-editorial';
