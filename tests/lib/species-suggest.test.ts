@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   mergeSuggestions,
   shouldQueryRemote,
+  speciesSelectionFromSuggestion,
   suggestionRowView,
   type SpeciesSuggestion,
 } from '../../src/lib/knowledge/species-suggest';
@@ -45,5 +46,16 @@ describe('suggestionRowView', () => {
   it('falls back to scientific name as the lead when there is no common name', () => {
     expect(suggestionRowView({ scientificName: 'Ocimum basilicum', commonName: null, speciesId: null, slug: null }))
       .toEqual({ lead: 'Ocimum basilicum', sub: null, tag: null });
+  });
+});
+
+describe('speciesSelectionFromSuggestion', () => {
+  it('uses the relation id for catalog-backed picks', () => {
+    expect(speciesSelectionFromSuggestion({ scientificName: 'Ficus elastica', commonName: 'Rubber plant', speciesId: 'abc', slug: null }))
+      .toEqual({ speciesId: 'abc', speciesText: '' });
+  });
+  it('uses free scientific text for non-catalog picks', () => {
+    expect(speciesSelectionFromSuggestion({ scientificName: 'Ocimum basilicum', commonName: 'Basil', speciesId: null, slug: null, via: 'gbif' }))
+      .toEqual({ speciesId: '', speciesText: 'Ocimum basilicum' });
   });
 });

@@ -206,3 +206,12 @@ export function suggestionRowView(s: SpeciesSuggestion): SuggestionRowView {
     tag: s.slug ? 'care' : s.via === 'gbif' ? 'gbif' : null,
   };
 }
+
+/** The species-field updates a chosen suggestion implies: a catalog relation id,
+ *  or free scientific text when the suggestion is not catalog-backed. */
+export function speciesSelectionFromSuggestion(s: SpeciesSuggestion): {
+  speciesId: string;
+  speciesText: string;
+} {
+  return s.speciesId ? { speciesId: s.speciesId, speciesText: '' } : { speciesId: '', speciesText: s.scientificName };
+}
