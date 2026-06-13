@@ -187,3 +187,20 @@ export async function matchGbifSpecies(
     return null;
   }
 }
+
+/** Resolves a free-text query to plant suggestions via GBIF's vernacular index.
+ *  Returns [] on short query, network error, or no match; never throws. */
+export async function searchGbifVernacular(
+  query: string,
+  fetcher: typeof fetch = fetch,
+): Promise<SpeciesSuggestion[]> {
+  if (query.trim().length < 3) return [];
+  try {
+    const response = await fetcher(buildGbifVernacularSearchUrl(query));
+    if (!response.ok) return [];
+    const json: unknown = await response.json();
+    return parseGbifVernacularResults(json, query);
+  } catch {
+    return [];
+  }
+}
