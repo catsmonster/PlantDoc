@@ -5,9 +5,12 @@ dataset is large enough for species-specific recommendations. Roadmap:
 `docs/roadmap.md` (Phase 4A). This is the opposite direction from the outbound
 export pipeline in `docs/open-data.md`.
 
-The layer is **bundled data, not an Appwrite table** (yet), so it is
-deterministic, offline-safe, and ships in the client bundle. When any of it
-graduates to a real table, update `docs/schema.md`.
+The layer now lives in **relational Appwrite tables** (`species`,
+`source_datasets`, `taxon_references`, `care_facts` — see `docs/schema.md`),
+read through the species relation. The bundled `CARE_PROFILES` pack is retained
+as the editorial seed, the onboarding name index, and the offline fallback, so
+the layer stays deterministic and offline-safe. When new tables or columns land,
+update `docs/schema.md`.
 
 ## Source acceptance policy
 
@@ -41,6 +44,8 @@ CC BY-NC, no-license, or scraped web content.
 | `src/lib/knowledge/facts.ts` | The relational care-fact model (slice B). `composeCareProfile` shapes `care_facts` rows into `SpeciesCareProfile` with read-time precedence; `editorialProfileToFacts` adapts the bundled pack; `careFactsFromSpeciesRow` maps a hydrated Appwrite species row. |
 | `src/lib/knowledge/load-rows.ts` + `scripts/knowledge/load-knowledge.ts` | Pure row builders + the `knowledge:mine` admin script that upserts `source_datasets`, `species`, and `care_facts` for the editorial dataset (idempotent). |
 | `src/lib/knowledge/gbif.ts` | GBIF backbone name resolution (taxonomy only, never care inference). Pure URL builder + parser, plus a non-throwing fetch wrapper. |
+| `src/lib/knowledge/wikidata.ts` | Wikidata cross-link extractor (slice 2). SPARQL URL builder + parser + non-throwing fetch wrapper; maps a taxon name to its QID and its IDs in GBIF/USDA/POWO/IPNI/EOL. CC0, so cross-links inherit no share-alike obligation. Admin-script use only (sets a User-Agent). |
+| `src/lib/knowledge/taxon-refs.ts` + `scripts/knowledge/load-cross-links.ts` | Pure `taxon_references` row builder (deduped by species+source, GBIF match preferred over Wikidata P846) + the `knowledge:cross-links` admin script that resolves each species' cross-links live from Wikidata + GBIF and upserts them (idempotent). |
 | `src/features/knowledge/CareProfilePanel.tsx` | Plant-detail panel rendering sourced reference facts with per-fact provenance, distinct from the deterministic insights and the Gemini AI preview. |
 
 **Storage (slice B):** care profiles now live in Appwrite relational tables —
@@ -51,7 +56,8 @@ seed and as the offline fallback / onboarding name index. The three-care-layers
 separation below is unchanged.
 
 Tests: `tests/lib/knowledge.test.ts`, `tests/lib/knowledge-facts.test.ts`,
-`tests/lib/knowledge-load-rows.test.ts`.
+`tests/lib/knowledge-load-rows.test.ts`, `tests/lib/knowledge-wikidata.test.ts`,
+`tests/lib/knowledge-taxon-refs.test.ts`.
 
 ## The three care layers stay distinct
 
