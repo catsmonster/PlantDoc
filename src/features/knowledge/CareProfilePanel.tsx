@@ -43,50 +43,48 @@ function cultivationSourceLine(facts: CultivationFact[]): string {
   return sources.map((s) => `Source: ${s.name} (${s.license})`).join(' · ');
 }
 
-function buildFacts(profile: SpeciesCareProfile, units: Units): Fact[] {
-  const temp = profile.comfortableTemperatureC.value;
-  return [
-    { label: 'Family', text: profile.family.value, sourceId: profile.family.sourceId },
-    { label: 'Light', text: profile.light.value, sourceId: profile.light.sourceId },
-    {
-      label: 'Watering',
-      text: rangeDays(profile.waterCadenceDays.value),
-      sourceId: profile.waterCadenceDays.sourceId,
-    },
-    {
-      label: 'Comfortable temp',
-      text: `${formatTemperature(temp.min, units)} - ${formatTemperature(temp.max, units)}`,
-      sourceId: profile.comfortableTemperatureC.sourceId,
-    },
-    { label: 'Humidity', text: profile.humidity.value, sourceId: profile.humidity.sourceId },
-    { label: 'Toxicity', text: profile.toxicity.value, sourceId: profile.toxicity.sourceId },
-    {
-      label: 'Common stress signs',
-      text: profile.commonStressSigns.value.join('; '),
-      sourceId: profile.commonStressSigns.sourceId,
-    },
-    {
-      label: 'Likely pests',
-      text: profile.likelyPests.value.join(', '),
-      sourceId: profile.likelyPests.sourceId,
-    },
-  ];
+/** A text field renders only when it carries a value (composeCareProfile fills
+ *  absent fields with an empty string, which we skip rather than show blank). */
+function textFactRow(label: string, s: Sourced<string>): Fact | null {
+  return s.value.trim() ? { label, text: s.value, sourceId: s.sourceId } : null;
 }
 
-function usedSources(profile: SpeciesCareProfile): KnowledgeSource[] {
-  const fields: Sourced<unknown>[] = [
-    profile.family,
-    profile.light,
-    profile.waterCadenceDays,
-    profile.comfortableTemperatureC,
-    profile.humidity,
-    profile.toxicity,
-    profile.commonStressSigns,
-    profile.likelyPests,
+function listFactRow(label: string, s: Sourced<string[]>, sep: string): Fact | null {
+  return s.value.length > 0 ? { label, text: s.value.join(sep), sourceId: s.sourceId } : null;
+}
+
+function buildFacts(profile: SpeciesCareProfile, units: Units): Fact[] {
+  const temp = profile.comfortableTemperatureC.value;
+  const water = profile.waterCadenceDays.value;
+  const candidates: (Fact | null)[] = [
+    textFactRow('Family', profile.family),
+    textFactRow('Light', profile.light),
+    // composeCareProfile uses {min:0,max:0} as the "absent" range sentinel — skip
+    // it instead of rendering a meaningless "every 0 days" / "0°C - 0°C".
+    water.max > 0
+      ? { label: 'Watering', text: rangeDays(water), sourceId: profile.waterCadenceDays.sourceId }
+      : null,
+    temp.min !== 0 || temp.max !== 0
+      ? {
+          label: 'Comfortable temp',
+          text: `${formatTemperature(temp.min, units)} - ${formatTemperature(temp.max, units)}`,
+          sourceId: profile.comfortableTemperatureC.sourceId,
+        }
+      : null,
+    textFactRow('Humidity', profile.humidity),
+    textFactRow('Toxicity', profile.toxicity),
+    listFactRow('Common stress signs', profile.commonStressSigns, '; '),
+    listFactRow('Likely pests', profile.likelyPests, ', '),
   ];
+  return candidates.filter((f): f is Fact => f !== null);
+}
+
+/** Sources cited by the *visible* facts plus the mined blocks — so the footer
+ *  never attributes a source (e.g. the name authority) whose fields were all
+ *  absent and therefore rendered nothing. */
+function usedSources(facts: Fact[], profile: SpeciesCareProfile): KnowledgeSource[] {
   const ids = new Set<string>([
-    profile.nameSourceId,
-    ...fields.map((f) => f.sourceId),
+    ...facts.map((f) => f.sourceId),
     ...(profile.communityRanges ?? []).map((r) => r.sourceId),
     ...(profile.cultivationFacts ?? []).map((c) => c.sourceId),
   ]);
@@ -103,7 +101,7 @@ export function CareProfilePanel({
   isDark: boolean;
 }) {
   const facts = useMemo(() => buildFacts(profile, units), [profile, units]);
-  const sources = useMemo(() => usedSources(profile), [profile]);
+  const sources = useMemo(() => usedSources(facts, profile), [facts, profile]);
 
   if (isDark) {
     return (
