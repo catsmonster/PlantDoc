@@ -164,6 +164,7 @@ Quantitative plant state.
 | `health_score` | integer | no | 1-10 scale. |
 | `pest_severity_score` | integer | no | 0-10 scale. |
 | `bloom_count` | integer | no | Optional. |
+| `soil_state` | enum/string | no | `dry`, `moist`, `wet`. Qualitative soil check; feeds moisture inference. May be exported when consented. |
 | `notes_private` | string | no | Never exported directly. |
 
 ### `photos`

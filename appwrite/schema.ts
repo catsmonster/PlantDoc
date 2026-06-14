@@ -287,6 +287,7 @@ export const TABLES: TableDef[] = [
       { kind: 'integer', key: 'health_score', min: 1, max: 10 },
       { kind: 'integer', key: 'pest_severity_score', min: 0, max: 10 },
       { kind: 'integer', key: 'bloom_count', min: 0 },
+      { kind: 'enum', key: 'soil_state', elements: ['dry', 'moist', 'wet'] },
       notesPrivate,
     ],
     indexes: [],

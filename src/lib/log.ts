@@ -1,4 +1,4 @@
-import type { ObservationType, TreatmentType } from './types';
+import type { ObservationType, SoilState, TreatmentType } from './types';
 
 /** Input collected by the logging UI for a single timeline entry. */
 export interface LogInput {
@@ -19,6 +19,7 @@ export interface LogInput {
     leaf_count?: number;
     soil_moisture_percent?: number;
     health_score?: number;
+    soil_state?: SoilState;
   };
 }
 

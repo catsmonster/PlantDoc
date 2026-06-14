@@ -102,6 +102,8 @@ export interface Treatment extends RowMeta {
   notes_private: string | null;
 }
 
+export type SoilState = 'dry' | 'moist' | 'wet';
+
 export interface Measurement extends RowMeta {
   user_id: string;
   height_cm: number | null;
@@ -110,6 +112,7 @@ export interface Measurement extends RowMeta {
   health_score: number | null;
   pest_severity_score: number | null;
   bloom_count: number | null;
+  soil_state?: SoilState | null;
   notes_private: string | null;
 }
 
