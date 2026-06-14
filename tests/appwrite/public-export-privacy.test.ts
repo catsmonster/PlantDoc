@@ -82,4 +82,24 @@ describe('public export privacy', () => {
       expect(geo.elements).not.toContain('local');
     }
   });
+
+  it('knowledge reference tables hold no user data and cannot leak private fields', () => {
+    // Inbound open-knowledge tables (roadmap Phase 4A) are public reference
+    // data: public-read, admin-write, and never the source of a public export
+    // (only public_observations is). They must carry no user_id and no private
+    // field, so no private user data can travel with mined reference rows.
+    for (const id of ['source_datasets', 'taxon_references', 'care_facts']) {
+      const table = TABLES.find((t) => t.id === id)!;
+      const keys = table.columns.map((c) => c.key);
+      for (const banned of PRIVATE_FIELDS) {
+        expect(keys, `${id}.${banned}`).not.toContain(banned);
+      }
+    }
+    // The export projection is and stays the public_observations table only.
+    const pub = TABLES.find((t) => t.id === 'public_observations')!;
+    const pubKeys = new Set(pub.columns.map((c) => c.key));
+    for (const field of PUBLIC_EXPORT_FIELDS) {
+      expect(pubKeys.has(field), field).toBe(true);
+    }
+  });
 });

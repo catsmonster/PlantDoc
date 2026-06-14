@@ -3,6 +3,9 @@ import { DATABASE_ID, PRIVATE_IMAGES_BUCKET, storage, tablesDB } from './appwrit
 import { forStorage, type Coords, type LocationPrecision } from './geo';
 import { buildLogPayload, type LogInput } from './log';
 import { ownerPermissions } from './owner';
+import { composeCareProfile, careFactsFromSpeciesRow, type CareFact } from './knowledge/facts';
+import { getSource } from './knowledge/sources';
+import type { SpeciesCareProfile } from './knowledge/care-profiles';
 import type {
   EnvironmentSnapshot,
   InsightFeedback,
@@ -61,6 +64,40 @@ export async function listSpecies(): Promise<Species[]> {
     queries: [Query.orderAsc('scientific_name'), Query.limit(100)],
   });
   return result.rows as unknown as Species[];
+}
+
+/**
+ * Loads the table-backed care profile for a species, composed from its
+ * care_facts. Facts are read through the species two-way relation (relationship
+ * columns are not directly queryable), then shaped into the SpeciesCareProfile
+ * the UI consumes. Returns null when the species has no facts or the read fails,
+ * so the panel degrades to hidden rather than erroring.
+ *
+ * Slice 1: source rows are upserted with rowId = source_key, so the hydrated
+ * source id already IS the registry key; getSource resolves it directly, with an
+ * editorial fallback. Slice 2 swaps in a cached source_datasets index.
+ */
+export async function getCareProfile(speciesId: string): Promise<SpeciesCareProfile | null> {
+  try {
+    const row = await tablesDB.getRow({
+      databaseId: db,
+      tableId: 'species',
+      rowId: speciesId,
+      queries: [Query.select(['*', 'care_facts.*'])],
+    });
+    const facts: CareFact[] = careFactsFromSpeciesRow(row as never, (id) =>
+      getSource(id) ? id : 'plantdoc-editorial',
+    );
+    const r = row as { scientific_name?: string; slug?: string; common_names?: string[] };
+    return composeCareProfile(r.scientific_name ?? '', facts, {
+      slug: r.slug ?? speciesId,
+      commonNames: r.common_names ?? [],
+      synonyms: [],
+      nameSourceId: 'powo',
+    });
+  } catch {
+    return null;
+  }
 }
 
 // ---------- locations ----------

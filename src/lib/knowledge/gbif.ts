@@ -146,7 +146,20 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function normalizeName(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, ' ');
+  return text.trim().toLowerCase().replace(/×/g, 'x').replace(/\s+/g, ' ');
+}
+
+/**
+ * The GBIF backbone usageKey ONLY when the match's canonical name equals the
+ * queried name exactly (normalized, hybrid "×"/"x" folded). The match endpoint
+ * runs in fuzzy mode (`strict=false`) for onboarding, where a near-miss is shown
+ * to the user with its confidence; but attaching a cross-link ID is
+ * exact-match-or-nothing — a fuzzy drift to a different species must never be
+ * written as a taxon reference. Returns null when there is no exact match.
+ */
+export function exactGbifUsageKey(match: GbifMatch | null, name: string): number | null {
+  if (!match) return null;
+  return normalizeName(match.canonicalName) === normalizeName(name) ? match.usageKey : null;
 }
 
 /**

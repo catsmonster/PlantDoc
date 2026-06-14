@@ -21,6 +21,26 @@ export interface CareRange {
   max: number;
 }
 
+/** A crowd-sourced, unverified numeric indoor range (e.g. OpenPlantbook),
+ *  surfaced apart from the sourced/editorial facts so its trust stays visible. */
+export interface CommunityRange {
+  attribute: string;
+  label: string;
+  min: number;
+  max: number;
+  unit: string;
+  sourceId: string;
+}
+
+/** A cited cultivation trait (e.g. Permapeople, CC-BY-SA), shown in its own
+ *  attributed block — distinct from the editorial care fields. */
+export interface CultivationFact {
+  attribute: string;
+  label: string;
+  value: string;
+  sourceId: string;
+}
+
 export interface SpeciesCareProfile {
   /** Stable slug for keys and feedback. */
   slug: string;
@@ -41,6 +61,10 @@ export interface SpeciesCareProfile {
   toxicity: Sourced<string>;
   commonStressSigns: Sourced<string[]>;
   likelyPests: Sourced<string[]>;
+  /** Crowd-sourced, unverified indoor ranges (e.g. OpenPlantbook), shown apart. */
+  communityRanges?: CommunityRange[];
+  /** Cited cultivation traits (e.g. Permapeople, CC-BY-SA), shown apart with attribution. */
+  cultivationFacts?: CultivationFact[];
 }
 
 const EDITORIAL = 'plantdoc-editorial';

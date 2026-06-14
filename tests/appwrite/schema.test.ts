@@ -12,6 +12,9 @@ const REQUIRED_TABLES = [
   'photos',
   'environment_snapshots',
   'insight_feedback',
+  'source_datasets',
+  'taxon_references',
+  'care_facts',
   'public_observations',
 ];
 
@@ -35,7 +38,7 @@ describe('schema coverage', () => {
   });
 
   it('every table with user data has a required user_id varchar column', () => {
-    const exempt = ['species', 'public_observations'];
+    const exempt = ['species', 'source_datasets', 'taxon_references', 'care_facts', 'public_observations'];
     for (const table of TABLES.filter((t) => !exempt.includes(t.id))) {
       const col = table.columns.find((c) => c.key === 'user_id');
       expect(col, `${table.id}.user_id`).toBeDefined();
@@ -170,5 +173,51 @@ describe('schema coverage', () => {
         }
       }
     }
+  });
+
+  it('knowledge reference tables are admin-write, public-read with no user grants', () => {
+    for (const id of ['source_datasets', 'taxon_references', 'care_facts']) {
+      expect(TABLES.find((t) => t.id === id)!.permissions, id).toEqual(['read:users']);
+      expect(TABLES.find((t) => t.id === id)!.rowSecurity, id).toBe(false);
+    }
+  });
+
+  it('care_facts and taxon_references relate to species two-way with cascade', () => {
+    for (const id of ['care_facts', 'taxon_references']) {
+      const rel = TABLES.find((t) => t.id === id)!.columns.find((c) => c.key === 'species_id')!;
+      expect(rel.kind, id).toBe('relationship');
+      if (rel.kind === 'relationship') {
+        expect(rel.relatedTableId, id).toBe('species');
+        expect(rel.twoWay, id).toBe(true);
+        expect(rel.twoWayKey, id).toBe(id);
+        expect(rel.onDelete, id).toBe('cascade');
+      }
+    }
+  });
+
+  it('care_facts and taxon_references relate to source_datasets (restrict, one-way)', () => {
+    for (const id of ['care_facts', 'taxon_references']) {
+      const rel = TABLES.find((t) => t.id === id)!.columns.find((c) => c.key === 'source_id')!;
+      expect(rel.kind, id).toBe('relationship');
+      if (rel.kind === 'relationship') {
+        expect(rel.relatedTableId, id).toBe('source_datasets');
+        expect(rel.twoWay, id).toBe(false);
+        expect(rel.onDelete, id).toBe('restrict');
+      }
+    }
+  });
+
+  it('source_datasets has a unique index on source_key', () => {
+    const t = TABLES.find((t) => t.id === 'source_datasets')!;
+    const idx = t.indexes.find((i) => i.key === 'idx_source_key');
+    expect(idx).toBeDefined();
+    expect(idx!.type).toBe('unique');
+    expect(idx!.columns).toEqual(['source_key']);
+  });
+
+  it('species has a slug column with a unique index', () => {
+    const t = TABLES.find((t) => t.id === 'species')!;
+    expect(t.columns.find((c) => c.key === 'slug')?.kind).toBe('varchar');
+    expect(t.indexes.find((i) => i.key === 'idx_slug')?.type).toBe('unique');
   });
 });

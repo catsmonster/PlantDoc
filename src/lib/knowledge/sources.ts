@@ -10,7 +10,13 @@
  * own logs and feedback refine over time.
  */
 
-export type SourceLicense = 'CC0' | 'CC-BY' | 'CC-BY-SA' | 'editorial';
+export type SourceLicense =
+  | 'CC0'
+  | 'CC-BY'
+  | 'CC-BY-SA'
+  | 'ODbL'
+  | 'public-domain'
+  | 'editorial';
 
 export interface KnowledgeSource {
   id: string;
@@ -55,6 +61,57 @@ export const KNOWLEDGE_SOURCES: readonly KnowledgeSource[] = [
     license: 'CC-BY',
     commercialOk: true,
     attribution: 'GBIF Secretariat: GBIF Backbone Taxonomy (CC BY)',
+  },
+  // Cross-link target catalogs (slice 2): the external registries a species'
+  // stable IDs index into. All permissive, so cross-links inherit no share-alike
+  // obligation. The IDs themselves are mined from Wikidata (CC0) + GBIF (CC BY).
+  {
+    id: 'usda',
+    name: 'USDA PLANTS Database',
+    url: 'https://plants.usda.gov',
+    license: 'public-domain',
+    commercialOk: true,
+    attribution: 'USDA, NRCS PLANTS Database (public domain)',
+  },
+  {
+    id: 'ipni',
+    name: 'International Plant Names Index',
+    url: 'https://www.ipni.org',
+    license: 'CC-BY',
+    commercialOk: true,
+    attribution: 'International Plant Names Index (CC BY)',
+  },
+  {
+    id: 'eol',
+    name: 'Encyclopedia of Life',
+    url: 'https://eol.org',
+    license: 'CC-BY',
+    commercialOk: true,
+    attribution: 'Encyclopedia of Life (CC BY)',
+  },
+  // Crowd-sourced indoor care (slice 3). Terms (verified 2026-06-13): "Anyone can
+  // use information from the database for any purpose without limitations" — modeled
+  // as public-domain; data quality is conveyed per-fact by the community_unverified
+  // trust, never presented as authoritative.
+  {
+    id: 'openplantbook',
+    name: 'OpenPlantbook',
+    url: 'https://open.plantbook.io',
+    license: 'public-domain',
+    commercialOk: true,
+    attribution:
+      'OpenPlantbook — community-contributed plant database, free for any purpose without limitations (open.plantbook.io); values are crowd-sourced and unverified',
+  },
+  // Quarantined cultivation source (slice 4). CC-BY-SA: commercial use permitted
+  // with attribution + share-alike, so derived data stays attributed and out of
+  // unencumbered export/commercial paths (quarantined flag set by buildSourceRows).
+  {
+    id: 'permapeople',
+    name: 'Permapeople',
+    url: 'https://permapeople.org',
+    license: 'CC-BY-SA',
+    commercialOk: true,
+    attribution: 'Permapeople (permapeople.org) — CC BY-SA 4.0',
   },
 ] as const;
 
