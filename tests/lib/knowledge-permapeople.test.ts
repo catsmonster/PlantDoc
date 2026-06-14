@@ -91,4 +91,14 @@ describe('fetchPermapeopleFacts failure vs empty', () => {
     expect(facts).not.toBeNull();
     expect(facts!.find((f) => f.attribute === 'growth_rate')).toMatchObject({ valueText: 'Fast' });
   });
+  it('returns null on a network throw', async () => {
+    const fetcher = (async () => {
+      throw new Error('offline');
+    }) as unknown as typeof fetch;
+    expect(await fetchPermapeopleFacts('Monstera deliciosa', CREDS, fetcher)).toBeNull();
+  });
+  it('returns null when a 200 response carries a malformed (non-JSON) body', async () => {
+    const fetcher = ppFetcher({ search: () => new Response('not json', { status: 200 }) });
+    expect(await fetchPermapeopleFacts('Monstera deliciosa', CREDS, fetcher)).toBeNull();
+  });
 });

@@ -112,4 +112,14 @@ describe('fetchOpenPlantbookFacts failure vs empty', () => {
     expect(facts).not.toBeNull();
     expect(facts!.find((f) => f.attribute === 'temperature_c')).toMatchObject({ valueMin: 12, valueMax: 32 });
   });
+  it('returns null on a network throw', async () => {
+    const fetcher = (async () => {
+      throw new Error('offline');
+    }) as unknown as typeof fetch;
+    expect(await fetchOpenPlantbookFacts('Monstera deliciosa', CREDS, fetcher, 'tok')).toBeNull();
+  });
+  it('returns null when a 200 response carries a malformed (non-JSON) body', async () => {
+    const fetcher = opbFetcher({ search: () => new Response('not json', { status: 200 }) });
+    expect(await fetchOpenPlantbookFacts('Monstera deliciosa', CREDS, fetcher, 'tok')).toBeNull();
+  });
 });

@@ -54,6 +54,10 @@ async function main(): Promise<void> {
     }
     // Exact-match-or-nothing: only attach GBIF's usageKey when its canonical
     // name equals this species' name (the fuzzy match endpoint can drift).
+    // Caveat: matchGbifSpecies returns null for both a transient failure and a
+    // genuine no-match, so on a Wikidata-success run a GBIF blip drops this
+    // species' GBIF ref for this pass — recoverable on the next clean re-run
+    // (Wikidata's own P846, when present, still carries the GBIF id).
     const rows = buildTaxonRefRows(p.slug, wikidata, exactGbifUsageKey(gbif, p.scientificName));
 
     const species = await ctx.tablesDB.getRow({
