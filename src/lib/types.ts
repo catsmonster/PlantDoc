@@ -26,6 +26,8 @@ export interface Species extends RowMeta {
 
 export type PlantStatus = 'active' | 'archived' | 'deceased' | 'gifted';
 export type PlacementType = 'indoor' | 'outdoor' | 'greenhouse' | 'balcony';
+export type SubstrateType = 'standard' | 'succulent_gritty' | 'chunky_aroid' | 'peat_seedling';
+export type LightLevel = 'low' | 'medium' | 'bright' | 'direct_sun';
 
 export interface UserLocation extends RowMeta {
   user_id: string;
@@ -59,6 +61,11 @@ export interface Plant extends RowMeta {
   watering_cadence_days?: number | null;
   latest_photo_file_id?: string | null;
   latest_photo_observed_at?: string | null;
+  pot_diameter_cm?: number | null;
+  pot_height_cm?: number | null;
+  substrate_type?: SubstrateType | null;
+  pot_drains?: boolean | null;
+  light_level?: LightLevel | null;
 }
 
 export interface InsightFeedback extends RowMeta {

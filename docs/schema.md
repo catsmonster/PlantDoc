@@ -106,6 +106,11 @@ User-owned plant profiles.
 | `watering_cadence_days` | float | no | Private summary field: computed or default watering interval in days. |
 | `latest_photo_file_id` | string | no | Private summary field: Appwrite file ID of the most recent photo. |
 | `latest_photo_observed_at` | datetime | no | Private summary field: timestamp of the most recent photo observation. |
+| `pot_diameter_cm` | float | no | Top inner pot diameter (cm), 1–200. Feeds moisture inference. |
+| `pot_height_cm` | float | no | Soil depth (cm), 1–200. Feeds moisture inference. |
+| `substrate_type` | enum/string | no | `standard`, `succulent_gritty`, `chunky_aroid`, `peat_seedling`. Nullable = unknown; no DB default. |
+| `pot_drains` | boolean | no | Whether the pot drains. Nullable = unknown; no DB default. |
+| `light_level` | enum/string | no | `low`, `medium`, `bright`, `direct_sun`. |
 | `created_at` | datetime | yes | Server generated. |
 | `updated_at` | datetime | yes | Server generated. |
 

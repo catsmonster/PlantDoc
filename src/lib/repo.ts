@@ -9,12 +9,14 @@ import type { SpeciesCareProfile } from './knowledge/care-profiles';
 import type {
   EnvironmentSnapshot,
   InsightFeedback,
+  LightLevel,
   Observation,
   Plant,
   PlacementType,
   PlantStatus,
   Profile,
   Species,
+  SubstrateType,
   Units,
   UserLocation,
 } from './types';
@@ -192,6 +194,11 @@ export interface PlantInput {
   watering_cadence_days?: number | null;
   latest_photo_file_id?: string | null;
   latest_photo_observed_at?: string | null;
+  pot_diameter_cm?: number | null;
+  pot_height_cm?: number | null;
+  substrate_type?: SubstrateType | null;
+  pot_drains?: boolean | null;
+  light_level?: LightLevel | null;
 }
 
 /** Scalar-only dashboard list; skips relationship columns so Appwrite does not

@@ -175,6 +175,15 @@ export const TABLES: TableDef[] = [
       { kind: 'float', key: 'watering_cadence_days' },
       { kind: 'varchar', key: 'latest_photo_file_id', size: 64 },
       { kind: 'datetime', key: 'latest_photo_observed_at' },
+      { kind: 'float', key: 'pot_diameter_cm', min: 1, max: 200 },
+      { kind: 'float', key: 'pot_height_cm', min: 1, max: 200 },
+      {
+        kind: 'enum',
+        key: 'substrate_type',
+        elements: ['standard', 'succulent_gritty', 'chunky_aroid', 'peat_seedling'],
+      },
+      { kind: 'boolean', key: 'pot_drains' },
+      { kind: 'enum', key: 'light_level', elements: ['low', 'medium', 'bright', 'direct_sun'] },
     ],
     indexes: [
       { key: 'idx_user_id', type: 'key', columns: ['user_id'] },
