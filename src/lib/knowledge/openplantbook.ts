@@ -93,33 +93,39 @@ export async function fetchOpenPlantbookToken(
   }
 }
 
-/** Resolves a species to OpenPlantbook care facts, or [] on any failure / no
- *  exact match. Pass a pre-fetched `token` to avoid re-authing across a batch. */
+/**
+ * Resolves a species to OpenPlantbook care facts. Distinguishes failure from
+ * absence so a batch loader never destroys good data on a flaky/rate-limited run:
+ * returns `null` when a request *fails* (no token, non-ok response incl. HTTP 429,
+ * or a network error) and `[]` only when the call *succeeds* but there is no exact
+ * match or no indoor ranges. Pass a pre-fetched `token` to avoid re-authing across
+ * a batch. Loaders must skip (not clear) a species when this returns `null`.
+ */
 export async function fetchOpenPlantbookFacts(
   scientificName: string,
   creds: OpenPlantbookCreds,
   fetcher: typeof fetch = fetch,
   token?: string,
-): Promise<CareFact[]> {
+): Promise<CareFact[] | null> {
   const access = token ?? (await fetchOpenPlantbookToken(creds, fetcher));
-  if (!access) return [];
+  if (!access) return null;
   const auth = { Authorization: `Bearer ${access}` };
   try {
     const searchRes = await fetcher(
       `${OPENPLANTBOOK_BASE}/plant/search?alias=${encodeURIComponent(scientificName)}`,
       { headers: auth },
     );
-    if (!searchRes.ok) return [];
+    if (!searchRes.ok) return null;
     const searchJson = (await searchRes.json()) as { results?: SearchResult[] };
     const pid = pickOpenPlantbookMatch(searchJson.results ?? [], scientificName);
-    if (!pid) return [];
+    if (!pid) return []; // searched successfully, genuinely no exact match
     const detailRes = await fetcher(
       `${OPENPLANTBOOK_BASE}/plant/detail/${encodeURIComponent(pid)}/`,
       { headers: auth },
     );
-    if (!detailRes.ok) return [];
+    if (!detailRes.ok) return null;
     return parseOpenPlantbookCareFacts(await detailRes.json());
   } catch {
-    return [];
+    return null;
   }
 }

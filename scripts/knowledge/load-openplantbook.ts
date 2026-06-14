@@ -52,8 +52,16 @@ async function main(): Promise<void> {
 
   const catalog = await listAllSpecies(ctx.tablesDB, db);
   let total = 0;
+  let skipped = 0;
   for (const p of catalog) {
     const facts = await fetchOpenPlantbookFacts(p.scientificName, creds, fetch, token);
+    // null = request failed (e.g. rate limit); skip so we never clear good data.
+    if (facts === null) {
+      skipped++;
+      console.warn(`${p.slug}: openplantbook fetch failed — keeping existing facts`);
+      await sleep(200);
+      continue;
+    }
     const species = await ctx.tablesDB.getRow({
       databaseId: db,
       tableId: 'species',
@@ -90,7 +98,7 @@ async function main(): Promise<void> {
     console.log(`${p.slug}: ${facts.length} openplantbook facts`);
     await sleep(200);
   }
-  console.log(`loaded ${total} OpenPlantbook care_facts`);
+  console.log(`loaded ${total} OpenPlantbook care_facts (${skipped} species skipped on fetch failure)`);
 }
 
 void main().catch((error) => {

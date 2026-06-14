@@ -3,7 +3,23 @@ import {
   pickOpenPlantbookMatch,
   parseOpenPlantbookCareFacts,
   fetchOpenPlantbookToken,
+  fetchOpenPlantbookFacts,
 } from '../../src/lib/knowledge/openplantbook';
+
+const CREDS = { clientId: 'a', secret: 'b' };
+
+/** Fake fetch routing OpenPlantbook endpoints by URL substring. */
+function opbFetcher(routes: { search?: () => Response; detail?: () => Response }): typeof fetch {
+  return (async (url: string | URL) => {
+    const u = String(url);
+    if (u.includes('/plant/search')) return routes.search?.() ?? new Response('', { status: 500 });
+    if (u.includes('/plant/detail/')) return routes.detail?.() ?? new Response('', { status: 500 });
+    throw new Error(`unexpected url ${u}`);
+  }) as unknown as typeof fetch;
+}
+
+const j = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('pickOpenPlantbookMatch', () => {
   it('returns the pid whose display_pid matches the scientific name (case-insensitive)', () => {
@@ -64,5 +80,36 @@ describe('fetchOpenPlantbookToken', () => {
   it('returns null on a non-ok response', async () => {
     const fake = (async () => new Response('nope', { status: 401 })) as unknown as typeof fetch;
     expect(await fetchOpenPlantbookToken({ clientId: 'a', secret: 'b' }, fake)).toBeNull();
+  });
+});
+
+describe('fetchOpenPlantbookFacts failure vs empty', () => {
+  it('returns null (not []) when the search request fails, so a rate-limited run never clears good data', async () => {
+    const fetcher = opbFetcher({ search: () => new Response('rate limited', { status: 429 }) });
+    expect(await fetchOpenPlantbookFacts('Monstera deliciosa', CREDS, fetcher, 'tok')).toBeNull();
+  });
+  it('returns null when authentication yields no token', async () => {
+    const fetcher = opbFetcher({}); // token path: no token provided, token endpoint not routed -> 500
+    expect(await fetchOpenPlantbookFacts('Monstera deliciosa', CREDS, fetcher)).toBeNull();
+  });
+  it('returns [] (genuine no data) when search succeeds but nothing matches exactly', async () => {
+    const fetcher = opbFetcher({ search: () => j({ results: [{ pid: 'other', display_pid: 'Other plant' }] }) });
+    expect(await fetchOpenPlantbookFacts('Monstera deliciosa', CREDS, fetcher, 'tok')).toEqual([]);
+  });
+  it('returns null when the detail request fails after an exact match', async () => {
+    const fetcher = opbFetcher({
+      search: () => j({ results: [{ pid: 'monstera deliciosa', display_pid: 'Monstera deliciosa' }] }),
+      detail: () => new Response('', { status: 500 }),
+    });
+    expect(await fetchOpenPlantbookFacts('Monstera deliciosa', CREDS, fetcher, 'tok')).toBeNull();
+  });
+  it('returns facts on an exact match with a good detail response', async () => {
+    const fetcher = opbFetcher({
+      search: () => j({ results: [{ pid: 'monstera deliciosa', display_pid: 'Monstera deliciosa' }] }),
+      detail: () => j({ min_temp: 12, max_temp: 32 }),
+    });
+    const facts = await fetchOpenPlantbookFacts('Monstera deliciosa', CREDS, fetcher, 'tok');
+    expect(facts).not.toBeNull();
+    expect(facts!.find((f) => f.attribute === 'temperature_c')).toMatchObject({ valueMin: 12, valueMax: 32 });
   });
 });

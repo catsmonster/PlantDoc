@@ -125,12 +125,14 @@ const INDOOR_RANGE_LABELS: { attribute: string; label: string }[] = [
 function extractCommunityRanges(facts: CareFact[]): CommunityRange[] {
   const ranges: CommunityRange[] = [];
   for (const { attribute, label } of INDOOR_RANGE_LABELS) {
-    const f = facts.find(
-      (x) =>
-        x.attribute === attribute &&
-        x.trust === 'community_unverified' &&
-        x.valueMin !== undefined &&
-        x.valueMax !== undefined,
+    const f = pickBest(
+      facts.filter(
+        (x) =>
+          x.attribute === attribute &&
+          x.trust === 'community_unverified' &&
+          x.valueMin !== undefined &&
+          x.valueMax !== undefined,
+      ),
     );
     if (f) {
       ranges.push({

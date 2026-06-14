@@ -2,7 +2,23 @@ import { describe, expect, it } from 'vitest';
 import {
   pickPermapeopleMatch,
   parsePermapeopleCultivationFacts,
+  fetchPermapeopleFacts,
 } from '../../src/lib/knowledge/permapeople';
+
+const CREDS = { keyId: 'k', secret: 's' };
+
+/** Fake fetch routing Permapeople endpoints by URL substring. */
+function ppFetcher(routes: { search?: () => Response; detail?: () => Response }): typeof fetch {
+  return (async (url: string | URL) => {
+    const u = String(url);
+    if (u.endsWith('/search')) return routes.search?.() ?? new Response('', { status: 500 });
+    if (u.includes('/plants/')) return routes.detail?.() ?? new Response('', { status: 500 });
+    throw new Error(`unexpected url ${u}`);
+  }) as unknown as typeof fetch;
+}
+
+const j = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('pickPermapeopleMatch', () => {
   it('returns the id whose scientific_name matches exactly', () => {
@@ -47,5 +63,32 @@ describe('parsePermapeopleCultivationFacts', () => {
   it('returns [] for a malformed detail', () => {
     expect(parsePermapeopleCultivationFacts(null)).toEqual([]);
     expect(parsePermapeopleCultivationFacts({ data: 'nope' })).toEqual([]);
+  });
+});
+
+describe('fetchPermapeopleFacts failure vs empty', () => {
+  it('returns null (not []) when the search request fails, so a rate-limited run never clears good data', async () => {
+    const fetcher = ppFetcher({ search: () => new Response('rate limited', { status: 429 }) });
+    expect(await fetchPermapeopleFacts('Monstera deliciosa', CREDS, fetcher)).toBeNull();
+  });
+  it('returns [] (genuine no data) when search succeeds but nothing matches exactly', async () => {
+    const fetcher = ppFetcher({ search: () => j({ plants: [{ id: 1, scientific_name: 'Other plant' }] }) });
+    expect(await fetchPermapeopleFacts('Monstera deliciosa', CREDS, fetcher)).toEqual([]);
+  });
+  it('returns null when the detail request fails after an exact match', async () => {
+    const fetcher = ppFetcher({
+      search: () => j({ plants: [{ id: 42, scientific_name: 'Monstera deliciosa' }] }),
+      detail: () => new Response('', { status: 500 }),
+    });
+    expect(await fetchPermapeopleFacts('Monstera deliciosa', CREDS, fetcher)).toBeNull();
+  });
+  it('returns facts on an exact match with a good detail response', async () => {
+    const fetcher = ppFetcher({
+      search: () => j({ plants: [{ id: 42, scientific_name: 'Monstera deliciosa' }] }),
+      detail: () => j({ data: [{ key: 'Growth', value: 'Fast' }] }),
+    });
+    const facts = await fetchPermapeopleFacts('Monstera deliciosa', CREDS, fetcher);
+    expect(facts).not.toBeNull();
+    expect(facts!.find((f) => f.attribute === 'growth_rate')).toMatchObject({ valueText: 'Fast' });
   });
 });

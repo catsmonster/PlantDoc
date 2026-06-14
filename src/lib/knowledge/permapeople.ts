@@ -70,12 +70,19 @@ interface PermapeopleCreds {
   secret: string;
 }
 
-/** Resolves a species to Permapeople cultivation facts, or [] on any failure / no exact match. */
+/**
+ * Resolves a species to Permapeople cultivation facts. Distinguishes failure from
+ * absence so a batch loader never destroys good data on a flaky/rate-limited run:
+ * returns `null` when a request *fails* (non-ok response incl. HTTP 429 or a
+ * network error) and `[]` only when the call *succeeds* but there is no exact
+ * match or no cultivation traits. Loaders must skip (not clear) a species when
+ * this returns `null`.
+ */
 export async function fetchPermapeopleFacts(
   scientificName: string,
   creds: PermapeopleCreds,
   fetcher: typeof fetch = fetch,
-): Promise<CareFact[]> {
+): Promise<CareFact[] | null> {
   const headers = {
     'x-permapeople-key-id': creds.keyId,
     'x-permapeople-key-secret': creds.secret,
@@ -87,14 +94,14 @@ export async function fetchPermapeopleFacts(
       headers,
       body: JSON.stringify({ q: scientificName }),
     });
-    if (!searchRes.ok) return [];
+    if (!searchRes.ok) return null;
     const searchJson = (await searchRes.json()) as { plants?: PlantSummary[] };
     const id = pickPermapeopleMatch(searchJson.plants ?? [], scientificName);
-    if (id === null) return [];
+    if (id === null) return []; // searched successfully, genuinely no exact match
     const detailRes = await fetcher(`${PERMAPEOPLE_BASE}/plants/${id}`, { headers });
-    if (!detailRes.ok) return [];
+    if (!detailRes.ok) return null;
     return parsePermapeopleCultivationFacts(await detailRes.json());
   } catch {
-    return [];
+    return null;
   }
 }
