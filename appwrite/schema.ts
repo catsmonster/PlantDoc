@@ -390,7 +390,7 @@ export const TABLES: TableDef[] = [
   },
   {
     id: 'moisture_feedback',
-    name: 'Moisture feedback',
+    name: 'Moisture Feedback',
     permissions: ['create:users'],
     rowSecurity: true,
     columns: [
