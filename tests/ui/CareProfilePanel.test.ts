@@ -88,12 +88,13 @@ describe('CareProfilePanel omits absent facts', () => {
     expect(html).toContain('Fast');
   });
 
-  it('does not attribute a source whose facts are all absent', () => {
+  it('attributes the scientific name source even when its fact rows are absent', () => {
     const html = renderToStaticMarkup(
       createElement(CareProfilePanel, { profile: minedOnly, units: 'metric', isDark: true }),
     );
-    // No visible fact is POWO-sourced, so POWO must not appear in the footer.
-    expect(html).not.toContain('Plants of the World Online');
+    // The POWO-sourced scientific name is visible in the intro, so its CC-BY
+    // attribution must remain in the footer even when POWO fact rows are blank.
+    expect(html).toContain('Plants of the World Online');
   });
 
   it('still renders a populated editorial fact and its source', () => {

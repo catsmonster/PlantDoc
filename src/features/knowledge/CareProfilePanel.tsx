@@ -79,11 +79,10 @@ function buildFacts(profile: SpeciesCareProfile, units: Units): Fact[] {
   return candidates.filter((f): f is Fact => f !== null);
 }
 
-/** Sources cited by the *visible* facts plus the mined blocks — so the footer
- *  never attributes a source (e.g. the name authority) whose fields were all
- *  absent and therefore rendered nothing. */
+/** Sources cited by the visible scientific name, fact rows, and mined blocks. */
 function usedSources(facts: Fact[], profile: SpeciesCareProfile): KnowledgeSource[] {
   const ids = new Set<string>([
+    profile.nameSourceId,
     ...facts.map((f) => f.sourceId),
     ...(profile.communityRanges ?? []).map((r) => r.sourceId),
     ...(profile.cultivationFacts ?? []).map((c) => c.sourceId),

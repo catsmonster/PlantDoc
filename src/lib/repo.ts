@@ -26,6 +26,7 @@ import type {
  */
 
 const db = DATABASE_ID;
+const SPECIES_PAGE_LIMIT = 1000;
 
 // ---------- profiles ----------
 
@@ -73,12 +74,16 @@ export async function listSpecies(): Promise<Species[]> {
   const rows: Species[] = [];
   let cursor: string | undefined;
   for (;;) {
-    const queries = [Query.limit(100), Query.select(['$id', 'scientific_name', 'common_names'])];
+    const queries = [
+      Query.limit(SPECIES_PAGE_LIMIT),
+      Query.orderAsc('scientific_name'),
+      Query.select(['$id', 'scientific_name', 'common_names']),
+    ];
     if (cursor) queries.push(Query.cursorAfter(cursor));
     const result = await tablesDB.listRows({ databaseId: db, tableId: 'species', queries });
     const page = result.rows as unknown as Species[];
     rows.push(...page);
-    if (page.length < 100) break;
+    if (page.length < SPECIES_PAGE_LIMIT) break;
     cursor = page[page.length - 1].$id;
   }
   return rows;
