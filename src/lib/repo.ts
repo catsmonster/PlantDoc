@@ -26,6 +26,7 @@ import type {
  */
 
 const db = DATABASE_ID;
+const SPECIES_PAGE_LIMIT = 1000;
 
 // ---------- profiles ----------
 
@@ -57,13 +58,35 @@ export async function createProfile(userId: string, input: ProfileInput): Promis
 
 // ---------- species (read-only catalog) ----------
 
+/**
+ * The full read-only species catalogue for onboarding, cursor-paginated so
+ * EVERY catalogued species is selectable. A fixed `limit` would hide species
+ * past the first page: the plant could never get a `species_id` relation for
+ * them, leaving their mined `care_facts` permanently unreachable in the UI. A
+ * light column select keeps the payload small (the form only needs the id,
+ * name, and common names).
+ *
+ * This loads the whole catalogue per form open, which is fine for a catalogue
+ * in the hundreds. Once it grows into the thousands, move suggestion ranking +
+ * `species_id` resolution server-side instead (see docs/knowledge-layer.md).
+ */
 export async function listSpecies(): Promise<Species[]> {
-  const result = await tablesDB.listRows({
-    databaseId: db,
-    tableId: 'species',
-    queries: [Query.orderAsc('scientific_name'), Query.limit(100)],
-  });
-  return result.rows as unknown as Species[];
+  const rows: Species[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const queries = [
+      Query.limit(SPECIES_PAGE_LIMIT),
+      Query.orderAsc('scientific_name'),
+      Query.select(['$id', 'scientific_name', 'common_names']),
+    ];
+    if (cursor) queries.push(Query.cursorAfter(cursor));
+    const result = await tablesDB.listRows({ databaseId: db, tableId: 'species', queries });
+    const page = result.rows as unknown as Species[];
+    rows.push(...page);
+    if (page.length < SPECIES_PAGE_LIMIT) break;
+    cursor = page[page.length - 1].$id;
+  }
+  return rows;
 }
 
 /**
