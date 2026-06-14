@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   buildWikidataSparqlUrl,
   parseWikidataCrossLinks,
+  fetchWikidataCrossLinks,
 } from '../../src/lib/knowledge/wikidata';
+
+const j = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 const FIXTURE = {
   results: {
@@ -55,5 +59,28 @@ describe('parseWikidataCrossLinks', () => {
   it('returns empty links for a malformed response', () => {
     expect(parseWikidataCrossLinks(null).ids).toEqual([]);
     expect(parseWikidataCrossLinks({}).qid).toBeNull();
+  });
+});
+
+describe('fetchWikidataCrossLinks failure vs empty', () => {
+  it('returns null (not empty links) when the request fails, so a re-run never clears good refs', async () => {
+    const failed = (async () => new Response('boom', { status: 503 })) as unknown as typeof fetch;
+    expect(await fetchWikidataCrossLinks('Monstera deliciosa', failed)).toBeNull();
+    const threw = (async () => {
+      throw new Error('offline');
+    }) as unknown as typeof fetch;
+    expect(await fetchWikidataCrossLinks('Monstera deliciosa', threw)).toBeNull();
+  });
+  it('returns parsed links on success', async () => {
+    const ok = (async () => j(FIXTURE)) as unknown as typeof fetch;
+    const links = await fetchWikidataCrossLinks('Monstera deliciosa', ok);
+    expect(links?.qid).toBe('Q161205');
+  });
+  it('returns an empty-but-non-null result when the query succeeds with no match', async () => {
+    const ok = (async () => j({ results: { bindings: [] } })) as unknown as typeof fetch;
+    const links = await fetchWikidataCrossLinks('Nonexistent plantus', ok);
+    expect(links).not.toBeNull();
+    expect(links!.qid).toBeNull();
+    expect(links!.ids).toEqual([]);
   });
 });

@@ -37,11 +37,21 @@ async function main(): Promise<void> {
 
   const catalog = await listAllSpecies(ctx.tablesDB, db);
   let total = 0;
+  let skipped = 0;
   for (const p of catalog) {
     const [wikidata, gbif] = await Promise.all([
       fetchWikidataCrossLinks(p.scientificName),
       matchGbifSpecies(p.scientificName),
     ]);
+    // Wikidata is the authoritative multi-catalog read (GBIF only supplements its
+    // usageKey). A null means the request failed, not that there's no match — skip
+    // so a transient blip never clears this species' existing refs.
+    if (wikidata === null) {
+      skipped++;
+      console.warn(`${p.slug}: wikidata fetch failed — keeping existing refs`);
+      await sleep(300);
+      continue;
+    }
     // Exact-match-or-nothing: only attach GBIF's usageKey when its canonical
     // name equals this species' name (the fuzzy match endpoint can drift).
     const rows = buildTaxonRefRows(p.slug, wikidata, exactGbifUsageKey(gbif, p.scientificName));
@@ -74,7 +84,9 @@ async function main(): Promise<void> {
     console.log(`${p.slug}: ${rows.length} refs`);
     await sleep(300); // be polite to the Wikidata Query Service
   }
-  console.log(`loaded ${total} taxon_references across ${catalog.length} species`);
+  console.log(
+    `loaded ${total} taxon_references across ${catalog.length} species (${skipped} skipped on fetch failure)`,
+  );
 }
 
 void main().catch((error) => {

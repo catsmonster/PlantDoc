@@ -78,12 +78,18 @@ export function parseWikidataCrossLinks(response: unknown): WikidataCrossLinks {
   };
 }
 
-/** Non-throwing live lookup. Returns empty links on network error or no match. */
+/**
+ * Non-throwing live lookup. Distinguishes failure from absence so a re-run never
+ * clears good cross-links: returns `null` when the request *fails* (empty name,
+ * non-ok response, or a network error) and a parsed result (with `qid: null` when
+ * there is genuinely no match) when the query *succeeds*. The loader skips (keeps
+ * existing refs) on `null`.
+ */
 export async function fetchWikidataCrossLinks(
   scientificName: string,
   fetcher: typeof fetch = fetch,
-): Promise<WikidataCrossLinks> {
-  if (!scientificName.trim()) return { qid: null, entityUrl: null, ids: [] };
+): Promise<WikidataCrossLinks | null> {
+  if (!scientificName.trim()) return null;
   try {
     const response = await fetcher(buildWikidataSparqlUrl(scientificName), {
       headers: {
@@ -91,10 +97,10 @@ export async function fetchWikidataCrossLinks(
         'User-Agent': 'PlantDoc/1.0 (open knowledge mining; +https://plantdoc.galvando.com)',
       },
     });
-    if (!response.ok) return { qid: null, entityUrl: null, ids: [] };
+    if (!response.ok) return null;
     const json: unknown = await response.json();
     return parseWikidataCrossLinks(json);
   } catch {
-    return { qid: null, entityUrl: null, ids: [] };
+    return null;
   }
 }
