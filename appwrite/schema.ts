@@ -389,6 +389,31 @@ export const TABLES: TableDef[] = [
     indexes: [{ key: 'idx_user_id', type: 'key', columns: ['user_id'] }],
   },
   {
+    id: 'moisture_feedback',
+    name: 'Moisture feedback',
+    permissions: ['create:users'],
+    rowSecurity: true,
+    columns: [
+      userId,
+      {
+        // Two-way so feedback hydrates through the plant select (relationship
+        // columns cannot be filtered); cascade so telemetry dies with its plant.
+        kind: 'relationship',
+        key: 'plant_id',
+        relatedTableId: 'plants',
+        relationType: 'manyToOne',
+        twoWay: true,
+        twoWayKey: 'moisture_feedback',
+        onDelete: 'cascade',
+      },
+      { kind: 'datetime', key: 'observed_at', required: true },
+      { kind: 'enum', key: 'estimate_feedback', elements: ['wetter', 'drier', 'correct'], required: true },
+      { kind: 'integer', key: 'magnitude', min: 1, max: 5 },
+      { kind: 'float', key: 'predicted_moisture_percent', min: 0, max: 100 },
+    ],
+    indexes: [{ key: 'idx_user_id', type: 'key', columns: ['user_id'] }],
+  },
+  {
     id: 'source_datasets',
     name: 'Source Datasets',
     permissions: ['read:users'],

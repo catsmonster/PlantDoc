@@ -231,6 +231,27 @@ labels, embeddings) are deferred pending an AI provider decision; their
 consent requirements are recorded in
 `docs/superpowers/specs/2026-06-10-phase-4-recommendations-design.md`.
 
+### `moisture_feedback`
+
+Added for the water-balance moisture inference engine. Per-plant model telemetry
+("was the estimate too wet, too dry, or correct?") used to evaluate and tune the
+estimator.
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `user_id` | string | yes | Owner Appwrite user ID. |
+| `plant_id` | relationship/string | yes | Two-way cascade (`plants.moisture_feedback`); telemetry is read through the plant and dies with it. |
+| `observed_at` | datetime | yes | When the feedback was given. |
+| `estimate_feedback` | enum/string | yes | `wetter`, `drier`, or `correct` — user's verdict on the model's moisture estimate. |
+| `magnitude` | integer | no | 1-5 scale, how far off the estimate felt. |
+| `predicted_moisture_percent` | float | no | 0-100, the model's estimate at the time of feedback. |
+
+**Private model telemetry, owner-scoped, never exported.** Unlike
+`measurements.soil_state` (an exportable observation when consented),
+`moisture_feedback` rows are not observations and are never reachable by the
+export pipeline — `plant_id` relates to `plants`, not `observations`, and the
+table is excluded from `PUBLIC_EXPORT_FIELDS` entirely.
+
 ## Open Plant Knowledge Tables
 
 Added in Phase 4A (slice B). Inbound open-knowledge reference data that powers the

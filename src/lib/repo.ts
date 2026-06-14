@@ -8,8 +8,10 @@ import { getSource } from './knowledge/sources';
 import type { SpeciesCareProfile } from './knowledge/care-profiles';
 import type {
   EnvironmentSnapshot,
+  EstimateFeedback,
   InsightFeedback,
   LightLevel,
+  MoistureFeedback,
   Observation,
   Plant,
   PlacementType,
@@ -461,6 +463,38 @@ export async function setInsightFeedback(
     permissions: ownerPermissions(userId),
   });
   return row as unknown as InsightFeedback;
+}
+
+// ---------- moisture feedback (private telemetry) ----------
+
+export interface MoistureFeedbackInput {
+  plantId: string;
+  observedAt: string;
+  estimate_feedback: EstimateFeedback;
+  magnitude?: number | null;
+  predicted_moisture_percent?: number | null;
+}
+
+/** Private model telemetry; owner-scoped, never part of EXPORTABLE_TYPES. */
+export async function createMoistureFeedback(
+  userId: string,
+  input: MoistureFeedbackInput,
+): Promise<MoistureFeedback> {
+  const row = await tablesDB.createRow({
+    databaseId: db,
+    tableId: 'moisture_feedback',
+    rowId: ID.unique(),
+    data: {
+      user_id: userId,
+      plant_id: input.plantId,
+      observed_at: input.observedAt,
+      estimate_feedback: input.estimate_feedback,
+      magnitude: input.magnitude ?? null,
+      predicted_moisture_percent: input.predicted_moisture_percent ?? null,
+    },
+    permissions: ownerPermissions(userId),
+  });
+  return row as unknown as MoistureFeedback;
 }
 
 // ---------- photos ----------

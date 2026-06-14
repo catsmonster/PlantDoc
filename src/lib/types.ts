@@ -56,6 +56,7 @@ export interface Plant extends RowMeta {
   location_id?: UserLocation | string | null;
   observations?: Observation[];
   insight_feedback?: InsightFeedback[];
+  moisture_feedback?: MoistureFeedback[];
   last_watered_at?: string | null;
   watering_count?: number | null;
   watering_cadence_days?: number | null;
@@ -72,6 +73,16 @@ export interface InsightFeedback extends RowMeta {
   user_id: string;
   insight_kind: string;
   helpful: boolean;
+}
+
+export type EstimateFeedback = 'wetter' | 'drier' | 'correct';
+
+export interface MoistureFeedback extends RowMeta {
+  user_id: string;
+  observed_at: string;
+  estimate_feedback: EstimateFeedback;
+  magnitude: number | null;
+  predicted_moisture_percent: number | null;
 }
 
 export type ObservationType =
