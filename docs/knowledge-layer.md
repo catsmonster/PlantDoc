@@ -46,6 +46,7 @@ CC BY-NC, no-license, or scraped web content.
 | `src/lib/knowledge/care-profiles.ts` | 10-species editorial starter pack + the synchronous name index (`findCareProfile`, `careProfileForPlant`, `searchCareProfiles`) that keeps onboarding search instant/offline. The loader's editorial dataset; also the bundled fallback when a species has no table facts. |
 | `src/lib/knowledge/facts.ts` | The relational care-fact model (slice B). `composeCareProfile` shapes `care_facts` rows into `SpeciesCareProfile` with read-time precedence; `editorialProfileToFacts` adapts the bundled pack; `careFactsFromSpeciesRow` maps a hydrated Appwrite species row. |
 | `src/lib/knowledge/load-rows.ts` + `scripts/knowledge/load-knowledge.ts` | Pure row builders + the `knowledge:mine` admin script that upserts `source_datasets`, `species`, and `care_facts` for the editorial dataset (idempotent). |
+| `scripts/knowledge/catalog.ts` + `species-list.ts` + `scripts/knowledge/seed-species.ts` | Catalog builder (editorial pack + common-plants seed, deduped by slug) + cursor-paginated `listAllSpecies` table lister + the `knowledge:seed-species` admin script that upserts the catalog and source registry (slice 5). The extractor loaders read the table via `listAllSpecies`, so this is the one place that decides which species the mine covers. |
 | `src/lib/knowledge/gbif.ts` | GBIF backbone name resolution (taxonomy only, never care inference). Pure URL builder + parser, plus a non-throwing fetch wrapper. |
 | `src/lib/knowledge/wikidata.ts` | Wikidata cross-link extractor (slice 2). SPARQL URL builder + parser + non-throwing fetch wrapper; maps a taxon name to its QID and its IDs in GBIF/USDA/POWO/IPNI/EOL. CC0, so cross-links inherit no share-alike obligation. Admin-script use only (sets a User-Agent). |
 | `src/lib/knowledge/taxon-refs.ts` + `scripts/knowledge/load-cross-links.ts` | Pure `taxon_references` row builder (deduped by species+source, GBIF match preferred over Wikidata P846) + the `knowledge:cross-links` admin script that resolves each species' cross-links live from Wikidata + GBIF and upserts them (idempotent). |
@@ -60,10 +61,21 @@ composed by `facts.ts`. The bundled `CARE_PROFILES` is retained as the editorial
 seed and as the offline fallback / onboarding name index. The three-care-layers
 separation below is unchanged.
 
+**Which species exist (slice 5):** the `species` table is the single authority
+for the mine's scope. `scripts/knowledge/catalog.ts` builds the catalog (10-species
+editorial pack + the deduped common-plants seed), and `knowledge:seed-species`
+upserts it (by slug) alongside the source registry. Every extractor loader then
+reads the table via `listAllSpecies` rather than the bundled pack, so **growing
+coverage is just growing the seed and re-running the loaders** — the pipeline
+scales to whatever the table holds. Latest live mine (2026-06-13): **80 species,
+426 taxon_references, 613 care_facts** (OpenPlantbook 300 / 60 species,
+Permapeople 209 / 37 species, editorial 94 / 10 species, POWO 10 / 10 species).
+
 Tests: `tests/lib/knowledge.test.ts`, `tests/lib/knowledge-facts.test.ts`,
 `tests/lib/knowledge-load-rows.test.ts`, `tests/lib/knowledge-wikidata.test.ts`,
 `tests/lib/knowledge-taxon-refs.test.ts`, `tests/lib/knowledge-openplantbook.test.ts`,
-`tests/lib/knowledge-permapeople.test.ts`, `tests/ui/CareProfilePanel.test.ts`.
+`tests/lib/knowledge-permapeople.test.ts`, `tests/lib/knowledge-catalog.test.ts`,
+`tests/ui/CareProfilePanel.test.ts`.
 
 ## The three care layers stay distinct
 
