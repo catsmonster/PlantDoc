@@ -27,3 +27,20 @@ export function waterCapacityMl(spec: PotSpec): number {
   const capacity = volume * FIELD_CAPACITY[spec.substrate];
   return spec.drains ? capacity : capacity * 1.15;
 }
+
+export type Hemisphere = 'north' | 'south';
+
+/** Default indoor relative humidity (%) when unmeasured (spec §B.3). */
+export const INDOOR_DEFAULT_RH = 45;
+
+/**
+ * Indoor air temperature (°C) from a low-variance seasonal default (spec §B.3):
+ * ~25 in the warm half of the year, ~23 in the cool half. The warm half is
+ * May–Oct in the northern hemisphere, inverted in the south.
+ */
+export function seasonalIndoorTempC(iso: string, hemisphere: Hemisphere): number {
+  const month = new Date(iso).getUTCMonth() + 1; // 1–12
+  const northernWarm = month >= 5 && month <= 10;
+  const warm = hemisphere === 'north' ? northernWarm : !northernWarm;
+  return warm ? 25 : 23;
+}

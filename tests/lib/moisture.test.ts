@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { potSoilVolumeMl, waterCapacityMl } from '../../src/lib/moisture';
+import {
+  INDOOR_DEFAULT_RH,
+  potSoilVolumeMl,
+  seasonalIndoorTempC,
+  waterCapacityMl,
+} from '../../src/lib/moisture';
 
 describe('pot geometry', () => {
   it('volume of a 12×10 cm pot is ~960 ml', () => {
@@ -11,5 +16,19 @@ describe('pot geometry', () => {
     const std = waterCapacityMl({ ...p, substrate: 'standard', drains: true });
     expect(std).toBeGreaterThan(waterCapacityMl({ ...p, substrate: 'succulent_gritty', drains: true }));
     expect(waterCapacityMl({ ...p, substrate: 'standard', drains: false })).toBeGreaterThan(std);
+  });
+});
+
+describe('seasonal indoor climate', () => {
+  it('northern hemisphere is warm May–Oct, cool otherwise', () => {
+    expect(seasonalIndoorTempC('2026-07-15', 'north')).toBe(25);
+    expect(seasonalIndoorTempC('2026-01-15', 'north')).toBe(23);
+  });
+  it('southern hemisphere is inverted', () => {
+    expect(seasonalIndoorTempC('2026-07-15', 'south')).toBe(23);
+    expect(seasonalIndoorTempC('2026-01-15', 'south')).toBe(25);
+  });
+  it('exposes an indoor default relative humidity', () => {
+    expect(INDOOR_DEFAULT_RH).toBe(45);
   });
 });
