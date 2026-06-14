@@ -49,6 +49,43 @@ describe('daily evapotranspiration', () => {
     expect(dailyEtMl({ ...base, light: 'bright' })).toBeGreaterThan(dailyEtMl({ ...base, light: 'medium' }));
     expect(dailyEtMl({ ...base, light: 'medium' })).toBeGreaterThan(dailyEtMl({ ...base, light: 'low' }));
   });
+
+  it('defaults canopy factor to one', () => {
+    const withoutCanopyFactor = {
+      capacityMl: base.capacityMl,
+      speciesDailyFraction: base.speciesDailyFraction,
+      tempC: base.tempC,
+      humidityPct: base.humidityPct,
+      light: base.light,
+    };
+
+    expect(dailyEtMl(withoutCanopyFactor)).toBeCloseTo(dailyEtMl({ ...withoutCanopyFactor, canopyFactor: 1 }));
+    expect(dailyEtMl({ ...withoutCanopyFactor, canopyFactor: 1.5 })).toBeGreaterThan(
+      dailyEtMl(withoutCanopyFactor),
+    );
+  });
+
+  it('clamps temperature factor at its minimum and maximum', () => {
+    const neutral = { ...base, tempC: 20, humidityPct: 50 };
+    const neutralEt = dailyEtMl(neutral);
+
+    expect(dailyEtMl({ ...neutral, tempC: -20 })).toBeCloseTo(neutralEt * 0.3);
+    expect(dailyEtMl({ ...neutral, tempC: -40 })).toBeCloseTo(dailyEtMl({ ...neutral, tempC: -20 }));
+    expect(dailyEtMl({ ...neutral, tempC: 100 })).toBeCloseTo(neutralEt * 2.5);
+    expect(dailyEtMl({ ...neutral, tempC: 120 })).toBeCloseTo(dailyEtMl({ ...neutral, tempC: 100 }));
+  });
+
+  it('clamps relative humidity factor at its minimum and maximum', () => {
+    const neutral = { ...base, tempC: 20, humidityPct: 50 };
+    const neutralEt = dailyEtMl(neutral);
+
+    expect(dailyEtMl({ ...neutral, humidityPct: 200 })).toBeCloseTo(neutralEt * 0.4);
+    expect(dailyEtMl({ ...neutral, humidityPct: 250 })).toBeCloseTo(dailyEtMl({ ...neutral, humidityPct: 200 }));
+    expect(dailyEtMl({ ...neutral, humidityPct: -50 })).toBeCloseTo(neutralEt * 1.8);
+    expect(dailyEtMl({ ...neutral, humidityPct: -100 })).toBeCloseTo(
+      dailyEtMl({ ...neutral, humidityPct: -50 }),
+    );
+  });
 });
 
 describe('seasonal indoor climate', () => {
