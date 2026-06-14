@@ -37,6 +37,12 @@ export const LIGHT_FACTOR: Record<LightLevel, number> = {
   direct_sun: 1.5,
 };
 
+export interface DayClimate {
+  tempC: number;
+  humidityPct: number;
+  light: LightLevel;
+}
+
 export interface EtInputs {
   capacityMl: number;
   speciesDailyFraction: number;
@@ -58,6 +64,155 @@ export function dailyEtMl(inputs: EtInputs): number {
   const canopyFactor = inputs.canopyFactor ?? 1;
 
   return base * tempFactor * humidityFactor * LIGHT_FACTOR[inputs.light] * canopyFactor;
+}
+
+export interface WateringEvent {
+  observedAtMs: number;
+  amountMl?: number | null;
+}
+
+export interface WaterContentCorrection {
+  observedAtMs: number;
+  waterContentMl: number;
+}
+
+export interface SimInput {
+  pot: PotSpec;
+  startMs: number;
+  endMs: number;
+  waterings: WateringEvent[];
+  dailyClimate: (iso: string) => DayClimate;
+  speciesDailyFraction: number;
+  canopyFactor?: number;
+  corrections: WaterContentCorrection[];
+  repotBoundaryMs?: number;
+}
+
+export interface SimResult {
+  waterContentMl: number;
+  capacityMl: number;
+  residualMl: number;
+  lowConfidenceStart: boolean;
+}
+
+type TimelineEvent =
+  | {
+      kind: 'watering';
+      observedAtMs: number;
+      amountMl?: number | null;
+    }
+  | {
+      kind: 'correction';
+      observedAtMs: number;
+      waterContentMl: number;
+    };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const RESIDUAL_FRACTION = 0.05;
+const UNKNOWN_WATERING_FRACTION = 0.4;
+const UNKNOWN_REPOT_WATER_FRACTION = 0.5;
+
+function dateIso(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** Indoor water-balance simulation from the latest watering/repot/window boundary. */
+export function simulateWaterContent(input: SimInput): SimResult {
+  const capacityMl = waterCapacityMl(input.pot);
+  const residualMl = capacityMl * RESIDUAL_FRACTION;
+  const lastWateringMs = input.waterings.reduce(
+    (latest, watering) =>
+      watering.observedAtMs <= input.endMs ? Math.max(latest, watering.observedAtMs) : latest,
+    Number.NEGATIVE_INFINITY,
+  );
+  const activeRepotBoundaryMs =
+    input.repotBoundaryMs !== undefined && input.repotBoundaryMs <= input.endMs
+      ? input.repotBoundaryMs
+      : Number.NEGATIVE_INFINITY;
+  const boundaryMs = Math.max(input.startMs, lastWateringMs, activeRepotBoundaryMs);
+  const hasWateringAtOrAfterBoundary = input.waterings.some(
+    (watering) => watering.observedAtMs >= boundaryMs && watering.observedAtMs <= input.endMs,
+  );
+  const lowConfidenceStart = !hasWateringAtOrAfterBoundary && activeRepotBoundaryMs === boundaryMs;
+  let waterContentMl = hasWateringAtOrAfterBoundary
+    ? residualMl
+    : lowConfidenceStart
+      ? capacityMl * UNKNOWN_REPOT_WATER_FRACTION
+      : residualMl;
+
+  const events: TimelineEvent[] = [
+    ...input.waterings.map(
+      (watering): TimelineEvent => ({
+        kind: 'watering',
+        observedAtMs: watering.observedAtMs,
+        amountMl: watering.amountMl,
+      }),
+    ),
+    ...input.corrections.map(
+      (correction): TimelineEvent => ({
+        kind: 'correction',
+        observedAtMs: correction.observedAtMs,
+        waterContentMl: correction.waterContentMl,
+      }),
+    ),
+  ]
+    .filter((event) => event.observedAtMs >= boundaryMs && event.observedAtMs <= input.endMs)
+    .sort((a, b) => {
+      const timeOrder = a.observedAtMs - b.observedAtMs;
+      if (timeOrder !== 0) {
+        return timeOrder;
+      }
+      if (a.kind === b.kind) {
+        return 0;
+      }
+      return a.kind === 'watering' ? -1 : 1;
+    });
+
+  let nextEventIndex = 0;
+  const applyEventsThrough = (throughMs: number) => {
+    while (nextEventIndex < events.length && events[nextEventIndex].observedAtMs <= throughMs) {
+      const event = events[nextEventIndex];
+      if (event.kind === 'watering') {
+        waterContentMl = Math.min(
+          capacityMl,
+          waterContentMl + (event.amountMl ?? capacityMl * UNKNOWN_WATERING_FRACTION),
+        );
+      } else {
+        waterContentMl = clamp(event.waterContentMl, residualMl, capacityMl);
+      }
+      nextEventIndex += 1;
+    }
+  };
+
+  applyEventsThrough(boundaryMs);
+
+  let cursorMs = boundaryMs;
+  while (cursorMs + DAY_MS <= input.endMs) {
+    const climate = input.dailyClimate(dateIso(cursorMs));
+    waterContentMl = Math.max(
+      residualMl,
+      waterContentMl -
+        dailyEtMl({
+          capacityMl,
+          speciesDailyFraction: input.speciesDailyFraction,
+          tempC: climate.tempC,
+          humidityPct: climate.humidityPct,
+          light: climate.light,
+          canopyFactor: input.canopyFactor,
+        }),
+    );
+    cursorMs += DAY_MS;
+    applyEventsThrough(cursorMs);
+  }
+
+  applyEventsThrough(input.endMs);
+
+  return {
+    waterContentMl: clamp(waterContentMl, residualMl, capacityMl),
+    capacityMl,
+    residualMl,
+    lowConfidenceStart,
+  };
 }
 
 export type Hemisphere = 'north' | 'south';

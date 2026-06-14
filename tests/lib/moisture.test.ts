@@ -4,6 +4,7 @@ import {
   INDOOR_DEFAULT_RH,
   potSoilVolumeMl,
   seasonalIndoorTempC,
+  simulateWaterContent,
   waterCapacityMl,
 } from '../../src/lib/moisture';
 
@@ -99,5 +100,145 @@ describe('seasonal indoor climate', () => {
   });
   it('exposes an indoor default relative humidity', () => {
     expect(INDOOR_DEFAULT_RH).toBe(45);
+  });
+});
+
+describe('water-balance simulation', () => {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const atUtcNoon = (dayOfMonth: number) => Date.UTC(2026, 0, dayOfMonth, 12);
+  const pot = {
+    diameterCm: 12,
+    heightCm: 10,
+    substrate: 'standard',
+    drains: true,
+  } as const;
+  const capacityMl = waterCapacityMl(pot);
+  const residualMl = capacityMl * 0.05;
+  const dailyClimate = () => ({
+    tempC: 20,
+    humidityPct: 50,
+    light: 'medium',
+  }) as const;
+
+  it('keeps water content within capacity and residual bounds', () => {
+    const saturated = simulateWaterContent({
+      pot,
+      startMs: atUtcNoon(1),
+      endMs: atUtcNoon(2),
+      waterings: [{ observedAtMs: atUtcNoon(1), amountMl: capacityMl * 10 }],
+      dailyClimate,
+      speciesDailyFraction: 0.05,
+      corrections: [],
+    });
+
+    expect(saturated.waterContentMl).toBeLessThanOrEqual(saturated.capacityMl);
+
+    const driedDown = simulateWaterContent({
+      pot,
+      startMs: atUtcNoon(1),
+      endMs: atUtcNoon(60),
+      waterings: [{ observedAtMs: atUtcNoon(1), amountMl: capacityMl }],
+      dailyClimate,
+      speciesDailyFraction: 0.2,
+      corrections: [],
+    });
+
+    expect(driedDown.waterContentMl).toBeGreaterThanOrEqual(driedDown.residualMl);
+  });
+
+  it('dries down over time after the same watering', () => {
+    const baseInput = {
+      pot,
+      startMs: atUtcNoon(1),
+      waterings: [{ observedAtMs: atUtcNoon(1), amountMl: capacityMl }],
+      dailyClimate,
+      speciesDailyFraction: 0.05,
+      corrections: [],
+    };
+
+    const earlier = simulateWaterContent({
+      ...baseInput,
+      endMs: atUtcNoon(2),
+    });
+    const later = simulateWaterContent({
+      ...baseInput,
+      endMs: atUtcNoon(7),
+    });
+
+    expect(later.waterContentMl).toBeLessThan(earlier.waterContentMl);
+  });
+
+  it('applies corrections as forward overrides and clamps them to modeled bounds', () => {
+    const corrected = simulateWaterContent({
+      pot,
+      startMs: atUtcNoon(1),
+      endMs: atUtcNoon(2),
+      waterings: [{ observedAtMs: atUtcNoon(1), amountMl: capacityMl }],
+      dailyClimate,
+      speciesDailyFraction: 0,
+      corrections: [{ observedAtMs: atUtcNoon(2), waterContentMl: capacityMl * 0.3 }],
+    });
+
+    expect(corrected.waterContentMl).toBeCloseTo(capacityMl * 0.3);
+
+    const clampedWet = simulateWaterContent({
+      pot,
+      startMs: atUtcNoon(1),
+      endMs: atUtcNoon(1),
+      waterings: [],
+      dailyClimate,
+      speciesDailyFraction: 0,
+      corrections: [{ observedAtMs: atUtcNoon(1), waterContentMl: capacityMl * 2 }],
+    });
+
+    expect(clampedWet.waterContentMl).toBeCloseTo(capacityMl);
+
+    const clampedDry = simulateWaterContent({
+      pot,
+      startMs: atUtcNoon(1),
+      endMs: atUtcNoon(1),
+      waterings: [],
+      dailyClimate,
+      speciesDailyFraction: 0,
+      corrections: [{ observedAtMs: atUtcNoon(1), waterContentMl: 0 }],
+    });
+
+    expect(clampedDry.waterContentMl).toBeCloseTo(residualMl);
+  });
+
+  it('starts from the repot boundary and seeds unknown fresh substrate as moist', () => {
+    const repotMs = atUtcNoon(10);
+    const result = simulateWaterContent({
+      pot,
+      startMs: atUtcNoon(1),
+      endMs: repotMs,
+      waterings: [{ observedAtMs: atUtcNoon(5), amountMl: capacityMl * 10 }],
+      dailyClimate,
+      speciesDailyFraction: 0.05,
+      corrections: [],
+      repotBoundaryMs: repotMs,
+    });
+
+    expect(result.waterContentMl).toBeCloseTo(capacityMl * 0.5);
+    expect(result.lowConfidenceStart).toBe(true);
+  });
+
+  it('uses a watering at or after a repot instead of the moist default seed', () => {
+    const repotMs = atUtcNoon(10);
+    const wateringMs = repotMs + dayMs;
+    const result = simulateWaterContent({
+      pot,
+      startMs: atUtcNoon(1),
+      endMs: wateringMs,
+      waterings: [{ observedAtMs: wateringMs, amountMl: null }],
+      dailyClimate,
+      speciesDailyFraction: 0.05,
+      corrections: [],
+      repotBoundaryMs: repotMs,
+    });
+
+    expect(result.lowConfidenceStart).toBe(false);
+    expect(result.waterContentMl).toBeCloseTo(residualMl + capacityMl * 0.4);
+    expect(result.waterContentMl).toBeLessThan(capacityMl * 0.5);
   });
 });
