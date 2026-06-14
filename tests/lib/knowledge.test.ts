@@ -15,6 +15,7 @@ import {
 } from '../../src/lib/knowledge/sources';
 import {
   buildGbifMatchUrl,
+  exactGbifUsageKey,
   matchGbifSpecies,
   parseGbifMatch,
   summarizeGbifMatch,
@@ -178,6 +179,30 @@ describe('GBIF taxonomy resolution', () => {
     expect(match?.usageKey).toBe(2868095);
     expect(fetcher).toHaveBeenCalledOnce();
     expect(String(fetcher.mock.calls[0][0])).toContain('strict=false');
+  });
+
+  it('exactGbifUsageKey returns the key only on an exact (normalized) canonical match', () => {
+    const base: GbifMatch = {
+      scientificName: 'Monstera deliciosa Liebm.',
+      canonicalName: 'Monstera deliciosa',
+      rank: 'SPECIES',
+      status: 'ACCEPTED',
+      usageKey: 2868095,
+      confidence: 97,
+      family: 'Araceae',
+      genus: 'Monstera',
+    };
+    // Exact canonical match (author in scientificName is ignored).
+    expect(exactGbifUsageKey(base, 'Monstera deliciosa')).toBe(2868095);
+    expect(exactGbifUsageKey(base, '  monstera   deliciosa ')).toBe(2868095);
+    // Hybrid sign folds: queried "x", GBIF canonical "×".
+    expect(
+      exactGbifUsageKey({ ...base, canonicalName: 'Mentha × piperita', usageKey: 2926500 }, 'Mentha x piperita'),
+    ).toBe(2926500);
+    // Fuzzy drift: GBIF resolved a different species — never attach it.
+    expect(exactGbifUsageKey({ ...base, canonicalName: 'Pilea cadierei' }, 'Pilea involucrata')).toBeNull();
+    // No match at all.
+    expect(exactGbifUsageKey(null, 'Monstera deliciosa')).toBeNull();
   });
 });
 

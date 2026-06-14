@@ -15,7 +15,7 @@ import { DATABASE_ID } from '../../appwrite/schema';
 import { createAdminContext } from '../appwrite/client';
 import { buildSourceRows } from '../../src/lib/knowledge/load-rows';
 import { fetchWikidataCrossLinks } from '../../src/lib/knowledge/wikidata';
-import { matchGbifSpecies } from '../../src/lib/knowledge/gbif';
+import { exactGbifUsageKey, matchGbifSpecies } from '../../src/lib/knowledge/gbif';
 import { buildTaxonRefRows } from '../../src/lib/knowledge/taxon-refs';
 import { listAllSpecies } from './species-list';
 
@@ -42,7 +42,9 @@ async function main(): Promise<void> {
       fetchWikidataCrossLinks(p.scientificName),
       matchGbifSpecies(p.scientificName),
     ]);
-    const rows = buildTaxonRefRows(p.slug, wikidata, gbif?.usageKey ?? null);
+    // Exact-match-or-nothing: only attach GBIF's usageKey when its canonical
+    // name equals this species' name (the fuzzy match endpoint can drift).
+    const rows = buildTaxonRefRows(p.slug, wikidata, exactGbifUsageKey(gbif, p.scientificName));
 
     const species = await ctx.tablesDB.getRow({
       databaseId: db,
