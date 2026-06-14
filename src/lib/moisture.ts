@@ -1,4 +1,6 @@
-import type { SubstrateType } from './types';
+import type { LightLevel, SubstrateType } from './types';
+
+export type { LightLevel } from './types';
 
 export interface PotSpec {
   diameterCm: number;
@@ -26,6 +28,36 @@ export function waterCapacityMl(spec: PotSpec): number {
   const volume = potSoilVolumeMl(spec.diameterCm, spec.heightCm);
   const capacity = volume * FIELD_CAPACITY[spec.substrate];
   return spec.drains ? capacity : capacity * 1.15;
+}
+
+export const LIGHT_FACTOR: Record<LightLevel, number> = {
+  low: 0.7,
+  medium: 1,
+  bright: 1.25,
+  direct_sun: 1.5,
+};
+
+export interface EtInputs {
+  capacityMl: number;
+  speciesDailyFraction: number;
+  tempC: number;
+  humidityPct: number;
+  light: LightLevel;
+  canopyFactor?: number;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Daily evapotranspiration in ml (spec §B.3). */
+export function dailyEtMl(inputs: EtInputs): number {
+  const base = inputs.capacityMl * inputs.speciesDailyFraction;
+  const tempFactor = clamp(1 + (inputs.tempC - 20) * 0.04, 0.3, 2.5);
+  const humidityFactor = clamp(1 + (50 - inputs.humidityPct) * 0.01, 0.4, 1.8);
+  const canopyFactor = inputs.canopyFactor ?? 1;
+
+  return base * tempFactor * humidityFactor * LIGHT_FACTOR[inputs.light] * canopyFactor;
 }
 
 export type Hemisphere = 'north' | 'south';
