@@ -116,6 +116,11 @@ function dateIso(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+function nextUtcDayBoundaryMs(ms: number): number {
+  const date = new Date(ms);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+}
+
 /** Indoor water-balance simulation from the latest watering/repot/window boundary. */
 export function simulateWaterContent(input: SimInput): SimResult {
   const capacityMl = waterCapacityMl(input.pot);
@@ -169,8 +174,8 @@ export function simulateWaterContent(input: SimInput): SimResult {
     });
 
   let nextEventIndex = 0;
-  const applyEventsThrough = (throughMs: number) => {
-    while (nextEventIndex < events.length && events[nextEventIndex].observedAtMs <= throughMs) {
+  const applyEventsAt = (timestampMs: number) => {
+    while (nextEventIndex < events.length && events[nextEventIndex].observedAtMs === timestampMs) {
       const event = events[nextEventIndex];
       if (event.kind === 'watering') {
         waterContentMl = Math.min(
@@ -184,10 +189,12 @@ export function simulateWaterContent(input: SimInput): SimResult {
     }
   };
 
-  applyEventsThrough(boundaryMs);
-
   let cursorMs = boundaryMs;
-  while (cursorMs + DAY_MS <= input.endMs) {
+  applyEventsAt(cursorMs);
+
+  while (cursorMs < input.endMs) {
+    const nextEventMs = events[nextEventIndex]?.observedAtMs ?? Number.POSITIVE_INFINITY;
+    const nextTimestampMs = Math.min(nextEventMs, nextUtcDayBoundaryMs(cursorMs), input.endMs);
     const climate = input.dailyClimate(dateIso(cursorMs));
     waterContentMl = Math.max(
       residualMl,
@@ -199,13 +206,13 @@ export function simulateWaterContent(input: SimInput): SimResult {
           humidityPct: climate.humidityPct,
           light: climate.light,
           canopyFactor: input.canopyFactor,
-        }),
+        }) *
+          ((nextTimestampMs - cursorMs) / DAY_MS),
     );
-    cursorMs += DAY_MS;
-    applyEventsThrough(cursorMs);
-  }
 
-  applyEventsThrough(input.endMs);
+    cursorMs = nextTimestampMs;
+    applyEventsAt(cursorMs);
+  }
 
   return {
     waterContentMl: clamp(waterContentMl, residualMl, capacityMl),

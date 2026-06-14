@@ -168,19 +168,36 @@ describe('water-balance simulation', () => {
     expect(later.waterContentMl).toBeLessThan(earlier.waterContentMl);
   });
 
-  it('applies corrections as forward overrides and clamps them to modeled bounds', () => {
+  it('applies corrections forward from their observation time', () => {
+    const startMs = atUtcNoon(1);
+    const correctionMs = startMs + 6 * 60 * 60 * 1000;
+    const endMs = correctionMs + dayMs;
+    const speciesDailyFraction = 0.1;
+    const correctionWaterContentMl = capacityMl * 0.6;
+    const expectedPostCorrectionEtMl =
+      dailyEtMl({
+        capacityMl,
+        speciesDailyFraction,
+        ...dailyClimate(),
+      }) *
+      ((endMs - correctionMs) / dayMs);
+
     const corrected = simulateWaterContent({
       pot,
-      startMs: atUtcNoon(1),
-      endMs: atUtcNoon(2),
-      waterings: [{ observedAtMs: atUtcNoon(1), amountMl: capacityMl }],
+      startMs,
+      endMs,
+      waterings: [{ observedAtMs: startMs, amountMl: capacityMl }],
       dailyClimate,
-      speciesDailyFraction: 0,
-      corrections: [{ observedAtMs: atUtcNoon(2), waterContentMl: capacityMl * 0.3 }],
+      speciesDailyFraction,
+      corrections: [{ observedAtMs: correctionMs, waterContentMl: correctionWaterContentMl }],
     });
 
-    expect(corrected.waterContentMl).toBeCloseTo(capacityMl * 0.3);
+    expect(corrected.waterContentMl).toBeCloseTo(
+      Math.max(residualMl, correctionWaterContentMl - expectedPostCorrectionEtMl),
+    );
+  });
 
+  it('clamps corrections to modeled bounds', () => {
     const clampedWet = simulateWaterContent({
       pot,
       startMs: atUtcNoon(1),
@@ -208,18 +225,29 @@ describe('water-balance simulation', () => {
 
   it('starts from the repot boundary and seeds unknown fresh substrate as moist', () => {
     const repotMs = atUtcNoon(10);
+    const endMs = repotMs + dayMs;
+    const speciesDailyFraction = 0.05;
+    const expectedDryDownMl =
+      capacityMl * 0.5 -
+      dailyEtMl({
+        capacityMl,
+        speciesDailyFraction,
+        ...dailyClimate(),
+      });
+
     const result = simulateWaterContent({
       pot,
       startMs: atUtcNoon(1),
-      endMs: repotMs,
+      endMs,
       waterings: [{ observedAtMs: atUtcNoon(5), amountMl: capacityMl * 10 }],
       dailyClimate,
-      speciesDailyFraction: 0.05,
+      speciesDailyFraction,
       corrections: [],
       repotBoundaryMs: repotMs,
     });
 
-    expect(result.waterContentMl).toBeCloseTo(capacityMl * 0.5);
+    expect(result.waterContentMl).toBeCloseTo(expectedDryDownMl);
+    expect(result.waterContentMl).toBeLessThan(capacityMl * 0.5);
     expect(result.lowConfidenceStart).toBe(true);
   });
 
@@ -240,5 +268,21 @@ describe('water-balance simulation', () => {
     expect(result.lowConfidenceStart).toBe(false);
     expect(result.waterContentMl).toBeCloseTo(residualMl + capacityMl * 0.4);
     expect(result.waterContentMl).toBeLessThan(capacityMl * 0.5);
+  });
+
+  it('uses the default pour when a watering amount is omitted', () => {
+    const wateringMs = atUtcNoon(12);
+    const result = simulateWaterContent({
+      pot,
+      startMs: atUtcNoon(1),
+      endMs: wateringMs,
+      waterings: [{ observedAtMs: wateringMs }],
+      dailyClimate,
+      speciesDailyFraction: 0.05,
+      corrections: [],
+    });
+
+    expect(result.lowConfidenceStart).toBe(false);
+    expect(result.waterContentMl).toBeCloseTo(residualMl + capacityMl * 0.4);
   });
 });
