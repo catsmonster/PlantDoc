@@ -12,9 +12,9 @@
 import { ID, Query } from 'node-appwrite';
 import { DATABASE_ID } from '../../appwrite/schema';
 import { createAdminContext } from '../appwrite/client';
-import { CARE_PROFILES } from '../../src/lib/knowledge/care-profiles';
 import { buildSourceRows } from '../../src/lib/knowledge/load-rows';
 import { fetchPermapeopleFacts } from '../../src/lib/knowledge/permapeople';
+import { listAllSpecies } from './species-list';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -43,8 +43,9 @@ async function main(): Promise<void> {
     data: ppRow,
   });
 
+  const catalog = await listAllSpecies(ctx.tablesDB, db);
   let total = 0;
-  for (const p of CARE_PROFILES) {
+  for (const p of catalog) {
     const facts = await fetchPermapeopleFacts(p.scientificName, creds);
     const species = await ctx.tablesDB.getRow({
       databaseId: db,

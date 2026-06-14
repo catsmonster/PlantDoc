@@ -12,9 +12,12 @@
 import { ID, Query } from 'node-appwrite';
 import { DATABASE_ID } from '../../appwrite/schema';
 import { createAdminContext } from '../appwrite/client';
-import { CARE_PROFILES } from '../../src/lib/knowledge/care-profiles';
 import { buildSourceRows } from '../../src/lib/knowledge/load-rows';
-import { fetchOpenPlantbookFacts } from '../../src/lib/knowledge/openplantbook';
+import {
+  fetchOpenPlantbookFacts,
+  fetchOpenPlantbookToken,
+} from '../../src/lib/knowledge/openplantbook';
+import { listAllSpecies } from './species-list';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -43,9 +46,14 @@ async function main(): Promise<void> {
     data: opbRow,
   });
 
+  // Auth once and reuse the token across the whole catalog.
+  const token = await fetchOpenPlantbookToken(creds);
+  if (!token) throw new Error('OpenPlantbook authentication failed (check credentials).');
+
+  const catalog = await listAllSpecies(ctx.tablesDB, db);
   let total = 0;
-  for (const p of CARE_PROFILES) {
-    const facts = await fetchOpenPlantbookFacts(p.scientificName, creds);
+  for (const p of catalog) {
+    const facts = await fetchOpenPlantbookFacts(p.scientificName, creds, fetch, token);
     const species = await ctx.tablesDB.getRow({
       databaseId: db,
       tableId: 'species',

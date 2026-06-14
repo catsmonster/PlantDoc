@@ -13,11 +13,11 @@
 import { ID, Query } from 'node-appwrite';
 import { DATABASE_ID } from '../../appwrite/schema';
 import { createAdminContext } from '../appwrite/client';
-import { CARE_PROFILES } from '../../src/lib/knowledge/care-profiles';
 import { buildSourceRows } from '../../src/lib/knowledge/load-rows';
 import { fetchWikidataCrossLinks } from '../../src/lib/knowledge/wikidata';
 import { matchGbifSpecies } from '../../src/lib/knowledge/gbif';
 import { buildTaxonRefRows } from '../../src/lib/knowledge/taxon-refs';
+import { listAllSpecies } from './species-list';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -35,8 +35,9 @@ async function main(): Promise<void> {
     });
   }
 
+  const catalog = await listAllSpecies(ctx.tablesDB, db);
   let total = 0;
-  for (const p of CARE_PROFILES) {
+  for (const p of catalog) {
     const [wikidata, gbif] = await Promise.all([
       fetchWikidataCrossLinks(p.scientificName),
       matchGbifSpecies(p.scientificName),
@@ -71,7 +72,7 @@ async function main(): Promise<void> {
     console.log(`${p.slug}: ${rows.length} refs`);
     await sleep(300); // be polite to the Wikidata Query Service
   }
-  console.log(`loaded ${total} taxon_references across ${CARE_PROFILES.length} species`);
+  console.log(`loaded ${total} taxon_references across ${catalog.length} species`);
 }
 
 void main().catch((error) => {
