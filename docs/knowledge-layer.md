@@ -67,9 +67,13 @@ editorial pack + the deduped common-plants seed), and `knowledge:seed-species`
 upserts it (by slug) alongside the source registry. Every extractor loader then
 reads the table via `listAllSpecies` rather than the bundled pack, so **growing
 coverage is just growing the seed and re-running the loaders** — the pipeline
-scales to whatever the table holds. Latest live mine (2026-06-13): **80 species,
-426 taxon_references, 613 care_facts** (OpenPlantbook 300 / 60 species,
-Permapeople 209 / 37 species, editorial 94 / 10 species, POWO 10 / 10 species).
+scales to whatever the table holds. Latest live mine (2026-06-13, 256-species
+catalog): **~259 species, 1,378 taxon_references, ~697 care_facts** (Permapeople
+503, editorial 94, OpenPlantbook 90, POWO 10). OpenPlantbook is rate-limit-capped
+at 90 (its free tier exhausts after a few hundred requests in a batch) — the
+hardened loader keeps the existing facts and the count tops up on a later re-run;
+this never blocks reads because every loader is idempotent and the bundled
+editorial pack is the fallback.
 
 Tests: `tests/lib/knowledge.test.ts`, `tests/lib/knowledge-facts.test.ts`,
 `tests/lib/knowledge-load-rows.test.ts`, `tests/lib/knowledge-wikidata.test.ts`,
