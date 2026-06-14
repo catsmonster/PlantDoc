@@ -1,114 +1,119 @@
 # Water-Balance Moisture Inference — Design
 
-**Status:** Draft for review · 2026-06-14
-**Roadmap:** Phase 4 (care intelligence), follows the Open Plant Knowledge Layer (Phase 4A, PR #10).
-**Related:** `docs/knowledge-layer.md` (mined `soil_moisture_percent` ranges feed this), `src/lib/insights.ts` (existing deterministic insights this coexists with).
+**Status:** Revised after code review · 2026-06-14
+**Roadmap:** Phase 4 (care intelligence), follows the Open Plant Knowledge Layer (Phase 4A, PR #10/#11).
+**Related:** `docs/knowledge-layer.md` (mined `soil_moisture_percent` band feeds this), `src/lib/insights.ts` (existing deterministic insights this coexists with), `scripts/export/transform.ts` (export boundary — see Privacy).
 
 ## Goal
 
-Estimate a potted plant's current **soil moisture** and turn it into an honest **watering recommendation** ("likely ~22% and drying — check in ~2 days" → "water now"), for the common case where the user has **no moisture meter**. The estimate is driven by a physics prior (pot size + species + seasonal climate + water added) and corrected by **behavior-independent ground truth** (a quick soil check, plant-health symptoms, optional meter logs) — explicitly *not* by how often the user waters.
+Estimate a potted **indoor** plant's soil moisture and turn it into an honest **watering recommendation** ("likely drying — near this species' dry side; check soon" → "water now"), for the common case where the user has **no moisture meter**. The estimate is a physics prior (pot size + seasonal indoor climate + logged water) corrected by **behavior-independent ground truth** (a soil check, optional meter logs, estimate feedback) — explicitly *not* by how often the user waters, and *not* by plant-health symptoms (a self-confirming loop, deferred).
 
-## Why physics-first, not watering-rhythm
+## Scope (tightened after review)
 
-A tempting calibrator is the user's observed watering interval. We reject it as a primary signal: if the model learns the dry-down rate from how often the user waters, and the user waters because the model told them to, that is a closed feedback loop that amplifies the user's existing over/under-watering bias with no ground truth to correct it. Watering frequency is kept only as a **weak sanity check** (flagging gross disagreement), never as a calibration input. Ground truth must reflect actual soil/plant state, independent of watering behavior.
+**v1 — indoor only.** Indoor (and greenhouse) plants use a low-variance **seasonal climate default** (~23 °C winter / 25 °C summer), so no per-day weather fetch is needed — which is exactly why the indoor case is the honest place to prove the model.
 
-## Architecture (units, with clear boundaries)
+**Deferred to v1.1+ (each needs the core model proven first):**
+- **Outdoor / balcony plants** — their evapotranspiration needs a *daily* temp/RH series across the dry-down window, but `environment_snapshots` are created only at log time (sparse). Requires a daily-weather series fetch.
+- **Rainfall ingestion** — depends on the outdoor daily series; rain is an unlogged watering that would otherwise skew outdoor estimates. (Toggle + model designed for, but not built in v1.)
+- **Health-symptom calibration** — using inferred moisture to explain ambiguous plant stress is a self-confirming loop; too risky until the base model is trustworthy.
+- Suggested watering **amount** (ml); predicted-dry **push notifications**.
+
+## Why physics-first, not watering-rhythm, not health
+
+A tempting calibrator is the user's watering interval — rejected: if the model learns the dry-down rate from how often the user waters, and the user waters because the model told them to, that closed loop amplifies their existing bias with no ground truth. **Health symptoms are rejected for v1 for the same reason** (attributing ambiguous stress to moisture using our own moisture estimate is circular). Calibration must come from signals that reflect actual soil state, independent of behavior and of our own output.
+
+## Architecture (units)
 
 | Unit | Responsibility | Purity |
 | --- | --- | --- |
-| **A. Pot & repot data model** | Pot dimensions + optional substrate/drainage/light on a plant; repotting updates current pot from that date. | Schema + repo glue |
-| **B. Moisture engine** (`src/lib/moisture.ts`) | Pure functions: soil volume, water capacity, daily evapotranspiration (ET), water-balance simulation over the timeline with ground-truth corrections, current-moisture estimate + confidence. | **Pure, fully unit-tested** |
-| **C. Ground-truth feedback** | Behavior-independent signals that calibrate B: an inline wetter/drier/spot-on tap on the recommendation + a standalone Dry/Moist/Wet soil check. | Schema + small UI |
-| **D. Recommendation + surfacing** | Compare estimate to the species' mined moisture band → recommendation + confidence; render as an insight (build first) and a hero gauge (fast-follow). | Pure rec logic + UI |
+| **A. Pot & repot data model** | Pot dimensions + optional substrate/drainage/light on a plant; repotting marks a simulation boundary. | Schema + repo glue |
+| **B. Moisture engine** (`src/lib/moisture.ts`) | Pure: soil volume, capacity, seasonal indoor climate, daily ET, water-balance simulation, internal moisture estimate + confidence, qualitative recommendation. | **Pure, fully unit-tested** |
+| **C. Ground-truth feedback** | Soil check (Dry/Moist/Wet, an observation) + estimate feedback (telemetry, private) calibrating B. | Schema + small UI |
+| **D. Recommendation + surfacing** | Map estimate → recommendation using species band as a prior; render insight (build first) + hero gauge. | Pure rec logic + UI |
 
-B is the heart and is pure/deterministic so it is testable without a backend, matching the project's "pure shaping is unit-tested; SDK glue is thin" convention.
+B is pure/deterministic so it is testable without a backend.
 
 ## A. Pot & repot data model
 
-New columns on `plants` (all nullable; only pot size is *encouraged* at creation):
-- `pot_diameter_cm: float` — top inner diameter.
-- `pot_height_cm: float` — soil depth.
-- `substrate_type: enum` — `standard` | `succulent_gritty` | `chunky_aroid` | `peat_seedling` (optional; default `standard`).
-- `pot_drains: boolean` — has drainage holes (optional; default `true`).
+New columns on `plants` (nullable; only pot size is *encouraged* at creation):
+- `pot_diameter_cm: float`, `pot_height_cm: float` — top inner diameter + soil depth.
+- `substrate_type: enum` — `standard` | `succulent_gritty` | `chunky_aroid` | `peat_seedling` (default `standard`).
+- `pot_drains: boolean` (default `true`).
 - `light_level: enum` — `low` | `medium` | `bright` | `direct_sun` (optional).
-- `rain_exposed: boolean` — offered for `outdoor`/`balcony` placements at onboarding ("Does rain reach this plant?"). Gates rainfall ingestion (Unit B). Default `false`; a covered balcony or porch plant stays off.
 
-**Repotting:** the `repotting` treatment (already exists) gains optional `amount_value`-style fields for the *new* pot size; on log, the repo updates the plant's current pot columns and stamps the change date so the engine recomputes capacity from that point. Pot history is reconstructable from the timeline (no separate table — YAGNI).
+*(`rain_exposed` is deferred with outdoor support.)*
 
-**Capture UX:** `PlantForm` gains a "Pot" group — diameter + height with a friendly default ("e.g. 12 cm"), and a collapsible "Improve accuracy" disclosure for substrate / drainage / light (the progressive-enhancement layer). Re-pot is logged from `LogSheet`'s existing repotting treatment.
+**Repot = a simulation boundary, not a history table.** Current pot lives on the plant. A `repotting` treatment's `observed_at` marks where the simulation restarts (fresh pot, from that date forward) with the *current* pot geometry; on repot the form updates the plant's pot columns. Because estimates are **recomputed on read** (no stored estimate), backdated or deleted repot logs need no invalidation rules — the next read simply uses the new inputs. No pot-history table in v1 (YAGNI); old geometry is not reconstructed.
 
-## B. Moisture engine (the model)
+**Capture UX:** `PlantForm` gains a "Pot" group — diameter + height (friendly default), and a collapsible "Improve accuracy" disclosure for substrate / drainage / light.
 
-All quantities derived per plant from its timeline. Units: ml, °C, days.
+## B. Moisture engine
 
-1. **Soil volume** `V` (ml) from pot dimensions, treated as a slightly tapered cylinder:
-   `V ≈ π · (d/2)² · h · 0.85` (the 0.85 accounts for taper + root/headspace), `d,h` in cm → ml.
+Units: ml, °C, days. Per plant, from its timeline.
 
-2. **Water-holding capacity** `C` (ml) = `V · θ_fc`, where `θ_fc` (field-capacity fraction) is substrate-dependent: `standard 0.35`, `peat_seedling 0.45`, `succulent_gritty 0.20`, `chunky_aroid 0.18`. Non-draining pots raise effective retention (water can't escape): multiply by `1.15`.
+1. **Soil volume** `V ≈ π·(d/2)²·h·0.85` (cm³ = ml; 0.85 = taper + root/headspace).
+2. **Capacity** `C = V · θ_fc`; `θ_fc`: `standard 0.35`, `peat_seedling 0.45`, `succulent_gritty 0.20`, `chunky_aroid 0.18`. Non-draining ×1.15.
+3. **Daily ET** `= base · f_temp(T) · f_rh(RH) · f_light(L) · f_size`, `base = C · speciesDailyFraction`. **Climate (v1):** indoor seasonal default — `seasonalIndoorTempC(date, hemisphere)` (23/25 °C), `INDOOR_DEFAULT_RH ≈ 45%`, light from `light_level` (default `medium`). Hemisphere from the user's location; none → northern.
+4. **Water-balance simulation** from the latest of {window start, last watering, **last repot**}:
+   - Watering event: `W += amount` (or, if unknown, default pour `0.4·C` flagged low-confidence). Cap at `C`; excess drains.
+   - Daily: `W -= ET(day)`, floored at residual `0.05·C`.
+   - Ground-truth corrections (below) override `W` forward at their timestamps.
 
-3. **Daily evapotranspiration** `ET` (ml/day) = `k · demand`:
-   - `demand` scales with **temperature**, **dryness of air (low humidity)**, **light**, and **plant size** (a bigger canopy in a small pot transpires more). A simple multiplicative form: `demand = base · f_temp(T) · f_rh(RH) · f_light(L) · f_size`.
-   - **Climate source by placement:** `indoor`/`greenhouse` use the **seasonal indoor default** (≈ 23 °C winter, 25 °C summer; season from date + hemisphere via the user's location; no location → 24 °C; RH default ~45%, light from `light_level` or `medium`). `outdoor`/`balcony` use the logged `environment_snapshots` weather (temp/humidity/photoperiod) nearest each day.
-   - `base` and the species demand level come from the mined **Permapeople `water_requirement`** (Dry/Moist/Wet) and **`soil_moisture_percent` band**; defaults when absent.
+### Moisture scale & thresholds (resolving the units mismatch)
 
-4. **Water-balance simulation** over the timeline:
-   - Start each watering event: `W += amount_value` (ml); if `amount_value` not logged, assume a default pour proportional to `C` (e.g. `0.4·C`) flagged as low-confidence. Cap `W` at `C`; excess drains (if `pot_drains`).
-   - **Rainfall** (only when `rain_exposed` and placement is `outdoor`/`balcony`): for each day in the window, add `rain_ml = precip_mm · pot_top_area_cm² · 0.1 · throughfall` (1 mm depth over 1 cm² = 0.1 ml; `throughfall ≈ 1` for an open pot, lower under dense foliage). Rain is the unlogged watering that would otherwise wreck outdoor estimates. Daily `precipitation_sum` comes from the existing Open-Meteo layer (see implementation note); cap at `C`, excess drains.
-   - Each day: `W -= ET(day)`, floored at a wilting residual (`0.05·C`).
-   - **Ground-truth corrections** applied at their observation timestamps (see below) *reset or nudge* `W`, overriding the simulation forward.
-   - **Current estimate:** `moisture% = clamp(W / C · 100, 0..100)`.
+The engine's **`moisture% = W / C`** is an **internal, relative scale**: percent of the pot's *modeled field capacity* (~5–100%). This is **not** the same quantity as a capacitive sensor reading or OpenPlantbook's `soil_moisture_percent` (`min_soil_moist`/`max_soil_moist`, device-relative) — those are uncalibrated to our capacity model. We therefore **never compare them as equal numbers**. Instead:
 
-**Implementation note (weather layer + purity boundary):** `src/lib/openmeteo.ts` already receives `precipitation_sum` in its daily response (used by `fetchClimateNormals`) but `fetchDailyWeather` doesn't request it. Add `precipitation_sum` to its daily vars and expose a small async range helper (the forecast endpoint already returns `past_days`/`forecast_days`; archive takes a date range) that returns a daily-rain series for the window in one or two calls. The **pure engine (Unit B) consumes that series as an input** (`dailyRainMm` keyed by ISO date) and never fetches — keeping it deterministic and offline-testable; the caller (repo glue) does the fetch for `rain_exposed` plants and passes it in. **No location-precision change** — see Risks.
+- **Thresholds live on the internal scale, anchored by the qualitative soil checks.** Dry/Moist/Wet ↔ internal capacity bands (`Dry ≈ 0.15·C`, `Moist ≈ 0.5·C`, `Wet ≈ 0.85·C`). `water_now` triggers as the estimate approaches the Dry anchor; `overwatered` near/above Wet. These anchors calibrate per-plant from the user's actual Dry/Moist/Wet observations.
+- **The mined `soil_moisture_percent` band is a coarse prior** — it nudges the species' default `speciesDailyFraction` and phrases guidance ("likes it on the drier/wetter side"), and is **not** a direct numeric threshold against the internal scale.
+- **Meter logs are approximate qualitative anchors, not direct percentages.** In v1 a logged sensor reading is bucketed (`<30%`→Dry, `30–70%`→Moist, `>70%`→Wet) onto the same capacity anchors as a soil check — never read as `pct = capacity%`. A true *learned* device→capacity mapping (from repeated readings) is deferred until the base model is proven.
 
-5. **Confidence** (Low/Med/High) from inputs present: pot size (required for any estimate), substrate/drainage/light set, count of ground-truth observations in the recent window, and whether recent waterings logged an amount. Each missing item widens the band and yields a concrete nudge ("add your pot's drainage to sharpen this").
+The recommendation is **qualitative first** (comfortable / drying / water-now / overwatered); the internal percent is shown only as an approximate, confidence-tagged figure.
 
-### Ground-truth calibration (behavior-independent)
+### Ground-truth calibration (behavior-independent; v1 set)
 
-Applied in priority order; these correct the simulation, watering frequency does not:
-- **Meter log** (`soil_moisture_percent` measurement): sets `W = pct/100 · C` at that timestamp. Strongest, but rare.
-- **Estimate feedback** (Unit C): a one-tap response *to the recommendation itself* — **wetter / drier / spot-on**, and when wetter/drier a **1–5 "how much" magnitude**. Converted to a *signed, sized* error against the predicted `W` at that moment (direction × magnitude → offset from prediction) and, accumulated, nudges `k`. Lowest-friction signal of all — it lives on the recommendation the user is already looking at — so it is the one users will actually give. Likely the dominant calibrator in practice.
-- **Soil check** (Unit C, Dry/Moist/Wet): an *absolute* finger-test, mapped to a `W` band (`Dry → ~0.15·C`, `Moist → ~0.5·C`, `Wet → ~0.85·C`). Over multiple checks it calibrates `k` so the simulated dry-down matches when "Dry" actually occurs. The no-meter anchor when the user proactively checks.
-- **Health symptoms** (coarse, v1-lite): a sharp `health_score` drop sustained while inferred moisture was high → nudge `θ_fc`/`k` toward "dries slower than modeled / likely overwatered"; the inverse for chronic low moisture + wilting. Precise symptom→cause attribution is **deferred**; v1 uses only a conservative nudge with a visible caveat.
+These correct the simulation; watering frequency and health symptoms do **not**.
+- **Soil check** (Dry/Moist/Wet): sets observed `W` to the matching anchor band; multiple checks calibrate the dry-down rate so the model's predicted "Dry" matches when the user actually finds it dry. The no-meter anchor.
+- **Estimate feedback** (telemetry; see Unit C): **wetter / drier / spot-on** *after the user checks the soil*, with a **1–5 magnitude**. Maps to observed `W = predicted ± m·step`, where `step = (0.85−0.15)·C / 5` (each step ≈ 14 % of the Dry→Wet span). `spot-on` ⇒ observed = predicted. Stored with `predicted_moisture_percent` so the signed, sized error is recoverable.
+- **Meter log** (`soil_moisture_percent`): bucketed to a qualitative anchor (above). Useful but rare; treated as approximate in v1.
 
-Estimate-feedback and soil-check are two entry points into the *same* correction path (both yield an observed `W` at a timestamp); the difference is only the question asked (relative vs. absolute) and where it is surfaced (on the recommendation vs. a standalone action).
+### Confidence
+
+Low/Med/High from inputs *actually* present: pot size, substrate set, ground-truth count in the recent window, and **a user-measured water amount** — where "measured" means the user entered an amount, **not** an accepted placeholder (the form must not pre-fill a default that counts as measured). Each missing item widens the band and yields one concrete enrichment nudge.
 
 ## C. Ground-truth feedback (no meter required)
 
-Both feedback flavors are stored on the existing **`measurements`** table (decision: reuse, not a new table — it is just another observed value alongside `soil_moisture_percent`, and keeps the timeline model simple):
-- `soil_state: enum(dry|moist|wet)` — the absolute finger-test ("Check soil" quick action on the plant screen).
-- `estimate_feedback: enum(wetter|drier|correct)` + `estimate_feedback_magnitude: int 1..5` (only meaningful when wetter/drier) — the one-tap response on the watering recommendation. Stored alongside `predicted_moisture_percent` (a snapshot of what we predicted at that moment) so the engine can reconstruct the **signed, sized** error without re-deriving the past estimate.
+Privacy split (measurements are exportable — `transform.ts` `EXPORTABLE_TYPES` includes `measurement`):
+- **`soil_state: enum(dry|moist|wet)` on `measurements`** — a genuine soil observation (like `soil_moisture_percent`); may be exported when consented. Captured via a "Check soil" quick action.
+- **A new private `moisture_feedback` table** — `user_id`, `plant_id`, `observed_at`, `estimate_feedback (wetter|drier|correct)`, `magnitude (1..5)`, `predicted_moisture_percent`. This is **model telemetry, not a plant observation**, so it is owner-scoped and **never exported** (it is not an observation type, so `EXPORTABLE_TYPES` excludes it by construction — locked by an export-exclusion test).
 
-**Prompts:** the recommendation insight carries the inline *wetter / drier / spot-on* tap; the plant screen also offers a standalone "Check soil" action with a Dry/Moist/Wet nudge ("Not sure? Finger in the top 2–3 cm"). Each is one tap.
-
-Together these are the mechanism that lets the model self-correct honestly **without a meter and without the watering-frequency loop**.
+**Prompts:** the recommendation insight carries an inline **"Check the soil, then: wetter / spot-on / drier (+ how much)"** — feedback is framed as *post-check*, so it stays independent ground truth, not a guess anchored to our number. The plant screen also has a standalone "Check soil" Dry/Moist/Wet action.
 
 ## D. Recommendation + surfacing
 
-- **Recommendation logic** (pure): compare current `moisture%` to the species' mined `soil_moisture_percent` band; the **low end is the water threshold**. Output a status (`comfortable` | `drying` | `water_now` | `overwatered`), a predicted dry-date (when the simulation crosses the threshold), and the confidence. Never overrides a directly logged measurement.
-- **Insight (build first):** a new `EXPERIMENTAL` insight in `src/lib/insights.ts`, coexisting with the existing care insights and the three knowledge layers (never replacing them). Carries the confidence chip, the single best enrichment nudge, and the inline **wetter / drier / spot-on** estimate-feedback tap (Unit C) so calibration happens right where the user reads the recommendation.
-- **Gauge (fast-follow):** a `MOISTURE` dial in the hero stat row beside `WATERED`/`CADENCE`, color-coded to status, tappable to the recommendation.
-
-## Scope
-
-**v1 (this spec):** Unit A (pot model + `rain_exposed` toggle + capture + repot), Unit B (engine: physics + rainfall ingestion + ground-truth calibration), Unit C (soil check + estimate feedback), Unit D insight + gauge. **Rainfall ingestion is a separable final slice** so the (majority) indoor case ships first; until it lands, a `rain_exposed` plant shows a low-confidence, caveated estimate rather than a wrong-but-confident one.
-
-**Deferred:** suggested watering **amount** (ml) recommendation; push notification when a plant is predicted dry; precise health-symptom → cause attribution; per-region indoor-climate averages beyond the 23/25 °C seasonal default.
+- **Recommendation (pure):** map the internal estimate to a status (`comfortable` | `drying` | `water_now` | `overwatered`) via the anchored thresholds; phrase with the species prior. Never overrides a directly logged measurement.
+- **Data path (explicit):** computed in `PlantScreen` from the **already-loaded table-backed `careProfile`** (`tableProfile`), reading `communityRanges` filtered to `soil_moisture_percent` for the species prior — *not* inside `plantInsights` (which only receives `plant, now, units`). Bundled-fallback profiles have no mined band → those plants use the default species prior at reduced confidence.
+- **Insight (build first):** a new `EXPERIMENTAL` insight, coexisting with `plantInsights` and the three knowledge layers (never replacing them); carries the confidence chip, one enrichment nudge, and the post-check feedback tap.
+- **Gauge (fast-follow):** a `MOISTURE` dial in the hero stat row beside `WATERED`/`CADENCE`, color-coded to status.
 
 ## Risks & decisions
 
-- **Indoor microclimate is modeled, not sensed** — accepted; the seasonal default is low-variance and ground-truth checks correct per-plant. Stated honestly via confidence.
-- **No feedback loop** — watering frequency is a weak sanity check only; calibration is behavior-independent. (Core design constraint.)
-- **Cold-start** — with only pot size and no ground truth, the estimate is physics-only at Low confidence; the UI nudges the first soil check / amount logging.
-- **Location stays city-level — and that is sufficient here.** Rainfall ingestion uses the existing captured location (a city centroid, rounded to ~1.1 km per `docs/privacy.md`). Open-Meteo's grid is ~9 km (archive) to ~1–11 km (forecast), i.e. **coarser than a city**, so precipitation is identical regardless of finer placement. This feature needs *which weather cell*, not a street address, so it neither needs nor is blocked by a finer location picker. (Separately, the location picker has its own known UX bug — the geocoder is populated-places-only and the "precision" control is actually a privacy-export tier; tracked as independent work, out of scope here.)
-- **Privacy/data** — all new fields live on the user's own `plants`/`observations` (owner-scoped, `user_id`-stamped); none enter the public export path (consistent with `docs/open-data.md`). The only new third-party traffic is daily-precipitation fetches for `rain_exposed` outdoor plants, via the Open-Meteo layer the app already uses for weather — no new vendor.
+- **Internal vs sensor scale** — engine % is capacity-fraction, anchored by qualitative checks; mined band is a prior; meter is a learned anchor. No raw cross-scale comparison. (Resolves review P1.)
+- **Indoor microclimate is modeled, not sensed** — accepted; the seasonal default is low-variance and ground-truth checks correct per-plant.
+- **No feedback loops** — watering frequency is a weak sanity check only; health-symptom calibration is deferred; estimate feedback is post-check.
+- **Privacy** — pot fields + `soil_state` live on owner-scoped rows; `soil_state` may export anonymized. Model telemetry (`moisture_feedback`) is a separate private table, never exported, with a guard test. No new third-party calls in v1 (indoor uses the seasonal default; no weather fetch).
+- **Cold-start** — pot size only, no ground truth → physics-only at Low confidence; UI nudges the first soil check.
 
 ## Testing
 
-- **Unit B** is pure → exhaustive unit tests: volume/capacity math, ET monotonicity (hotter/drier/brighter ⇒ faster dry-down), simulation conservation (never exceeds `C`, never below residual), rainfall ingestion (a rainy day raises `W`; ignored when `rain_exposed` is off or plant is indoor), each ground-truth correction (meter set, signed+sized estimate feedback, soil-check band, health nudge), confidence tiers, and the recommendation thresholds vs a species band. Fixture species: basil (`15–60%`). Daily rainfall is passed in as a series (not fetched by the engine), so Unit B stays pure/offline in tests.
-- **Recommendation logic** (Unit D pure part): status transitions + predicted dry-date.
-- **Repo/UI glue** stays thin; verified by the existing gate + a preview pass (add a plant with a pot, log a soil check, see the insight + gauge update).
+- **Unit B** is pure → exhaustive tests: volume/capacity; ET monotonicity (hotter/drier/brighter ⇒ faster); simulation conservation (≤ C, ≥ residual) and repot-boundary reset; each ground-truth correction (meter anchor, soil-check band, signed+sized estimate feedback); confidence tiers (incl. "measured amount" vs placeholder); recommendation thresholds vs the internal anchors with a species prior. Fixture: basil (mined band `15–60%` as the prior).
+- **Privacy guard:** a test asserting `moisture_feedback` rows never appear in `toPublicRow`/export output.
+- **Repo/UI glue** stays thin; verified by the gate + a preview pass (indoor plant: add pot, log a soil check, give post-check feedback, see insight + gauge update).
 
 ## Resolved decisions
 
-- **Ground-truth storage:** reuse the `measurements` table (`soil_state`, `estimate_feedback`, `predicted_moisture_percent` fields) — no new table.
-- **Estimate feedback** (wetter/drier/spot-on on the recommendation) is a first-class calibration input, expected to be the most-used one.
+- v1 is **indoor-only**; outdoor + rainfall + health-calibration deferred.
+- Engine moisture is an **internal capacity-fraction scale**; thresholds anchored to Dry/Moist/Wet; mined band is a prior; meter is a learned anchor.
+- **`soil_state` on `measurements`** (observation); **estimate feedback in a private `moisture_feedback` table** (telemetry, never exported).
+- Estimate feedback is **post-check**, with explicit magnitude→offset math.
+- **No measured-amount false confidence** — only user-entered amounts count.
+- **Repot = simulation boundary** on the current pot; no pot-history table.
