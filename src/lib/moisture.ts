@@ -353,7 +353,8 @@ const MOISTURE_INSIGHT_TITLE: Record<WateringStatus, string> = {
   overwatered: 'Soil looks waterlogged',
 };
 
-const MOISTURE_INSIGHT_STATUS_PHRASE: Record<WateringStatus, string> = {
+/** Short human phrase per status — reused by the insight detail and the Gemini estimate summary. */
+export const MOISTURE_INSIGHT_STATUS_PHRASE: Record<WateringStatus, string> = {
   water_now: 'likely dry enough to water',
   drying: 'drying down',
   comfortable: 'comfortably moist',
@@ -396,4 +397,22 @@ export function moistureInsight(
     // This is a model estimate, not an entry count — the card shows confidence, not an evidence tally.
     evidenceCount: 0,
   };
+}
+
+/** Status→accent color for the moisture %, per theme. Shared by the plant-detail
+ *  hero gauge and the home dashboard chip so both render on one scale. */
+export function moistureStatusColor(status: WateringStatus, isDark: boolean): string {
+  const dark: Record<WateringStatus, string> = {
+    comfortable: '#C7F24A',
+    drying: '#E0C56B',
+    water_now: '#E0A36B',
+    overwatered: '#7FC8E0',
+  };
+  const light: Record<WateringStatus, string> = {
+    comfortable: '#3C7140',
+    drying: '#A88A3C',
+    water_now: '#B07F57',
+    overwatered: '#3F7E91',
+  };
+  return (isDark ? dark : light)[status];
 }

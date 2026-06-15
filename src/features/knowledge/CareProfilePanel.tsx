@@ -94,22 +94,28 @@ export function CareProfilePanel({
   profile,
   units,
   isDark,
+  embedded = false,
 }: {
   profile: SpeciesCareProfile;
   units: Units;
   isDark: boolean;
+  /** When true, omit this panel's own header and card chrome — a parent
+   *  (e.g. Collapsible) supplies the section header and container. */
+  embedded?: boolean;
 }) {
   const facts = useMemo(() => buildFacts(profile, units), [profile, units]);
   const sources = useMemo(() => usedSources(facts, profile), [facts, profile]);
 
   if (isDark) {
     return (
-      <div style={{ marginTop: 30 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <span className="b-kicker">Species care guide</span>
-          <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.09)' }}></span>
-          <span className="mono" style={{ fontSize: 9.5, letterSpacing: '.1em', color: '#0E140F', background: '#C7F24A', padding: '3px 7px', borderRadius: 5 }}>SOURCED</span>
-        </div>
+      <div style={{ marginTop: embedded ? 0 : 30 }}>
+        {!embedded && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <span className="b-kicker">Species care guide</span>
+            <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.09)' }}></span>
+            <span className="mono" style={{ fontSize: 9.5, letterSpacing: '.1em', color: '#0E140F', background: '#C7F24A', padding: '3px 7px', borderRadius: 5 }}>SOURCED</span>
+          </div>
+        )}
         <p style={{ margin: '0 0 14px', fontSize: 13, color: '#9BAA98' }}>
           Reference facts for <em style={{ color: '#F2F6EF', fontStyle: 'normal', fontWeight: 600 }}>{profile.scientificName}</em>, separate from your own logs.
         </p>
@@ -169,12 +175,17 @@ export function CareProfilePanel({
   }
 
   return (
-    <div className="a-card a-rise" style={{ animationDelay: '40ms', marginTop: 16, borderRadius: 22, padding: '6px 18px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '15px 0 4px' }}>
-        <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#EBF1E7', color: '#3C7140', fontSize: 18 }}>🌿</span>
-        <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: '#23302A' }}>Species care guide</h3>
-        <span className="a-chip" style={{ background: '#EBF1E7', color: '#3C7140', padding: '3px 8px', fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 700 }}>Sourced</span>
-      </div>
+    <div
+      className={embedded ? undefined : 'a-card a-rise'}
+      style={embedded ? undefined : { animationDelay: '40ms', marginTop: 16, borderRadius: 22, padding: '6px 18px 16px' }}
+    >
+      {!embedded && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '15px 0 4px' }}>
+          <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#EBF1E7', color: '#3C7140', fontSize: 18 }}>🌿</span>
+          <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: '#23302A' }}>Species care guide</h3>
+          <span className="a-chip" style={{ background: '#EBF1E7', color: '#3C7140', padding: '3px 8px', fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 700 }}>Sourced</span>
+        </div>
+      )}
       <p style={{ margin: '0 0 6px', fontSize: 13, color: '#6B7568' }}>
         Reference facts for <em style={{ color: '#23302A', fontStyle: 'normal', fontWeight: 600 }}>{profile.scientificName}</em>, separate from your own logs.
       </p>

@@ -106,6 +106,18 @@ describe('CareProfilePanel omits absent facts', () => {
   });
 });
 
+describe('CareProfilePanel embedded mode', () => {
+  it.each([true, false])('omits its own header but keeps the facts (isDark=%s)', (isDark) => {
+    const html = renderToStaticMarkup(
+      createElement(CareProfilePanel, { profile: base, units: 'metric', isDark, embedded: true }),
+    );
+    expect(html).not.toContain('Species care guide'); // header suppressed for the parent Collapsible
+    expect(html).not.toContain('a-card'); // light card chrome suppressed too
+    expect(html).toContain('Araceae'); // facts still render
+    expect(html).toContain('every 7-10 days');
+  });
+});
+
 describe('CareProfilePanel cultivation block', () => {
   it.each([true, false])(
     'renders the Cultivation block with Permapeople CC-BY-SA attribution (isDark=%s)',

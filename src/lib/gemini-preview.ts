@@ -6,6 +6,10 @@ import type {
   Treatment,
   Units,
 } from './types';
+import type { Confidence, MoistureBand, WateringStatus } from './moisture';
+import { MOISTURE_INSIGHT_STATUS_PHRASE } from './moisture';
+import type { PlantMoisture } from './moisture-read';
+import type { SpeciesCareProfile } from './knowledge/care-profiles';
 
 export const GEMINI_PREVIEW_MODEL = 'gemini-3.5-flash';
 export const AI_PREVIEW_DAILY_LIMIT = 3;
@@ -56,6 +60,33 @@ export interface GeminiPreviewObservation {
   hasPhoto: boolean;
 }
 
+/** PlantDoc's own physics-based soil-moisture model output — a derived prior we
+ *  share with the model. Never carries the private `moisture_feedback` telemetry
+ *  it was calibrated from; only these derived, already-surfaced values leave the device. */
+export interface GeminiMoistureEstimate {
+  percent: number;
+  confidence: Confidence;
+  status: WateringStatus;
+  band: MoistureBand;
+  recommendation: string;
+  daysUntilDry?: number;
+}
+
+/** Sourced species care facts (editorial + mined), flattened for grounding. */
+export interface GeminiCareReference {
+  scientificName?: string;
+  family?: string;
+  light?: string;
+  waterCadenceDays?: { min: number; max: number };
+  comfortableTemperatureC?: { min: number; max: number };
+  humidity?: string;
+  toxicity?: string;
+  commonStressSigns?: string[];
+  likelyPests?: string[];
+  communityRanges?: { label: string; min: number; max: number; unit: string }[];
+  cultivationFacts?: { label: string; value: string }[];
+}
+
 export interface GeminiPlantSummary {
   nickname: string;
   commonName?: string;
@@ -68,6 +99,8 @@ export interface GeminiPlantSummary {
   observationCount: number;
   photoCount: number;
   observations: GeminiPreviewObservation[];
+  moistureEstimate?: GeminiMoistureEstimate;
+  careReference?: GeminiCareReference;
 }
 
 export interface GeminiPreviewPayload {
@@ -182,10 +215,61 @@ function climateZoneFor(plant: Plant): string | undefined {
   return undefined;
 }
 
+/** Derived estimate only — by construction this never touches `moisture_feedback`. */
+function summarizeMoisture(
+  moisture: PlantMoisture | null | undefined,
+): GeminiMoistureEstimate | undefined {
+  if (!moisture) return undefined;
+  return compactObject({
+    percent: Math.round(moisture.moisturePercent),
+    confidence: moisture.confidence,
+    status: moisture.recommendation.status,
+    band: moisture.band,
+    recommendation: MOISTURE_INSIGHT_STATUS_PHRASE[moisture.recommendation.status],
+    daysUntilDry:
+      moisture.recommendation.daysUntilDry == null
+        ? undefined
+        : Math.round(moisture.recommendation.daysUntilDry * 10) / 10,
+  });
+}
+
+/** Flattens the sourced care profile, dropping the empty editorial sentinels
+ *  (`''` / `{min:0,max:0}`) that composeCareProfile leaves for absent facts. */
+function summarizeCareReference(
+  profile: SpeciesCareProfile | null | undefined,
+): GeminiCareReference | undefined {
+  if (!profile) return undefined;
+  const text = (field: { value: string }) => (field.value.trim() ? field.value : undefined);
+  const range = (field: { value: { min: number; max: number } }) =>
+    field.value.min === 0 && field.value.max === 0 ? undefined : field.value;
+  const list = (field: { value: string[] }) => (field.value.length ? field.value : undefined);
+  const reference = compactObject({
+    scientificName: profile.scientificName || undefined,
+    family: text(profile.family),
+    light: text(profile.light),
+    waterCadenceDays: range(profile.waterCadenceDays),
+    comfortableTemperatureC: range(profile.comfortableTemperatureC),
+    humidity: text(profile.humidity),
+    toxicity: text(profile.toxicity),
+    commonStressSigns: list(profile.commonStressSigns),
+    likelyPests: list(profile.likelyPests),
+    communityRanges: profile.communityRanges?.map((r) => ({
+      label: r.label,
+      min: r.min,
+      max: r.max,
+      unit: r.unit,
+    })),
+    cultivationFacts: profile.cultivationFacts?.map((c) => ({ label: c.label, value: c.value })),
+  });
+  return Object.keys(reference).length ? reference : undefined;
+}
+
 export function buildPlantGeminiPreviewPayload(
   plant: Plant,
   units: Units,
   image?: GeminiPreviewImage,
+  moisture?: PlantMoisture | null,
+  careProfile?: SpeciesCareProfile | null,
 ): GeminiPreviewPayload {
   const observations = plant.observations ?? [];
   const species = plant.species_id ?? null;
@@ -204,6 +288,8 @@ export function buildPlantGeminiPreviewPayload(
     observationCount: observations.length,
     photoCount,
     observations: observations.slice(0, 16).map(summarizeObservation),
+    moistureEstimate: summarizeMoisture(moisture),
+    careReference: summarizeCareReference(careProfile),
   });
 
   return compactObject({
@@ -217,6 +303,8 @@ function buildPrompt(summary: GeminiPlantSummary): string {
     'You are PlantDoc AI Preview. Give cautious, non-diagnostic houseplant care observations from the supplied structured log data and optional latest photo.',
     'Do not claim medical, pesticide, or species certainty. Distinguish logged facts from visual guesses. Prefer practical next checks over confident instructions.',
     'Return 3 concise bullets and a one-line "Why" based only on the data below.',
+    'The "moistureEstimate" field, when present, is PlantDoc\'s own physics-based soil-moisture model output. Treat it as an informed prior, not ground truth, and reconcile it with the logged observations.',
+    'The "careReference" field, when present, holds sourced species care facts. Use them to ground your advice and do not contradict them without saying why.',
     'Never mention private notes, hidden IDs, or exact location because they are intentionally excluded.',
     'Plant summary JSON:',
     JSON.stringify(summary, null, 2),

@@ -5,6 +5,7 @@ import {
   estimateMoisture,
   INDOOR_DEFAULT_RH,
   moistureInsight,
+  moistureStatusColor,
   potSoilVolumeMl,
   recommendWatering,
   seasonalIndoorTempC,
@@ -648,5 +649,21 @@ describe('moistureInsight', () => {
 
     expect(insight.detail).not.toContain('likes');
     expect(insight.detail).not.toContain('prefers');
+  });
+});
+
+describe('moistureStatusColor', () => {
+  it('returns the dark-theme accent per status', () => {
+    expect(moistureStatusColor('comfortable', true)).toBe('#C7F24A');
+    expect(moistureStatusColor('drying', true)).toBe('#E0C56B');
+    expect(moistureStatusColor('water_now', true)).toBe('#E0A36B');
+    expect(moistureStatusColor('overwatered', true)).toBe('#7FC8E0');
+  });
+
+  it('returns the light-theme accent per status', () => {
+    expect(moistureStatusColor('comfortable', false)).toBe('#3C7140');
+    expect(moistureStatusColor('drying', false)).toBe('#A88A3C');
+    expect(moistureStatusColor('water_now', false)).toBe('#B07F57');
+    expect(moistureStatusColor('overwatered', false)).toBe('#3F7E91');
   });
 });
