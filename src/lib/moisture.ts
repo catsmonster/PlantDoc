@@ -238,10 +238,20 @@ export function simulateWaterContent(input: SimInput): SimResult {
   };
 }
 
+function normalizedGroundTruthCount(count: number): number {
+  return Number.isFinite(count) ? clamp(Math.trunc(count), 0, 3) : 0;
+}
+
+function hasMeasuredWateringAmount(waterings: WateringEvent[]): boolean {
+  return waterings.some((watering) => typeof watering.amountMl === 'number' && Number.isFinite(watering.amountMl));
+}
+
 export function estimateMoisture(input: EstimateInput): MoistureEstimate {
   const simulation = simulateWaterContent(input);
   const score =
-    (input.substratePresent ? 1 : 0) + (input.amountMeasured ? 1 : 0) + Math.min(input.groundTruthCount, 3);
+    (input.substratePresent ? 1 : 0) +
+    (input.amountMeasured && hasMeasuredWateringAmount(input.waterings) ? 1 : 0) +
+    normalizedGroundTruthCount(input.groundTruthCount);
   let confidence: Confidence = score >= 4 ? 'high' : score >= 2 ? 'medium' : 'low';
 
   if (simulation.lowConfidenceStart && confidence === 'high') {

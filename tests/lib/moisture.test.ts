@@ -364,17 +364,53 @@ describe('moisture estimate and confidence', () => {
     expect(confidenceTrail).toEqual(['low', 'medium', 'high']);
   });
 
-  it('does not raise confidence for placeholder watering amounts unless the amount was measured', () => {
+  it.each([
+    [0, { substratePresent: false, amountMeasured: false, groundTruthCount: 0 }, 'low'],
+    [1, { substratePresent: true, amountMeasured: false, groundTruthCount: 0 }, 'low'],
+    [2, { substratePresent: true, amountMeasured: true, groundTruthCount: 0 }, 'medium'],
+    [3, { substratePresent: false, amountMeasured: false, groundTruthCount: 3 }, 'medium'],
+    [4, { substratePresent: true, amountMeasured: false, groundTruthCount: 3 }, 'high'],
+    [5, { substratePresent: true, amountMeasured: true, groundTruthCount: 3 }, 'high'],
+  ] as const)('maps confidence score %i to %s', (_score, overrides, confidence) => {
+    expect(estimateMoisture(baseInput(overrides)).confidence).toBe(confidence);
+  });
+
+  it('does not raise confidence for placeholder watering amounts even when flagged as measured', () => {
     const unknownAmountInput = baseInput({
       substratePresent: true,
       waterings: [{ observedAtMs: atUtcNoon(1), amountMl: null }],
     });
 
     expect(estimateMoisture({ ...unknownAmountInput, amountMeasured: false }).confidence).toBe('low');
-    expect(estimateMoisture({ ...unknownAmountInput, amountMeasured: true }).confidence).toBe('medium');
+    expect(estimateMoisture({ ...unknownAmountInput, amountMeasured: true }).confidence).toBe('low');
+    expect(
+      estimateMoisture({
+        ...unknownAmountInput,
+        amountMeasured: true,
+        waterings: [{ observedAtMs: atUtcNoon(1), amountMl: capacityMl }],
+      }).confidence,
+    ).toBe('medium');
   });
 
-  it('caps ground truth contribution at three corrections for confidence scoring', () => {
+  it('normalizes ground truth contribution before confidence scoring', () => {
+    expect(
+      estimateMoisture(
+        baseInput({
+          substratePresent: true,
+          amountMeasured: true,
+          groundTruthCount: -3,
+        }),
+      ).confidence,
+    ).toBe('medium');
+    expect(
+      estimateMoisture(
+        baseInput({
+          substratePresent: true,
+          amountMeasured: false,
+          groundTruthCount: 2.9,
+        }),
+      ).confidence,
+    ).toBe('medium');
     expect(
       estimateMoisture(
         baseInput({
@@ -386,6 +422,24 @@ describe('moisture estimate and confidence', () => {
       estimateMoisture(
         baseInput({
           groundTruthCount: 30,
+        }),
+      ).confidence,
+    ).toBe('medium');
+    expect(
+      estimateMoisture(
+        baseInput({
+          substratePresent: true,
+          amountMeasured: true,
+          groundTruthCount: Number.POSITIVE_INFINITY,
+        }),
+      ).confidence,
+    ).toBe('medium');
+    expect(
+      estimateMoisture(
+        baseInput({
+          substratePresent: true,
+          amountMeasured: true,
+          groundTruthCount: Number.NaN,
         }),
       ).confidence,
     ).toBe('medium');
@@ -409,5 +463,16 @@ describe('moisture estimate and confidence', () => {
         repotBoundaryMs: atUtcNoon(10),
       }).confidence,
     ).toBe('medium');
+  });
+
+  it('returns zero moisture percent for zero-capacity pots', () => {
+    const estimate = estimateMoisture(
+      baseInput({
+        pot: { ...pot, diameterCm: 0 },
+      }),
+    );
+
+    expect(estimate.capacityMl).toBe(0);
+    expect(estimate.moisturePercent).toBe(0);
   });
 });
