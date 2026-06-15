@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { errorMessage } from '../../lib/error';
-import { createLog, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
+import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto, type MoistureFeedbackInput } from '../../lib/repo';
 import type { LogInput } from '../../lib/log';
-import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback, SoilState } from '../../lib/types';
+import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback, SoilState, EstimateFeedback } from '../../lib/types';
+import { moistureForPlant } from '../../lib/moisture-read';
 import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
@@ -90,6 +91,62 @@ export async function submitSoilCheck({
       plantId,
       soilState,
       contribute,
+      observedAt: now().toISOString(),
+    }),
+  );
+  refresh();
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- Pure helper exported for focused tests.
+export function buildMoistureFeedbackInput({
+  plantId,
+  estimateFeedback,
+  magnitude,
+  predictedMoisturePercent,
+  observedAt,
+}: {
+  plantId: string;
+  estimateFeedback: EstimateFeedback;
+  magnitude: number | null;
+  predictedMoisturePercent: number;
+  observedAt: string;
+}): MoistureFeedbackInput {
+  return {
+    plantId,
+    observedAt,
+    estimate_feedback: estimateFeedback,
+    magnitude: estimateFeedback === 'correct' ? null : magnitude,
+    predicted_moisture_percent: predictedMoisturePercent,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- Submit helper exported for focused tests.
+export async function submitMoistureFeedback({
+  userId,
+  plantId,
+  estimateFeedback,
+  magnitude,
+  predictedMoisturePercent,
+  now = () => new Date(),
+  createMoistureFeedback: createMoistureFeedbackFn = createMoistureFeedback,
+  refresh,
+}: {
+  userId: string;
+  plantId: string;
+  estimateFeedback: EstimateFeedback;
+  magnitude: number | null;
+  predictedMoisturePercent: number;
+  now?: () => Date;
+  createMoistureFeedback?: (userId: string, input: MoistureFeedbackInput) => Promise<unknown>;
+  refresh: () => void;
+}): Promise<void> {
+  await createMoistureFeedbackFn(
+    userId,
+    buildMoistureFeedbackInput({
+      plantId,
+      estimateFeedback,
+      magnitude,
+      predictedMoisturePercent,
       observedAt: now().toISOString(),
     }),
   );
@@ -345,6 +402,109 @@ function SoilCheckAction({
   );
 }
 
+const estimateFeedbackLabels: Record<EstimateFeedback, string> = {
+  wetter: 'Wetter',
+  correct: 'Spot-on',
+  drier: 'Drier',
+};
+
+function MoistureFeedbackPrompt({
+  isDark,
+  predictedMoisturePercent,
+  busy,
+  onSubmit,
+}: {
+  isDark: boolean;
+  predictedMoisturePercent: number;
+  busy: boolean;
+  onSubmit: (estimateFeedback: EstimateFeedback, magnitude: number | null) => void;
+}) {
+  const [selected, setSelected] = useState<'wetter' | 'drier' | null>(null);
+  const border = isDark ? '1px solid rgba(255,255,255,.09)' : '1px solid #E7E0D2';
+  const background = isDark ? '#111912' : '#FFFDF8';
+  const muted = isDark ? '#9BAA98' : '#6B7568';
+  const text = isDark ? '#F2F6EF' : '#23302A';
+  const accent = isDark ? '#C7F24A' : '#3C7140';
+  const activeBackground = isDark ? '#243024' : '#EBF1E7';
+
+  const choices: EstimateFeedback[] = ['wetter', 'correct', 'drier'];
+
+  const handleChoice = (choice: EstimateFeedback) => {
+    if (choice === 'correct') {
+      onSubmit('correct', null);
+      return;
+    }
+    setSelected(choice);
+  };
+
+  return (
+    <div style={{ marginTop: 14, padding: 12, borderRadius: isDark ? 14 : 16, border, background }}>
+      <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: text }}>Checked the soil?</p>
+      <p style={{ margin: '3px 0 0', fontSize: 11.5, lineHeight: 1.35, color: muted }}>
+        We estimated ~{Math.round(predictedMoisturePercent)}% — how was it?
+      </p>
+      <div
+        role="group"
+        aria-label="How did our estimate compare?"
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginTop: 10 }}
+      >
+        {choices.map((choice) => (
+          <button
+            key={choice}
+            type="button"
+            className={isDark ? 'b-tap' : 'a-tap'}
+            disabled={busy}
+            onClick={() => handleChoice(choice)}
+            style={{
+              minHeight: 40,
+              border,
+              borderRadius: 12,
+              background: selected === choice ? activeBackground : background,
+              color: text,
+              cursor: busy ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 12.5,
+              fontWeight: 700,
+            }}
+          >
+            {estimateFeedbackLabels[choice]}
+          </button>
+        ))}
+      </div>
+      {selected && (
+        <div
+          role="group"
+          aria-label="How far off?"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 6, marginTop: 8 }}
+        >
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={isDark ? 'b-tap' : 'a-tap'}
+              disabled={busy}
+              onClick={() => onSubmit(selected, n)}
+              style={{
+                minHeight: 36,
+                border,
+                borderRadius: 10,
+                background: activeBackground,
+                color: accent,
+                cursor: busy ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 12.5,
+                fontWeight: 700,
+              }}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface AiPreviewState {
   loading: boolean;
   text: string | null;
@@ -531,6 +691,7 @@ export function PlantScreen({
   const [logOpen, setLogOpen] = useState(false);
   const [soilCheckOpen, setSoilCheckOpen] = useState(false);
   const [soilCheckBusy, setSoilCheckBusy] = useState(false);
+  const [moistureFeedbackBusy, setMoistureFeedbackBusy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [verdicts, setVerdicts] = useState<Map<string, InsightFeedback>>(new Map());
   const [aiPreview, setAiPreview] = useState<AiPreviewState>(initialAiPreview);
@@ -607,6 +768,25 @@ export function PlantScreen({
     }
   };
 
+  const handleMoistureFeedback = async (estimateFeedback: EstimateFeedback, magnitude: number | null) => {
+    if (!plant || !moisture || moistureFeedbackBusy) return;
+    setMoistureFeedbackBusy(true);
+    try {
+      await submitMoistureFeedback({
+        userId,
+        plantId: plant.$id,
+        estimateFeedback,
+        magnitude,
+        predictedMoisturePercent: Math.round(moisture.moisturePercent),
+        refresh,
+      });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setMoistureFeedbackBusy(false);
+    }
+  };
+
   const handleFeedback = (kind: string, helpful: boolean) => {
     if (!plant) return;
     const existing = verdicts.get(kind) ?? null;
@@ -670,6 +850,7 @@ export function PlantScreen({
   const tableMatch =
     tableProfile && tableProfile.speciesId === speciesRowId ? tableProfile.profile : null;
   const careProfile = tableMatch ?? careProfileForPlant(plant);
+  const moisture = moistureForPlant(plant, careProfile, plant.moisture_feedback ?? [], now);
 
   // Group timeline observations by day
   const groupedTimeline: [string, Observation[]][] = [];
@@ -916,6 +1097,14 @@ export function PlantScreen({
                     </div>
                   );
                 })}
+                {moisture && (
+                  <MoistureFeedbackPrompt
+                    isDark
+                    predictedMoisturePercent={moisture.moisturePercent}
+                    busy={moistureFeedbackBusy}
+                    onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                  />
+                )}
                 <AiPreviewBlock isDark state={aiPreview} onGenerate={() => void handleAiPreview()} />
               </div>
             )}
@@ -1192,6 +1381,14 @@ export function PlantScreen({
                   </div>
                 );
               })}
+              {moisture && (
+                <MoistureFeedbackPrompt
+                  isDark={false}
+                  predictedMoisturePercent={moisture.moisturePercent}
+                  busy={moistureFeedbackBusy}
+                  onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                />
+              )}
               <AiPreviewBlock isDark={false} state={aiPreview} onGenerate={() => void handleAiPreview()} />
             </div>
           )}
