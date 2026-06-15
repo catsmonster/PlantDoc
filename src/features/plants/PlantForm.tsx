@@ -7,7 +7,7 @@ import {
   updatePlant,
   type PlantInput,
 } from '../../lib/repo';
-import type { PlacementType, Plant, PlantStatus, Species, UserLocation } from '../../lib/types';
+import type { LightLevel, PlacementType, Plant, PlantStatus, Species, SubstrateType, UserLocation } from '../../lib/types';
 import { ErrorText } from '../../ui/Field';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon } from '../../ui/Icon';
@@ -55,6 +55,18 @@ export function PlantForm({
   const [status, setStatus] = useState<PlantStatus>(plant?.status ?? 'active');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [potDiameter, setPotDiameter] = useState(
+    plant?.pot_diameter_cm != null ? String(plant.pot_diameter_cm) : '',
+  );
+  const [potHeight, setPotHeight] = useState(
+    plant?.pot_height_cm != null ? String(plant.pot_height_cm) : '',
+  );
+  const [substrateType, setSubstrateType] = useState<SubstrateType | ''>(plant?.substrate_type ?? '');
+  const [potDrains, setPotDrains] = useState<boolean>(plant?.pot_drains ?? true);
+  const [lightLevel, setLightLevel] = useState<LightLevel | ''>(plant?.light_level ?? '');
+  const [showPotDetails, setShowPotDetails] = useState(
+    Boolean(plant?.substrate_type) || Boolean(plant?.light_level),
+  );
 
   const isDark = theme === 'dark';
 
@@ -136,6 +148,11 @@ export function PlantForm({
       placement_label: placementLabel.trim() || null,
       acquired_on: acquiredOn ? new Date(acquiredOn).toISOString() : null,
       location_id: locationId || null,
+      pot_diameter_cm: potDiameter.trim() ? Number(potDiameter) : null,
+      pot_height_cm: potHeight.trim() ? Number(potHeight) : null,
+      substrate_type: substrateType || null,
+      pot_drains: potDrains,
+      light_level: lightLevel || null,
       ...(editing ? { status } : {}),
     });
   }
@@ -267,6 +284,59 @@ export function PlantForm({
               <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Spot label</span>
               <input className="b-input" value={placementLabel} onChange={(e) => setPlacementLabel(e.target.value)} placeholder="e.g. Living room, south window" disabled={busy} maxLength={128} />
             </label>
+
+            {/* Pot size — the physics prior for the moisture model. The friendly
+                numbers are placeholders only, so an untouched field stays unknown
+                (no false confidence). */}
+            <label style={{ display: 'block' }}>
+              <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Pot size</span>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <input className="b-input" type="number" inputMode="decimal" min={1} max={200} value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="Pot diameter in centimetres" />
+                <input className="b-input" type="number" inputMode="decimal" min={1} max={200} value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="Pot height in centimetres" />
+              </div>
+            </label>
+
+            {/* Improve accuracy — optional details that sharpen the moisture estimate. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: showPotDetails ? 16 : 0 }}>
+              <button type="button" className="b-tap" onClick={() => setShowPotDetails((v) => !v)} disabled={busy} aria-expanded={showPotDetails} style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: 'none', color: '#C7F24A', padding: '2px 0', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 600, fontSize: 13.5, cursor: 'pointer' }}>
+                <Icon name={showPotDetails ? 'chevronDown' : 'chevronRight'} size={16} stroke={2.2} />
+                Improve accuracy
+              </button>
+              {showPotDetails && (
+                <>
+                  <label style={{ display: 'block' }}>
+                    <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Soil / substrate</span>
+                    <select className="b-input" value={substrateType} onChange={(e) => setSubstrateType(e.target.value as SubstrateType | '')} disabled={busy}>
+                      <option value="">— Not sure —</option>
+                      <option value="standard">Standard potting mix</option>
+                      <option value="succulent_gritty">Succulent / cactus (gritty)</option>
+                      <option value="chunky_aroid">Chunky aroid mix</option>
+                      <option value="peat_seedling">Peat / seedling mix</option>
+                    </select>
+                  </label>
+                  <label style={{ display: 'block' }}>
+                    <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Drainage</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {([{ v: true, l: 'Drainage hole' }, { v: false, l: 'No drainage' }] as const).map((o) => (
+                        <button key={String(o.v)} type="button" className={'b-pillopt b-tap' + (potDrains === o.v ? ' on' : '')} onClick={() => setPotDrains(o.v)} style={{ flex: 1, textAlign: 'center' }}>
+                          {o.l}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                  <label style={{ display: 'block' }}>
+                    <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Light</span>
+                    <select className="b-input" value={lightLevel} onChange={(e) => setLightLevel(e.target.value as LightLevel | '')} disabled={busy}>
+                      <option value="">— Not sure —</option>
+                      <option value="low">Low light</option>
+                      <option value="medium">Medium light</option>
+                      <option value="bright">Bright indirect</option>
+                      <option value="direct_sun">Direct sun</option>
+                    </select>
+                  </label>
+                </>
+              )}
+            </div>
 
             {/* Acquired On Date */}
             <label style={{ display: 'block' }}>
@@ -456,6 +526,58 @@ export function PlantForm({
             <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Spot label</span>
             <input className="a-input" value={placementLabel} onChange={(e) => setPlacementLabel(e.target.value)} placeholder="e.g. Living room, south window" disabled={busy} maxLength={128} />
           </label>
+
+          {/* Pot size — physics prior for the moisture model; friendly numbers are
+              placeholders only, so an untouched field stays unknown (no false confidence). */}
+          <label style={{ display: 'block' }}>
+            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Pot size</span>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <input className="a-input" type="number" inputMode="decimal" min={1} max={200} value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="Pot diameter in centimetres" />
+              <input className="a-input" type="number" inputMode="decimal" min={1} max={200} value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="Pot height in centimetres" />
+            </div>
+          </label>
+
+          {/* Improve accuracy — optional details that sharpen the moisture estimate. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: showPotDetails ? 16 : 0 }}>
+            <button type="button" className="a-tap" onClick={() => setShowPotDetails((v) => !v)} disabled={busy} aria-expanded={showPotDetails} style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: 'none', color: '#3C7140', padding: '2px 0', fontFamily: 'inherit', fontWeight: 600, fontSize: 13.5, cursor: 'pointer' }}>
+              <Icon name={showPotDetails ? 'chevronDown' : 'chevronRight'} size={16} stroke={2.2} />
+              Improve accuracy
+            </button>
+            {showPotDetails && (
+              <>
+                <label style={{ display: 'block' }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Soil / substrate</span>
+                  <select className="a-input" value={substrateType} onChange={(e) => setSubstrateType(e.target.value as SubstrateType | '')} disabled={busy}>
+                    <option value="">— Not sure —</option>
+                    <option value="standard">Standard potting mix</option>
+                    <option value="succulent_gritty">Succulent / cactus (gritty)</option>
+                    <option value="chunky_aroid">Chunky aroid mix</option>
+                    <option value="peat_seedling">Peat / seedling mix</option>
+                  </select>
+                </label>
+                <label style={{ display: 'block' }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Drainage</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {([{ v: true, l: 'Drainage hole' }, { v: false, l: 'No drainage' }] as const).map((o) => (
+                      <button key={String(o.v)} type="button" className={'a-pillopt a-tap' + (potDrains === o.v ? ' on' : '')} onClick={() => setPotDrains(o.v)} style={{ flex: 1, textAlign: 'center' }}>
+                        {o.l}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+                <label style={{ display: 'block' }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Light</span>
+                  <select className="a-input" value={lightLevel} onChange={(e) => setLightLevel(e.target.value as LightLevel | '')} disabled={busy}>
+                    <option value="">— Not sure —</option>
+                    <option value="low">Low light</option>
+                    <option value="medium">Medium light</option>
+                    <option value="bright">Bright indirect</option>
+                    <option value="direct_sun">Direct sun</option>
+                  </select>
+                </label>
+              </>
+            )}
+          </div>
 
           {/* Acquired date input */}
           <label style={{ display: 'block' }}>
