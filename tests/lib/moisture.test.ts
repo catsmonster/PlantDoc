@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ANCHORS,
   dailyEtMl,
+  estimateMoisture,
   INDOOR_DEFAULT_RH,
   potSoilVolumeMl,
   seasonalIndoorTempC,
   simulateWaterContent,
   waterCapacityMl,
 } from '../../src/lib/moisture';
+import type { Confidence, EstimateInput, MoistureEstimate } from '../../src/lib/moisture';
 
 describe('pot geometry', () => {
   it('volume of a 12×10 cm pot is ~960 ml', () => {
@@ -284,5 +287,127 @@ describe('water-balance simulation', () => {
 
     expect(result.lowConfidenceStart).toBe(false);
     expect(result.waterContentMl).toBeCloseTo(residualMl + capacityMl * 0.4);
+  });
+});
+
+describe('moisture estimate and confidence', () => {
+  const atUtcNoon = (dayOfMonth: number) => Date.UTC(2026, 0, dayOfMonth, 12);
+  const pot = {
+    diameterCm: 12,
+    heightCm: 10,
+    substrate: 'standard',
+    drains: true,
+  } as const;
+  const capacityMl = waterCapacityMl(pot);
+  const dailyClimate = () => ({
+    tempC: 20,
+    humidityPct: 50,
+    light: 'medium',
+  }) as const;
+
+  const baseInput = (overrides: Partial<EstimateInput> = {}): EstimateInput => ({
+    pot,
+    startMs: atUtcNoon(1),
+    endMs: atUtcNoon(1),
+    waterings: [{ observedAtMs: atUtcNoon(1), amountMl: capacityMl }],
+    dailyClimate,
+    speciesDailyFraction: 0.05,
+    corrections: [],
+    substratePresent: false,
+    amountMeasured: false,
+    groundTruthCount: 0,
+    ...overrides,
+  });
+
+  it('exposes dry, moist, and wet anchors as fractions of capacity', () => {
+    expect(ANCHORS).toEqual({
+      dry: 0.15,
+      moist: 0.5,
+      wet: 0.85,
+    });
+  });
+
+  it('returns bounded moisture percent and the simulated capacity', () => {
+    const saturated: MoistureEstimate = estimateMoisture(
+      baseInput({
+        waterings: [{ observedAtMs: atUtcNoon(1), amountMl: capacityMl * 10 }],
+      }),
+    );
+    const driedDown = estimateMoisture(
+      baseInput({
+        endMs: atUtcNoon(60),
+        speciesDailyFraction: 0.2,
+      }),
+    );
+
+    expect(saturated.capacityMl).toBeCloseTo(waterCapacityMl(pot));
+    expect(saturated.moisturePercent).toBeGreaterThanOrEqual(0);
+    expect(saturated.moisturePercent).toBeLessThanOrEqual(100);
+    expect(saturated.moisturePercent).toBe(100);
+    expect(driedDown.moisturePercent).toBeGreaterThanOrEqual(0);
+    expect(driedDown.moisturePercent).toBeLessThanOrEqual(100);
+  });
+
+  it('raises confidence as substrate, measured amount, and ground truth are added', () => {
+    const confidenceTrail: Confidence[] = [
+      estimateMoisture(baseInput()).confidence,
+      estimateMoisture(baseInput({ substratePresent: true, amountMeasured: true })).confidence,
+      estimateMoisture(
+        baseInput({
+          substratePresent: true,
+          amountMeasured: true,
+          groundTruthCount: 2,
+        }),
+      ).confidence,
+    ];
+
+    expect(confidenceTrail).toEqual(['low', 'medium', 'high']);
+  });
+
+  it('does not raise confidence for placeholder watering amounts unless the amount was measured', () => {
+    const unknownAmountInput = baseInput({
+      substratePresent: true,
+      waterings: [{ observedAtMs: atUtcNoon(1), amountMl: null }],
+    });
+
+    expect(estimateMoisture({ ...unknownAmountInput, amountMeasured: false }).confidence).toBe('low');
+    expect(estimateMoisture({ ...unknownAmountInput, amountMeasured: true }).confidence).toBe('medium');
+  });
+
+  it('caps ground truth contribution at three corrections for confidence scoring', () => {
+    expect(
+      estimateMoisture(
+        baseInput({
+          groundTruthCount: 3,
+        }),
+      ).confidence,
+    ).toBe('medium');
+    expect(
+      estimateMoisture(
+        baseInput({
+          groundTruthCount: 30,
+        }),
+      ).confidence,
+    ).toBe('medium');
+  });
+
+  it('caps otherwise high confidence at medium for unknown-moisture repot starts', () => {
+    const beforeRepotWatering = atUtcNoon(5);
+    const highScoreInput = baseInput({
+      startMs: atUtcNoon(1),
+      endMs: atUtcNoon(11),
+      waterings: [{ observedAtMs: beforeRepotWatering, amountMl: capacityMl }],
+      substratePresent: true,
+      amountMeasured: true,
+      groundTruthCount: 3,
+    });
+
+    expect(estimateMoisture(highScoreInput).confidence).toBe('high');
+    expect(
+      estimateMoisture({
+        ...highScoreInput,
+        repotBoundaryMs: atUtcNoon(10),
+      }).confidence,
+    ).toBe('medium');
   });
 });

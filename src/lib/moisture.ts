@@ -30,6 +30,8 @@ export function waterCapacityMl(spec: PotSpec): number {
   return spec.drains ? capacity : capacity * 1.15;
 }
 
+export const ANCHORS = { dry: 0.15, moist: 0.5, wet: 0.85 } as const;
+
 export const LIGHT_FACTOR: Record<LightLevel, number> = {
   low: 0.7,
   medium: 1,
@@ -93,6 +95,20 @@ export interface SimResult {
   capacityMl: number;
   residualMl: number;
   lowConfidenceStart: boolean;
+}
+
+export type Confidence = 'low' | 'medium' | 'high';
+
+export interface EstimateInput extends SimInput {
+  substratePresent: boolean;
+  amountMeasured: boolean;
+  groundTruthCount: number;
+}
+
+export interface MoistureEstimate {
+  moisturePercent: number;
+  confidence: Confidence;
+  capacityMl: number;
 }
 
 type TimelineEvent =
@@ -219,6 +235,24 @@ export function simulateWaterContent(input: SimInput): SimResult {
     capacityMl,
     residualMl,
     lowConfidenceStart,
+  };
+}
+
+export function estimateMoisture(input: EstimateInput): MoistureEstimate {
+  const simulation = simulateWaterContent(input);
+  const score =
+    (input.substratePresent ? 1 : 0) + (input.amountMeasured ? 1 : 0) + Math.min(input.groundTruthCount, 3);
+  let confidence: Confidence = score >= 4 ? 'high' : score >= 2 ? 'medium' : 'low';
+
+  if (simulation.lowConfidenceStart && confidence === 'high') {
+    confidence = 'medium';
+  }
+
+  return {
+    moisturePercent:
+      simulation.capacityMl > 0 ? clamp((simulation.waterContentMl / simulation.capacityMl) * 100, 0, 100) : 0,
+    confidence,
+    capacityMl: simulation.capacityMl,
   };
 }
 
