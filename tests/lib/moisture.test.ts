@@ -5,11 +5,12 @@ import {
   estimateMoisture,
   INDOOR_DEFAULT_RH,
   potSoilVolumeMl,
+  recommendWatering,
   seasonalIndoorTempC,
   simulateWaterContent,
   waterCapacityMl,
 } from '../../src/lib/moisture';
-import type { Confidence, EstimateInput, MoistureEstimate } from '../../src/lib/moisture';
+import type { Confidence, EstimateInput, EtInputs, MoistureEstimate } from '../../src/lib/moisture';
 
 describe('pot geometry', () => {
   it('volume of a 12×10 cm pot is ~960 ml', () => {
@@ -474,5 +475,33 @@ describe('moisture estimate and confidence', () => {
 
     expect(estimate.capacityMl).toBe(0);
     expect(estimate.moisturePercent).toBe(0);
+  });
+});
+
+describe('watering recommendation', () => {
+  it('maps the internal scale onto anchored statuses', () => {
+    expect(recommendWatering(10).status).toBe('water_now');   // below dry anchor
+    expect(recommendWatering(15).status).toBe('water_now');   // at dry anchor
+    expect(recommendWatering(30).status).toBe('drying');      // just above
+    expect(recommendWatering(50).status).toBe('comfortable'); // mid (moist anchor)
+    expect(recommendWatering(70).status).toBe('comfortable');
+    expect(recommendWatering(85).status).toBe('overwatered'); // at wet anchor
+    expect(recommendWatering(95).status).toBe('overwatered');
+  });
+
+  it('species band changes neither the status nor the thresholds', () => {
+    expect(recommendWatering(30, { band: 'dry' }).status).toBe('drying');
+    expect(recommendWatering(30, { band: 'wet' }).status).toBe('drying');
+    expect(recommendWatering(60, { band: 'dry' }).status).toBe('comfortable');
+    expect(recommendWatering(60, { band: 'wet' }).status).toBe('comfortable');
+  });
+
+  it('projects a sooner dry-date in hotter air', () => {
+    const baseEt: EtInputs = { capacityMl: 1000, speciesDailyFraction: 0.12, tempC: 20, humidityPct: 50, light: 'medium' };
+    const cool = recommendWatering(60, { et: baseEt }).daysUntilDry;
+    const hot = recommendWatering(60, { et: { ...baseEt, tempC: 32 } }).daysUntilDry;
+    expect(cool).toBeGreaterThan(0);
+    expect(hot).toBeGreaterThan(0);
+    expect(hot).toBeLessThan(cool as number);
   });
 });

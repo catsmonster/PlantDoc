@@ -282,3 +282,57 @@ export function seasonalIndoorTempC(iso: string, hemisphere: Hemisphere): number
   const warm = hemisphere === 'north' ? northernWarm : !northernWarm;
   return warm ? 25 : 23;
 }
+
+export type MoistureBand = 'dry' | 'moist' | 'wet';
+
+export type WateringStatus = 'water_now' | 'drying' | 'comfortable' | 'overwatered';
+
+export interface RecommendOptions {
+  /** Species moisture preference; colors downstream wording only, never the thresholds. */
+  band?: MoistureBand;
+  /** When provided, projects forward to estimate days until the Dry anchor. */
+  et?: EtInputs;
+}
+
+export interface WateringRecommendation {
+  status: WateringStatus;
+  /** Days until soil reaches the Dry anchor — present only when `opts.et` is supplied and soil sits above it. */
+  daysUntilDry?: number;
+}
+
+/**
+ * Watering recommendation on the internal capacity-fraction scale (spec §B.4).
+ * The three ANCHORS (×100) partition 0–100 into four statuses; the species `band`
+ * only colors downstream wording, never the cutoffs.
+ */
+export function recommendWatering(
+  moisturePercent: number,
+  opts: RecommendOptions = {},
+): WateringRecommendation {
+  const dry = ANCHORS.dry * 100;
+  const moist = ANCHORS.moist * 100;
+  const wet = ANCHORS.wet * 100;
+
+  let status: WateringStatus;
+  if (moisturePercent <= dry) {
+    status = 'water_now';
+  } else if (moisturePercent < moist) {
+    status = 'drying';
+  } else if (moisturePercent < wet) {
+    status = 'comfortable';
+  } else {
+    status = 'overwatered';
+  }
+
+  const recommendation: WateringRecommendation = { status };
+
+  if (opts.et) {
+    const dailyLoss = dailyEtMl(opts.et);
+    const aboveDryMl = (clamp(moisturePercent, 0, 100) / 100 - ANCHORS.dry) * opts.et.capacityMl;
+    if (dailyLoss > 0 && aboveDryMl > 0) {
+      recommendation.daysUntilDry = aboveDryMl / dailyLoss;
+    }
+  }
+
+  return recommendation;
+}
