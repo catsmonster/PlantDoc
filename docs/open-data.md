@@ -43,10 +43,10 @@ cut a release.
 
 `country`, `region`, `climate_zone`, and `geo_precision` are populated from
 the plant's linked location (`plant_id.location_id`, nested-selected at depth
-3) through `exportGeo` in `src/lib/geo.ts`. The location's user-chosen
-`location_precision` tier caps what may export:
+3) through `exportGeo` in `src/lib/geo.ts`. The location's user-chosen public
+sharing tier (`location_precision`) caps what may export:
 
-| Location precision | Exported geography | `geo_precision` |
+| Location sharing tier | Exported geography | `geo_precision` |
 | --- | --- | --- |
 | `exact`, `local`, `regional` | country + region + climate zone | `regional` |
 | `climate` (default) | country + climate zone | `climate` |

@@ -1,9 +1,9 @@
 /**
- * Thin Open-Meteo client (keyless, CORS-enabled, browser-direct). Every
- * request gets coordinates rounded to ~11 km via forApi — exact coordinates
- * never leave the device. All functions resolve to null/[] on failure;
- * callers decide whether that is fatal (location form) or silent (log-time
- * enrichment).
+ * Thin browser-direct clients for location search and Open-Meteo weather.
+ * Weather requests get coordinates rounded to ~11 km via forApi — exact
+ * coordinates never leave the device. Geocoding sends user-entered place text
+ * only. All functions resolve to null/[] on failure; callers decide whether
+ * that is fatal (location form) or silent (log-time enrichment).
  */
 import { forApi, type Coords } from './geo';
 import { aggregateMonthly, type MonthlyNormals } from './koppen';
@@ -13,31 +13,148 @@ type FetchFn = typeof fetch;
 export interface GeocodeResult {
   name: string;
   region: string | null;
+  subregion: string | null;
   country: string | null;
   latitude: number;
   longitude: number;
 }
 
 export async function geocodeCity(name: string, fetchFn: FetchFn = fetch): Promise<GeocodeResult[]> {
+  const query = name.trim();
+  if (!query) return [];
+
+  const rawResults = await searchOpenMeteo(query, fetchFn);
+  if (rawResults.length > 0) return rawResults;
+
+  const leadingToken = leadingCommaToken(query);
+  if (leadingToken && leadingToken !== query) {
+    const tokenResults = await searchOpenMeteo(leadingToken, fetchFn);
+    if (tokenResults.length > 0) return tokenResults;
+  }
+
+  return searchNominatim(query, fetchFn);
+}
+
+interface OpenMeteoGeocodeRow {
+  name: string;
+  latitude: number;
+  longitude: number;
+  country?: string;
+  admin1?: string;
+  admin2?: string;
+}
+
+async function searchOpenMeteo(name: string, fetchFn: FetchFn): Promise<GeocodeResult[]> {
   try {
     const url =
       'https://geocoding-api.open-meteo.com/v1/search?' +
-      new URLSearchParams({ name, count: '5', language: 'en', format: 'json' });
+      new URLSearchParams({ name, count: '10', language: 'en', format: 'json' });
     const response = await fetchFn(url);
     if (!response.ok) return [];
-    const body = (await response.json()) as {
-      results?: { name: string; latitude: number; longitude: number; country?: string; admin1?: string }[];
-    };
+    const body = (await response.json()) as { results?: OpenMeteoGeocodeRow[] };
     return (body.results ?? []).map((r) => ({
       name: r.name,
-      region: r.admin1 ?? null,
-      country: r.country ?? null,
+      region: cleanText(r.admin1),
+      subregion: cleanText(r.admin2),
+      country: cleanText(r.country),
       latitude: r.latitude,
       longitude: r.longitude,
     }));
   } catch {
     return [];
   }
+}
+
+function leadingCommaToken(query: string): string | null {
+  const token = query.split(',')[0]?.trim();
+  return token && token.length > 1 ? token : null;
+}
+
+interface NominatimAddress {
+  neighbourhood?: string;
+  suburb?: string;
+  quarter?: string;
+  city_district?: string;
+  municipality?: string;
+  city?: string;
+  town?: string;
+  village?: string;
+  county?: string;
+  state?: string;
+  region?: string;
+  province?: string;
+  country?: string;
+}
+
+interface NominatimRow {
+  name?: string;
+  display_name?: string;
+  lat?: string;
+  lon?: string;
+  address?: NominatimAddress;
+}
+
+async function searchNominatim(query: string, fetchFn: FetchFn): Promise<GeocodeResult[]> {
+  try {
+    const url =
+      'https://nominatim.openstreetmap.org/search?' +
+      new URLSearchParams({
+        q: query,
+        format: 'jsonv2',
+        addressdetails: '1',
+        limit: '5',
+      });
+    const response = await fetchFn(url);
+    if (!response.ok) return [];
+    const body = (await response.json()) as unknown;
+    if (!Array.isArray(body)) return [];
+    return body.map(nominatimResult).filter((result): result is GeocodeResult => result !== null);
+  } catch {
+    return [];
+  }
+}
+
+function nominatimResult(row: NominatimRow): GeocodeResult | null {
+  const latitude = Number(row.lat);
+  const longitude = Number(row.lon);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  const address = row.address ?? {};
+  const displayName = row.display_name?.split(',')[0];
+  const name = firstText(
+    row.name,
+    address.neighbourhood,
+    address.suburb,
+    address.quarter,
+    address.city_district,
+    address.city,
+    address.town,
+    address.village,
+    displayName,
+  );
+  if (!name) return null;
+
+  return {
+    name,
+    region: firstText(address.state, address.region, address.province),
+    subregion: firstText(address.county, address.municipality, address.city, address.town),
+    country: cleanText(address.country),
+    latitude,
+    longitude,
+  };
+}
+
+function cleanText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function firstText(...values: (string | null | undefined)[]): string | null {
+  for (const value of values) {
+    const cleaned = cleanText(value);
+    if (cleaned) return cleaned;
+  }
+  return null;
 }
 
 interface DailyResponse {

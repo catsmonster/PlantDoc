@@ -61,7 +61,7 @@ Allowed public fields include:
 - Users can revoke contribution for future exports.
 - The app must clearly explain that public exports are open data and may be copied after release.
 
-## Location Precision
+## Location Sharing Tiers
 
 Use precision tiers:
 
@@ -76,12 +76,15 @@ Public exports should prefer climate zone and coarse region over exact city. Add
 ### As Implemented (Phase 3)
 
 - Coordinates are rounded to **2 decimal places (~1.1 km) before storage** in `user_locations`; the exact device/geocoder value is discarded and never persists anywhere.
-- Every outbound weather/geocoding API call rounds further to **1 decimal place (~11 km)**, so no third party ever receives finer than ~11 km.
+- Weather and climate API calls round coordinates further to **1 decimal place (~11 km)**, so those third parties never receive finer than ~11 km.
+- Location search sends the user's typed place text to geocoding providers, not device coordinates. The form asks for a city, neighborhood, or municipality and warns users not to enter a street address.
 - Geography reaches the public export only through the precision-tier projection in docs/open-data.md (country/region/climate zone at most); city, postal prefix, coordinates, and location labels never export.
 
 ## Third-Party Services
 
-Geocoding (location setup) and weather enrichment (log entries) call **Open-Meteo** directly from the browser. These requests are keyless, carry no account identity, and include only coordinates rounded to 1 decimal place (~11 km) plus dates. The location form discloses this in-app at the point of entry.
+Geocoding (location setup) calls **Open-Meteo** first and falls back to **OpenStreetMap Nominatim** only when the city gazetteer has no match for a user-triggered search. These requests are keyless, carry no PlantDoc account identity, and send the typed place text rather than device coordinates. PlantDoc must not use Nominatim for autocomplete, bulk/systematic geocoding, or street-address collection; if public traffic grows, move this behind a cache/proxy or another provider before relying on the public endpoint.
+
+Weather enrichment (log entries) calls **Open-Meteo** directly from the browser with coordinates rounded to 1 decimal place (~11 km) plus dates. The location form discloses third-party location search and coordinate rounding in-app at the point of entry.
 
 The optional **Gemini AI preview** calls Google Gemini 3.5 Flash through PlantDoc's `/api/gemini-insights` Worker route. The API key is server-side only and must never use a `VITE_` prefix. The preview is user-triggered from the plant detail screen and sends:
 

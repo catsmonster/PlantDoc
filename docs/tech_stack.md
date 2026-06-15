@@ -29,7 +29,7 @@ This keeps the launch architecture inexpensive and simple while avoiding a dead 
 - **Database**: Appwrite Databases/TablesDB for plant profiles, observations, treatments, measurements, environment snapshots, and public export records.
 - **Geo features**: Appwrite spatial columns and geo queries for location-aware functionality.
 - **Storage**: Appwrite Storage for plant images and public export files.
-- **Functions**: Appwrite Functions for climate enrichment, image sanitization, export generation, and future recommendation jobs.
+- **Functions**: Appwrite Functions for image sanitization, export generation, and future recommendation jobs. Browser-direct location/weather enrichment is acceptable while providers are keyless and no server secret is involved (ADR-007).
 - **Realtime**: use Appwrite Realtime sparingly for timelines or dashboards that benefit from live updates.
 
 ## Domain Layout

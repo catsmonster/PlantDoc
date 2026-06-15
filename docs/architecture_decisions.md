@@ -161,10 +161,11 @@ Appwrite TablesDB relationships are no longer beta, and Phase 0 implements the d
 
 - [Appwrite relationships docs](https://appwrite.io/docs/products/databases/relationships)
 
-## ADR-007: Browser-Direct Open-Meteo Enrichment With Coordinate Rounding Tiers
+## ADR-007: Browser-Direct Location And Weather Enrichment With Coordinate Rounding Tiers
 
 - **Status**: Accepted.
 - **Date**: 2026-06-10
+- **Amended**: 2026-06-15
 
 ### Context
 
@@ -173,6 +174,8 @@ Phase 3 needs geocoding (location setup), a climate zone per location, and per-o
 ### Decision
 
 - Call Open-Meteo directly from the browser at log time; no Appwrite Function, no API key, no backend transit of coordinates.
+- For location setup, try Open-Meteo geocoding first. If a comma-separated query has no match, retry the leading place token because Open-Meteo's gazetteer expects a place/postal name rather than a full address string. If Open-Meteo still has no match, fall back to OpenStreetMap Nominatim for the same user-triggered query so neighborhoods/localities can resolve.
+- Do not use the public Nominatim endpoint for autocomplete, bulk/systematic geocoding, or street-address collection. The UI must warn users to search by city, neighborhood, or municipality rather than street address. If traffic grows beyond small/moderate use, add a cache/proxy, switch providers, or self-host before relying on public Nominatim.
 - Round coordinates in two tiers: **2 decimal places (~1.1 km) for storage** in `user_locations`, **1 decimal place (~11 km) for every outbound API call**. Exact device/geocoder coordinates are discarded after rounding.
 - Compute the Köppen-Geiger climate zone in-app from 5-year Open-Meteo archive monthly normals instead of bundling a raster dataset or calling a zone-lookup service.
 - Store weather context as `environment_snapshots` rows linked to observations via a two-way cascade relationship (consistent with ADR-006 timeline children); enrichment is best-effort and never blocks saving a log entry.
@@ -180,13 +183,16 @@ Phase 3 needs geocoding (location setup), a climate zone per location, and per-o
 ### Consequences
 
 - No server secret exists for weather/geocoding, and `APPWRITE_API_KEY` stays out of every enrichment path.
-- Published or stored geography can never be finer than ~1.1 km, and third parties (Open-Meteo) never see better than ~11 km.
+- Published or stored geography can never be finer than ~1.1 km. Weather/climate providers never see better than ~11 km; geocoding providers receive only user-entered place text, not device coordinates.
 - Offline or failed enrichment degrades to a log entry without weather context — acceptable by design.
-- If Open-Meteo changes terms or rate limits, enrichment switches providers or moves server-side under a new ADR; rows already written are unaffected.
+- If Open-Meteo or Nominatim changes terms or rate limits, enrichment switches providers or moves server-side under a new ADR; rows already written are unaffected.
 
 ### References
 
 - [Open-Meteo docs](https://open-meteo.com/en/docs)
+- [Open-Meteo geocoding docs](https://open-meteo.com/en/docs/geocoding-api)
+- [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/)
+- [Nominatim search API](https://nominatim.org/release-docs/latest/api/Search/)
 - docs/schema.md (`environment_snapshots`, `user_locations` as-implemented notes)
 
 ## ADR-008: Deterministic Care Insights Recomputed At Render, Feedback As The Only Stored Artifact
