@@ -483,7 +483,10 @@ function MoistureFeedbackPrompt({
               type="button"
               className={isDark ? 'b-tap' : 'a-tap'}
               disabled={busy}
-              onClick={() => onSubmit(selected, n)}
+              onClick={() => {
+                onSubmit(selected, n);
+                setSelected(null);
+              }}
               style={{
                 minHeight: 36,
                 border,
