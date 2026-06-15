@@ -1391,7 +1391,7 @@ export function PlantScreen({
                 const warn = ins.severity === 'warning';
                 const verdict = verdicts.get(ins.kind);
                 return (
-                  <div key={ins.kind} className="a-rise" style={{ animationDelay: 80 + i * 80 + 'ms', display: 'flex', gap: 12, padding: '14px 0', borderTop: i ? '1px solid #E7E0D2' : 'none' }}>
+                  <div key={ins.kind} className="a-rise" style={{ animationDelay: 80 + i * 80 + 'ms', display: 'flex', gap: 12, padding: '14px 0', borderTop: (i || moistureIns) ? '1px solid #E7E0D2' : 'none' }}>
                     <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: warn ? '#F1E7DC' : '#EBF1E7', color: warn ? '#B07F57' : '#3C7140' }}>
                       <Icon name={warn ? 'sun' : ins.kind.includes('growth') ? 'arrowUp' : 'droplet'} size={18} stroke={2} />
                     </span>
