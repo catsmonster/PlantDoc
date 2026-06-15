@@ -397,3 +397,21 @@ export function moistureInsight(
     evidenceCount: 0,
   };
 }
+
+/** Status→accent color for the moisture %, per theme. Shared by the plant-detail
+ *  hero gauge and the home dashboard chip so both render on one scale. */
+export function moistureStatusColor(status: WateringStatus, isDark: boolean): string {
+  const dark: Record<WateringStatus, string> = {
+    comfortable: '#C7F24A',
+    drying: '#E0C56B',
+    water_now: '#E0A36B',
+    overwatered: '#7FC8E0',
+  };
+  const light: Record<WateringStatus, string> = {
+    comfortable: '#3C7140',
+    drying: '#A88A3C',
+    water_now: '#B07F57',
+    overwatered: '#3F7E91',
+  };
+  return (isDark ? dark : light)[status];
+}

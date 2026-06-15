@@ -3,7 +3,7 @@ import { errorMessage } from '../../lib/error';
 import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
 import type { Observation, Plant, Profile, Units, InsightFeedback, SoilState, EstimateFeedback } from '../../lib/types';
 import { moistureForPlant } from '../../lib/moisture-read';
-import { moistureInsight, type WateringStatus } from '../../lib/moisture';
+import { moistureInsight, moistureStatusColor } from '../../lib/moisture';
 import { formatHeight, formatTemperature } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
@@ -79,22 +79,6 @@ function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function moistureStatusColor(status: WateringStatus, isDark: boolean): string {
-  const dark: Record<WateringStatus, string> = {
-    comfortable: '#C7F24A',
-    drying: '#E0C56B',
-    water_now: '#E0A36B',
-    overwatered: '#7FC8E0',
-  };
-  const light: Record<WateringStatus, string> = {
-    comfortable: '#3C7140',
-    drying: '#A88A3C',
-    water_now: '#B07F57',
-    overwatered: '#3F7E91',
-  };
-  return (isDark ? dark : light)[status];
 }
 
 function getPlantTint(plantId: string): [string, string] {
