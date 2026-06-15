@@ -193,4 +193,65 @@ describe('buildMoistureInputs', () => {
     expect(estimate.speciesDailyFraction).toBeCloseTo(0.08);
     expect(estimate.dailyClimate('2026-07-10').tempC).toBe(23); // July in the south -> cool
   });
+
+  it('excludes corrections and feedback older than the 60-day window', () => {
+    const plant = makePlant({
+      observations: [
+        observation(daysAgo(90), {
+          observation_type: 'measurement',
+          measurements: [measurement({ soil_state: 'wet' })],
+        }),
+      ],
+    });
+    const feedback: MoistureFeedback[] = [
+      {
+        $id: 'fb-old',
+        $createdAt: daysAgo(90),
+        $updatedAt: daysAgo(90),
+        user_id: 'user-1',
+        observed_at: daysAgo(90),
+        estimate_feedback: 'wetter',
+        magnitude: 3,
+        predicted_moisture_percent: 40,
+      },
+    ];
+    const { estimate } = buildMoistureInputs({ plant, careProfile: null, feedback, now: NOW });
+    expect(estimate.corrections).toHaveLength(0);
+    expect(estimate.groundTruthCount).toBe(0);
+  });
+
+  it("'correct' feedback pins observed water content to the prediction", () => {
+    const feedback: MoistureFeedback[] = [
+      {
+        $id: 'fb-correct',
+        $createdAt: daysAgo(1),
+        $updatedAt: daysAgo(1),
+        user_id: 'user-1',
+        observed_at: daysAgo(1),
+        estimate_feedback: 'correct',
+        magnitude: null,
+        predicted_moisture_percent: 60,
+      },
+    ];
+    const { estimate } = buildMoistureInputs({ plant: makePlant(), careProfile: null, feedback, now: NOW });
+    expect(estimate.corrections).toHaveLength(1);
+    expect(estimate.corrections[0].waterContentMl).toBeCloseTo(0.6 * CAPACITY);
+  });
+
+  it('treats a null magnitude as a zero offset', () => {
+    const feedback: MoistureFeedback[] = [
+      {
+        $id: 'fb-null-mag',
+        $createdAt: daysAgo(1),
+        $updatedAt: daysAgo(1),
+        user_id: 'user-1',
+        observed_at: daysAgo(1),
+        estimate_feedback: 'drier',
+        magnitude: null,
+        predicted_moisture_percent: 60,
+      },
+    ];
+    const { estimate } = buildMoistureInputs({ plant: makePlant(), careProfile: null, feedback, now: NOW });
+    expect(estimate.corrections[0].waterContentMl).toBeCloseTo(0.6 * CAPACITY);
+  });
 });

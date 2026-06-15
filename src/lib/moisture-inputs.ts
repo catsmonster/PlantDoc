@@ -23,9 +23,10 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** How far back ground-truth corrections count toward confidence and the recent window. */
 const OBSERVATION_WINDOW_DAYS = 60;
-const DEFAULT_SPECIES_DAILY_FRACTION = 0.12;
 /** Permapeople water_requirement -> daily ET fraction of capacity (spec §B.3). */
 const WATER_REQUIREMENT_FRACTION: Record<MoistureBand, number> = { dry: 0.08, moist: 0.12, wet: 0.18 };
+/** Species with no stated water requirement default to the "moist" fraction. */
+const DEFAULT_SPECIES_DAILY_FRACTION = WATER_REQUIREMENT_FRACTION.moist;
 /** Each estimate-feedback magnitude step ~= 14% of the Dry->Wet span (spec Unit C). */
 const FEEDBACK_STEP_FRACTION = (ANCHORS.wet - ANCHORS.dry) / 5;
 
@@ -112,6 +113,9 @@ export function buildMoistureInputs(args: BuildMoistureInputsArgs): MoistureInpu
       }
     }
 
+    // Waterings and repots set the simulation boundary at any age; ground-truth
+    // corrections only count inside the recent window. On one measurement a soil-state
+    // check wins over a raw meter percent (the qualitative anchor is closer to the model).
     if (!withinWindow) continue;
     for (const measurement of observation.measurements ?? []) {
       if (measurement.soil_state) {
