@@ -3,7 +3,7 @@ import {
   buildSoilCheckLogInput,
   detailLine,
   submitSoilCheck,
-} from '../../src/features/timeline/PlantScreen';
+} from '../../src/features/timeline/plant-screen-logic';
 import type { Observation } from '../../src/lib/types';
 
 const baseObservation: Observation = {

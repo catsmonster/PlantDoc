@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildMoistureFeedbackInput,
   submitMoistureFeedback,
-} from '../../src/features/timeline/PlantScreen';
+} from '../../src/features/timeline/plant-screen-logic';
 
 describe('PlantScreen moisture feedback (post-check estimate tap)', () => {
   it('builds a wetter feedback input retaining magnitude', () => {

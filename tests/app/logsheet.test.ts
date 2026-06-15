@@ -5,7 +5,7 @@ import {
   buildRepotPlantUpdate,
   buildWateringTreatment,
   submitRepotPlantUpdate,
-} from '../../src/features/timeline/LogSheet';
+} from '../../src/features/timeline/logsheet-logic';
 
 const source = readFileSync(
   join(process.cwd(), 'src', 'features', 'timeline', 'LogSheet.tsx'),

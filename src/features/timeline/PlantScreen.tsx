@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { errorMessage } from '../../lib/error';
-import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto, type MoistureFeedbackInput } from '../../lib/repo';
-import type { LogInput } from '../../lib/log';
+import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
 import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback, SoilState, EstimateFeedback } from '../../lib/types';
 import { moistureForPlant } from '../../lib/moisture-read';
 import { moistureInsight, type WateringStatus } from '../../lib/moisture';
@@ -25,8 +24,10 @@ import {
   recordAiPreviewUse,
   type GeminiPreviewImage,
 } from '../../lib/gemini-preview';
-
-
+import {
+  submitMoistureFeedback,
+  submitSoilCheck,
+} from './plant-screen-logic';
 
 const treatmentLabels: Record<TreatmentType, string> = {
   watering: 'Watered',
@@ -44,115 +45,6 @@ const soilStateLabels: Record<SoilState, string> = {
   moist: 'Moist',
   wet: 'Wet',
 };
-
-// eslint-disable-next-line react-refresh/only-export-components -- Pure helper exported for focused tests.
-export function buildSoilCheckLogInput({
-  userId,
-  plantId,
-  soilState,
-  contribute,
-  observedAt,
-}: {
-  userId: string;
-  plantId: string;
-  soilState: SoilState;
-  contribute: boolean;
-  observedAt: string;
-}): LogInput {
-  return {
-    userId,
-    plantId,
-    observedAt,
-    contribute,
-    measurement: { soil_state: soilState },
-  };
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- Submit helper exported for focused tests.
-export async function submitSoilCheck({
-  userId,
-  plantId,
-  soilState,
-  contribute,
-  now = () => new Date(),
-  createLog: createLogFn = createLog,
-  refresh,
-}: {
-  userId: string;
-  plantId: string;
-  soilState: SoilState;
-  contribute: boolean;
-  now?: () => Date;
-  createLog?: (input: LogInput) => Promise<Observation>;
-  refresh: () => void;
-}): Promise<void> {
-  await createLogFn(
-    buildSoilCheckLogInput({
-      userId,
-      plantId,
-      soilState,
-      contribute,
-      observedAt: now().toISOString(),
-    }),
-  );
-  refresh();
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- Pure helper exported for focused tests.
-export function buildMoistureFeedbackInput({
-  plantId,
-  estimateFeedback,
-  magnitude,
-  predictedMoisturePercent,
-  observedAt,
-}: {
-  plantId: string;
-  estimateFeedback: EstimateFeedback;
-  magnitude: number | null;
-  predictedMoisturePercent: number;
-  observedAt: string;
-}): MoistureFeedbackInput {
-  return {
-    plantId,
-    observedAt,
-    estimate_feedback: estimateFeedback,
-    magnitude: estimateFeedback === 'correct' ? null : magnitude,
-    predicted_moisture_percent: predictedMoisturePercent,
-  };
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- Submit helper exported for focused tests.
-export async function submitMoistureFeedback({
-  userId,
-  plantId,
-  estimateFeedback,
-  magnitude,
-  predictedMoisturePercent,
-  now = () => new Date(),
-  createMoistureFeedback: createMoistureFeedbackFn = createMoistureFeedback,
-  refresh,
-}: {
-  userId: string;
-  plantId: string;
-  estimateFeedback: EstimateFeedback;
-  magnitude: number | null;
-  predictedMoisturePercent: number;
-  now?: () => Date;
-  createMoistureFeedback?: (userId: string, input: MoistureFeedbackInput) => Promise<unknown>;
-  refresh: () => void;
-}): Promise<void> {
-  await createMoistureFeedbackFn(
-    userId,
-    buildMoistureFeedbackInput({
-      plantId,
-      estimateFeedback,
-      magnitude,
-      predictedMoisturePercent,
-      observedAt: now().toISOString(),
-    }),
-  );
-  refresh();
-}
 
 function getIconName(obs: Observation): IconName {
   if (obs.observation_type === 'treatment') {
@@ -779,6 +671,7 @@ export function PlantScreen({
         plantId: plant.$id,
         soilState,
         contribute: profile.public_contribution_default,
+        createLog,
         refresh,
       });
     } catch (e) {
@@ -798,6 +691,7 @@ export function PlantScreen({
         estimateFeedback,
         magnitude,
         predictedMoisturePercent: Math.round(moisture.moisturePercent),
+        createMoistureFeedback,
         refresh,
       });
     } catch (e) {
