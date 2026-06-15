@@ -1,9 +1,16 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildRepotPlantUpdate,
   buildWateringTreatment,
   submitRepotPlantUpdate,
 } from '../../src/features/timeline/LogSheet';
+
+const source = readFileSync(
+  join(process.cwd(), 'src', 'features', 'timeline', 'LogSheet.tsx'),
+  'utf8',
+);
 
 describe('LogSheet watering treatment payload', () => {
   it('builds untouched water amounts as unknown with no unit', () => {
@@ -25,6 +32,18 @@ describe('LogSheet watering treatment payload', () => {
 });
 
 describe('LogSheet repot plant update', () => {
+  it('allows fractional repot dimensions in both theme branches', () => {
+    const dimensionInputs = source
+      .split('\n')
+      .filter(
+        (line) =>
+          line.includes('aria-label="New pot diameter in centimetres"') ||
+          line.includes('aria-label="New pot height in centimetres"'),
+      );
+    expect(dimensionInputs).toHaveLength(4);
+    expect(dimensionInputs.every((line) => line.includes('step="any"'))).toBe(true);
+  });
+
   it('includes only provided valid diameter, height, and substrate', () => {
     expect(buildRepotPlantUpdate('14', '', 'chunky_aroid')).toEqual({
       pot_diameter_cm: 14,

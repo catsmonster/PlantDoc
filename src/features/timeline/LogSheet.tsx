@@ -420,8 +420,8 @@ export function LogSheet({
                       <label style={{ display: 'block' }}>
                         <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>New pot size (optional)</span>
                         <div style={{ display: 'flex', gap: 10 }}>
-                          <input className="b-input" type="number" inputMode="decimal" min={1} max={200} value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="New pot diameter in centimetres" />
-                          <input className="b-input" type="number" inputMode="decimal" min={1} max={200} value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="New pot height in centimetres" />
+                          <input className="b-input" type="number" inputMode="decimal" min={1} max={200} step="any" value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="New pot diameter in centimetres" />
+                          <input className="b-input" type="number" inputMode="decimal" min={1} max={200} step="any" value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="New pot height in centimetres" />
                         </div>
                       </label>
                       <label style={{ display: 'block' }}>
@@ -624,8 +624,8 @@ export function LogSheet({
                     <label style={{ display: 'block' }}>
                       <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>New pot size (optional)</span>
                       <div style={{ display: 'flex', gap: 10 }}>
-                        <input className="a-input" type="number" inputMode="decimal" min={1} max={200} value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="New pot diameter in centimetres" />
-                        <input className="a-input" type="number" inputMode="decimal" min={1} max={200} value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="New pot height in centimetres" />
+                        <input className="a-input" type="number" inputMode="decimal" min={1} max={200} step="any" value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="New pot diameter in centimetres" />
+                        <input className="a-input" type="number" inputMode="decimal" min={1} max={200} step="any" value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="New pot height in centimetres" />
                       </div>
                     </label>
                     <label style={{ display: 'block' }}>
