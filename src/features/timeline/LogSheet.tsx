@@ -9,6 +9,7 @@ import {
 } from '../../lib/drafts';
 import { enrichObservationWeather } from '../../lib/enrich';
 import { errorMessage } from '../../lib/error';
+import type { LogInput } from '../../lib/log';
 import { createLog, updatePlant, type PlantInput } from '../../lib/repo';
 import type { Profile, SubstrateType, TreatmentType, UserLocation } from '../../lib/types';
 import {
@@ -36,21 +37,68 @@ const careTypes: { value: TreatmentType; label: string }[] = [
 ];
 
 const waterMethods = ['top water', 'bottom water', 'soak'];
+const POT_DIMENSION_MIN_CM = 1;
+const POT_DIMENSION_MAX_CM = 200;
 
-function buildRepotPlantUpdate(
+function parseValidPotDimension(value: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value);
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < POT_DIMENSION_MIN_CM ||
+    parsed > POT_DIMENSION_MAX_CM
+  ) {
+    return undefined;
+  }
+  return parsed;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function buildWateringTreatment(
+  amount: string,
+  method: string,
+): NonNullable<LogInput['treatment']> {
+  const parsedAmount = parseWaterAmountMl(amount);
+  if (parsedAmount === undefined) {
+    return {
+      treatment_type: 'watering',
+      amount_value: null,
+      method,
+    };
+  }
+  return {
+    treatment_type: 'watering',
+    amount_value: parsedAmount,
+    amount_unit: 'ml',
+    method,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function buildRepotPlantUpdate(
   repotDiameter: string,
   repotHeight: string,
   repotSubstrate: SubstrateType | '',
 ): Partial<PlantInput> {
   const potUpdate: Partial<PlantInput> = {};
-  if (repotDiameter.trim() && Number.isFinite(Number(repotDiameter))) {
-    potUpdate.pot_diameter_cm = Number(repotDiameter);
-  }
-  if (repotHeight.trim() && Number.isFinite(Number(repotHeight))) {
-    potUpdate.pot_height_cm = Number(repotHeight);
-  }
+  const diameter = parseValidPotDimension(repotDiameter);
+  const height = parseValidPotDimension(repotHeight);
+  if (diameter !== undefined) potUpdate.pot_diameter_cm = diameter;
+  if (height !== undefined) potUpdate.pot_height_cm = height;
   if (repotSubstrate) potUpdate.substrate_type = repotSubstrate;
   return potUpdate;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export async function submitRepotPlantUpdate(
+  plantId: string,
+  repotDiameter: string,
+  repotHeight: string,
+  repotSubstrate: SubstrateType | '',
+  updatePlantFn: (plantId: string, input: Partial<PlantInput>) => Promise<unknown>,
+): Promise<void> {
+  const potUpdate = buildRepotPlantUpdate(repotDiameter, repotHeight, repotSubstrate);
+  if (Object.keys(potUpdate).length > 0) await updatePlantFn(plantId, potUpdate);
 }
 
 function nowLocal(): string {
@@ -238,15 +286,9 @@ export function LogSheet({
       };
       let observation;
       if (mode === 'water') {
-        const parsedAmount = parseWaterAmountMl(amount);
         observation = await createLog({
           ...base,
-          treatment: {
-            treatment_type: 'watering',
-            amount_value: parsedAmount ?? null,
-            amount_unit: parsedAmount === undefined ? undefined : 'ml',
-            method,
-          },
+          treatment: buildWateringTreatment(amount, method),
         });
       } else if (mode === 'care') {
         observation = await createLog({
@@ -257,8 +299,13 @@ export function LogSheet({
           },
         });
         if (careType === 'repotting') {
-          const potUpdate = buildRepotPlantUpdate(repotDiameter, repotHeight, repotSubstrate);
-          if (Object.keys(potUpdate).length > 0) await updatePlant(plantId, potUpdate);
+          await submitRepotPlantUpdate(
+            plantId,
+            repotDiameter,
+            repotHeight,
+            repotSubstrate,
+            updatePlant,
+          );
         }
       } else if (mode === 'measure') {
         const heightCm = height ? (imperial ? Number(height) * 2.54 : Number(height)) : undefined;
