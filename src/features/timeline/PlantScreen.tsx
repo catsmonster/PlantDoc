@@ -12,6 +12,7 @@ import { LogSheet } from './LogSheet';
 import { plantInsights } from '../../lib/insights';
 import { careProfileForPlant, type SpeciesCareProfile } from '../../lib/knowledge/care-profiles';
 import { CareProfilePanel } from '../knowledge/CareProfilePanel';
+import { Collapsible } from '../../ui/Collapsible';
 import { TrendsCard } from './TrendsCard';
 import { ErrorText } from '../../ui/Field';
 import {
@@ -927,38 +928,51 @@ export function PlantScreen({
 
             {/* Species care guide — sourced reference facts */}
             {careProfile && (
-              <CareProfilePanel profile={careProfile} units={profile.preferred_units} isDark />
+              <Collapsible
+                isDark
+                title="Species care guide"
+                badge={<span className="mono" style={{ fontSize: 9.5, letterSpacing: '.1em', color: '#0E140F', background: '#C7F24A', padding: '3px 7px', borderRadius: 5 }}>SOURCED</span>}
+              >
+                <CareProfilePanel profile={careProfile} units={profile.preferred_units} isDark embedded />
+              </Collapsible>
             )}
 
             {/* Growth & health trends — charted from the user's own measurements */}
             <TrendsCard plant={plant} units={profile.preferred_units} isDark />
 
-            {/* Care Insights */}
+            {/* Care Insights (experimental) — moisture estimate expanded, computed list collapsed */}
             {observations.length > 0 && (
-              <div style={{ marginTop: 30 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                  <span className="b-kicker">Care insights</span>
-                  <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.09)' }}></span>
-                  <span className="mono" style={{ fontSize: 9.5, letterSpacing: '.1em', color: '#0E140F', background: '#E0A36B', padding: '3px 7px', borderRadius: 5 }}>EXPERIMENTAL</span>
-                </div>
+              <>
                 {moistureIns && moisture && (
-                  <div className="b-rise" style={{ borderLeft: '2px solid ' + (moistureIns.severity === 'warning' ? '#E0A36B' : '#C7F24A'), paddingLeft: 14, marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Icon name="droplet" size={15} stroke={2.2} style={{ color: moistureIns.severity === 'warning' ? '#E0A36B' : '#C7F24A' }} />
-                      <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#F2F6EF' }}>{moistureIns.title}</p>
+                  <Collapsible
+                    isDark
+                    defaultOpen
+                    title="Soil moisture"
+                    badge={<span className="mono" style={{ fontSize: 9.5, letterSpacing: '.1em', color: '#0E140F', background: '#E0A36B', padding: '3px 7px', borderRadius: 5 }}>EXPERIMENTAL</span>}
+                  >
+                    <div className="b-rise" style={{ borderLeft: '2px solid ' + (moistureIns.severity === 'warning' ? '#E0A36B' : '#C7F24A'), paddingLeft: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Icon name="droplet" size={15} stroke={2.2} style={{ color: moistureIns.severity === 'warning' ? '#E0A36B' : '#C7F24A' }} />
+                        <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#F2F6EF' }}>{moistureIns.title}</p>
+                      </div>
+                      <p style={{ margin: '5px 0 0', fontSize: 13, lineHeight: 1.5, color: '#9BAA98' }}>{moistureIns.detail}</p>
+                      <p className="mono" style={{ margin: '6px 0 0', fontSize: 10, color: '#67766A', letterSpacing: '.06em' }}>
+                        ESTIMATED · {moisture.confidence.toUpperCase()} CONFIDENCE
+                      </p>
+                      <MoistureFeedbackPrompt
+                        isDark
+                        predictedMoisturePercent={moisture.moisturePercent}
+                        busy={moistureFeedbackBusy}
+                        onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                      />
                     </div>
-                    <p style={{ margin: '5px 0 0', fontSize: 13, lineHeight: 1.5, color: '#9BAA98' }}>{moistureIns.detail}</p>
-                    <p className="mono" style={{ margin: '6px 0 0', fontSize: 10, color: '#67766A', letterSpacing: '.06em' }}>
-                      ESTIMATED · {moisture.confidence.toUpperCase()} CONFIDENCE
-                    </p>
-                    <MoistureFeedbackPrompt
-                      isDark
-                      predictedMoisturePercent={moisture.moisturePercent}
-                      busy={moistureFeedbackBusy}
-                      onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
-                    />
-                  </div>
+                  </Collapsible>
                 )}
+                <Collapsible
+                  isDark
+                  title="Care insights"
+                  badge={<span className="mono" style={{ fontSize: 9.5, letterSpacing: '.1em', color: '#0E140F', background: '#E0A36B', padding: '3px 7px', borderRadius: 5 }}>EXPERIMENTAL</span>}
+                >
                 {insights.map((ins, i) => {
                   const warn = ins.severity === 'warning';
                   const verdict = verdicts.get(ins.kind);
@@ -995,7 +1009,8 @@ export function PlantScreen({
                   );
                 })}
                 <AiPreviewBlock isDark state={aiPreview} onGenerate={() => void handleAiPreview()} />
-              </div>
+                </Collapsible>
+              </>
             )}
 
             {/* Timeline */}
@@ -1232,43 +1247,56 @@ export function PlantScreen({
 
           {/* Species care guide — sourced reference facts */}
           {careProfile && (
-            <CareProfilePanel profile={careProfile} units={profile.preferred_units} isDark={false} />
+            <Collapsible
+              isDark={false}
+              title="Species care guide"
+              badge={<span className="a-chip" style={{ background: '#EBF1E7', color: '#3C7140', padding: '3px 8px', fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 700 }}>Sourced</span>}
+            >
+              <CareProfilePanel profile={careProfile} units={profile.preferred_units} isDark={false} embedded />
+            </Collapsible>
           )}
 
           {/* Growth & health trends — charted from the user's own measurements */}
           <TrendsCard plant={plant} units={profile.preferred_units} isDark={false} />
 
-          {/* Care Insights Panel */}
+          {/* Care Insights (experimental) — moisture estimate expanded, computed list collapsed */}
           {observations.length > 0 && (
-            <div className="a-card a-rise" style={{ animationDelay: '60ms', marginTop: 16, borderRadius: 22, padding: '6px 18px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '15px 0 4px' }}>
-                <Icon name="sparkle" size={18} stroke={2} style={{ color: '#B07F57' }} />
-                <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: '#23302A' }}>Care insights</h3>
-                <span className="a-chip" style={{ background: '#F1E7DC', color: '#B07F57', padding: '3px 8px', fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 700 }}>Experimental</span>
-              </div>
+            <>
               {moistureIns && moisture && (
-                <div className="a-rise" style={{ display: 'flex', gap: 12, padding: '14px 0', borderTop: 'none' }}>
-                  <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: moistureIns.severity === 'warning' ? '#F1E7DC' : '#EBF1E7', color: moistureIns.severity === 'warning' ? '#B07F57' : '#3C7140' }}>
-                    <Icon name="droplet" size={18} stroke={2} />
-                  </span>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: '#23302A' }}>{moistureIns.title}</p>
-                    <p style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5, color: '#6B7568' }}>{moistureIns.detail}</p>
-                    <p style={{ margin: '6px 0 0', fontSize: 11, color: '#9AA294' }}>Estimated · {moisture.confidence} confidence</p>
-                    <MoistureFeedbackPrompt
-                      isDark={false}
-                      predictedMoisturePercent={moisture.moisturePercent}
-                      busy={moistureFeedbackBusy}
-                      onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
-                    />
+                <Collapsible
+                  isDark={false}
+                  defaultOpen
+                  title="Soil moisture"
+                  badge={<span className="a-chip" style={{ background: '#F1E7DC', color: '#B07F57', padding: '3px 8px', fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 700 }}>Experimental</span>}
+                >
+                  <div className="a-rise" style={{ display: 'flex', gap: 12, padding: '14px 0 0' }}>
+                    <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: moistureIns.severity === 'warning' ? '#F1E7DC' : '#EBF1E7', color: moistureIns.severity === 'warning' ? '#B07F57' : '#3C7140' }}>
+                      <Icon name="droplet" size={18} stroke={2} />
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: '#23302A' }}>{moistureIns.title}</p>
+                      <p style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5, color: '#6B7568' }}>{moistureIns.detail}</p>
+                      <p style={{ margin: '6px 0 0', fontSize: 11, color: '#9AA294' }}>Estimated · {moisture.confidence} confidence</p>
+                      <MoistureFeedbackPrompt
+                        isDark={false}
+                        predictedMoisturePercent={moisture.moisturePercent}
+                        busy={moistureFeedbackBusy}
+                        onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                      />
+                    </div>
                   </div>
-                </div>
+                </Collapsible>
               )}
+              <Collapsible
+                isDark={false}
+                title="Care insights"
+                badge={<span className="a-chip" style={{ background: '#F1E7DC', color: '#B07F57', padding: '3px 8px', fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 700 }}>Experimental</span>}
+              >
               {insights.map((ins, i) => {
                 const warn = ins.severity === 'warning';
                 const verdict = verdicts.get(ins.kind);
                 return (
-                  <div key={ins.kind} className="a-rise" style={{ animationDelay: 80 + i * 80 + 'ms', display: 'flex', gap: 12, padding: '14px 0', borderTop: (i || moistureIns) ? '1px solid #E7E0D2' : 'none' }}>
+                  <div key={ins.kind} className="a-rise" style={{ animationDelay: 80 + i * 80 + 'ms', display: 'flex', gap: 12, padding: '14px 0', borderTop: i ? '1px solid #E7E0D2' : 'none' }}>
                     <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: warn ? '#F1E7DC' : '#EBF1E7', color: warn ? '#B07F57' : '#3C7140' }}>
                       <Icon name={warn ? 'sun' : ins.kind.includes('growth') ? 'arrowUp' : 'droplet'} size={18} stroke={2} />
                     </span>
@@ -1300,7 +1328,8 @@ export function PlantScreen({
                 );
               })}
               <AiPreviewBlock isDark={false} state={aiPreview} onGenerate={() => void handleAiPreview()} />
-            </div>
+              </Collapsible>
+            </>
           )}
 
           {/* Timeline Title */}
