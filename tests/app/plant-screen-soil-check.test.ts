@@ -1,10 +1,24 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import * as plantScreenLogic from '../../src/features/timeline/plant-screen-logic';
 import {
   buildSoilCheckLogInput,
   detailLine,
   submitSoilCheck,
 } from '../../src/features/timeline/plant-screen-logic';
 import type { Observation } from '../../src/lib/types';
+import type { Plant } from '../../src/lib/types';
+import { makePlant } from '../lib/moisture-fixtures';
+
+const plantScreenSource = readFileSync(
+  join(process.cwd(), 'src', 'features', 'timeline', 'PlantScreen.tsx'),
+  'utf8',
+);
+const plantsScreenSource = readFileSync(
+  join(process.cwd(), 'src', 'features', 'plants', 'PlantsScreen.tsx'),
+  'utf8',
+);
 
 const baseObservation: Observation = {
   $id: 'obs-1',
@@ -85,5 +99,28 @@ describe('PlantScreen soil check quick action', () => {
       measurement: { soil_state: 'wet' },
     });
     expect(refresh).toHaveBeenCalledOnce();
+  });
+});
+
+describe('PlantScreen missing pot-size moisture nudge', () => {
+  const shouldPromptForPotSize = (
+    plantScreenLogic as {
+      shouldPromptForPotSize?: (plant: Pick<Plant, 'placement_type' | 'pot_diameter_cm' | 'pot_height_cm'>) => boolean;
+    }
+  ).shouldPromptForPotSize;
+
+  it('prompts only for moisture-eligible placements missing a pot dimension', () => {
+    expect(shouldPromptForPotSize?.(makePlant({ pot_diameter_cm: null }))).toBe(true);
+    expect(shouldPromptForPotSize?.(makePlant({ pot_height_cm: null }))).toBe(true);
+    expect(shouldPromptForPotSize?.(makePlant({ placement_type: 'greenhouse', pot_height_cm: null }))).toBe(true);
+    expect(shouldPromptForPotSize?.(makePlant({ placement_type: 'outdoor', pot_diameter_cm: null }))).toBe(false);
+    expect(shouldPromptForPotSize?.(makePlant({ placement_type: 'balcony', pot_height_cm: null }))).toBe(false);
+    expect(shouldPromptForPotSize?.(makePlant())).toBe(false);
+  });
+
+  it('wires the chosen add-pot-size CTA where the moisture gauge would be', () => {
+    expect(plantScreenSource).toContain('Add pot size to track soil moisture');
+    expect(plantScreenSource).toContain('onClick={() => onEdit(plant)}');
+    expect(plantsScreenSource).toContain('Add pot size');
   });
 });

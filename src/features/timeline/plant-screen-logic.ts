@@ -3,6 +3,8 @@ import type { MoistureFeedbackInput } from '../../lib/repo';
 import type { EstimateFeedback, Observation, SoilState, TreatmentType, Units } from '../../lib/types';
 import { formatHeight, formatVolume } from '../../lib/units';
 
+export { shouldPromptForPotSize } from '../../lib/moisture-read';
+
 const treatmentLabels: Record<TreatmentType, string> = {
   watering: 'Watered',
   fertilizing: 'Fertilized',

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { errorMessage } from '../../lib/error';
 import { listPlantsForDashboard, type DashboardPlant } from '../../lib/repo';
 import { isPlantThirstyFromSummary } from '../../lib/insights';
-import { moistureForPlant, type PlantMoisture } from '../../lib/moisture-read';
+import { moistureForPlant, shouldPromptForPotSize, type PlantMoisture } from '../../lib/moisture-read';
 import { moistureStatusColor } from '../../lib/moisture';
 import { careProfileForPlant } from '../../lib/knowledge/care-profiles';
 import type { Plant, Profile } from '../../lib/types';
@@ -245,6 +245,7 @@ export function PlantsScreen({
               const isThirsty = isPlantThirstyFromSummary(p, now);
               const speciesLine = p.common_name ?? p.species_text ?? '';
               const m = moistureByPlant.get(p.$id) ?? null;
+              const promptForPotSize = shouldPromptForPotSize(p);
 
               return (
                 <button
@@ -282,6 +283,11 @@ export function PlantsScreen({
                       {m && (
                         <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: 'rgba(8,12,9,.55)', color: moistureStatusColor(m.recommendation.status, true), backdropFilter: 'blur(6px)' }}>
                           <Icon name="droplet" size={11} stroke={2.6} /> {Math.round(m.moisturePercent)}%
+                        </span>
+                      )}
+                      {!m && promptForPotSize && (
+                        <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: 'rgba(8,12,9,.55)', color: '#C7F24A', backdropFilter: 'blur(6px)' }}>
+                          <Icon name="pot" size={11} stroke={2.6} /> Add pot size
                         </span>
                       )}
                       {isThirsty && (
@@ -486,6 +492,7 @@ export function PlantsScreen({
             const isThirsty = isPlantThirstyFromSummary(p, now);
             const speciesLine = p.common_name ?? p.species_text ?? '';
             const m = moistureByPlant.get(p.$id) ?? null;
+            const promptForPotSize = shouldPromptForPotSize(p);
 
             return (
               <button
@@ -540,6 +547,15 @@ export function PlantsScreen({
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 600, color: moistureStatusColor(m.recommendation.status, false) }}>
                           <Icon name="droplet" size={13} stroke={2.4} />
                           {Math.round(m.moisturePercent)}%
+                        </span>
+                      </>
+                    )}
+                    {!m && promptForPotSize && (
+                      <>
+                        <span style={{ width: 3, height: 3, borderRadius: 9, background: '#9AA294', margin: '0 1px' }}></span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 600, color: '#A06D3B' }}>
+                          <Icon name="pot" size={13} stroke={2.4} />
+                          Add pot size
                         </span>
                       </>
                     )}
