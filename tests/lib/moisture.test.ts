@@ -504,4 +504,10 @@ describe('watering recommendation', () => {
     expect(hot).toBeGreaterThan(0);
     expect(hot).toBeLessThan(cool as number);
   });
+
+  it('omits daysUntilDry when soil is already at or below the dry anchor', () => {
+    const baseEt: EtInputs = { capacityMl: 1000, speciesDailyFraction: 0.12, tempC: 20, humidityPct: 50, light: 'medium' };
+    expect(recommendWatering(15, { et: baseEt }).daysUntilDry).toBeUndefined();
+    expect(recommendWatering(8, { et: baseEt }).daysUntilDry).toBeUndefined();
+  });
 });

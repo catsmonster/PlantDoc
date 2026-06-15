@@ -309,16 +309,17 @@ export function recommendWatering(
   moisturePercent: number,
   opts: RecommendOptions = {},
 ): WateringRecommendation {
+  const pct = clamp(moisturePercent, 0, 100);
   const dry = ANCHORS.dry * 100;
   const moist = ANCHORS.moist * 100;
   const wet = ANCHORS.wet * 100;
 
   let status: WateringStatus;
-  if (moisturePercent <= dry) {
+  if (pct <= dry) {
     status = 'water_now';
-  } else if (moisturePercent < moist) {
+  } else if (pct < moist) {
     status = 'drying';
-  } else if (moisturePercent < wet) {
+  } else if (pct < wet) {
     status = 'comfortable';
   } else {
     status = 'overwatered';
@@ -328,7 +329,7 @@ export function recommendWatering(
 
   if (opts.et) {
     const dailyLoss = dailyEtMl(opts.et);
-    const aboveDryMl = (clamp(moisturePercent, 0, 100) / 100 - ANCHORS.dry) * opts.et.capacityMl;
+    const aboveDryMl = (pct / 100 - ANCHORS.dry) * opts.et.capacityMl;
     if (dailyLoss > 0 && aboveDryMl > 0) {
       recommendation.daysUntilDry = aboveDryMl / dailyLoss;
     }
