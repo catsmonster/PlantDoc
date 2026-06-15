@@ -1,10 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { errorMessage } from '../../lib/error';
 import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
-import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback, SoilState, EstimateFeedback } from '../../lib/types';
+import type { Observation, Plant, Profile, Units, InsightFeedback, SoilState, EstimateFeedback } from '../../lib/types';
 import { moistureForPlant } from '../../lib/moisture-read';
 import { moistureInsight, type WateringStatus } from '../../lib/moisture';
-import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
+import { formatHeight, formatTemperature } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon, healthLabel, type IconName } from '../../ui/Icon';
@@ -25,20 +25,10 @@ import {
   type GeminiPreviewImage,
 } from '../../lib/gemini-preview';
 import {
+  detailLine,
   submitMoistureFeedback,
   submitSoilCheck,
 } from './plant-screen-logic';
-
-const treatmentLabels: Record<TreatmentType, string> = {
-  watering: 'Watered',
-  fertilizing: 'Fertilized',
-  repotting: 'Repotted',
-  pruning: 'Pruned',
-  misting: 'Misted',
-  pest_control: 'Pest control',
-  cleaning: 'Cleaned leaves',
-  relocation: 'Moved',
-};
 
 const soilStateLabels: Record<SoilState, string> = {
   dry: 'Dry',
@@ -69,39 +59,6 @@ function getIconName(obs: Observation): IconName {
     health_check: 'heart',
   };
   return map[obs.observation_type] || 'note';
-}
-
-// eslint-disable-next-line react-refresh/only-export-components -- Timeline detail helper exported for focused tests.
-export function detailLine(obs: Observation, units: Units): string | null {
-  if (obs.observation_type === 'treatment') {
-    const t = obs.treatments?.[0];
-    if (!t) return 'Care';
-    const parts = [treatmentLabels[t.treatment_type]];
-    if (t.amount_value != null) {
-      parts.push(
-        t.amount_unit === 'ml'
-          ? formatVolume(t.amount_value, units)
-          : `${t.amount_value} ${t.amount_unit ?? ''}`.trim(),
-      );
-    }
-    if (t.method) parts.push(t.method);
-    if (t.product_name) parts.push(t.product_name);
-    return parts.join(' · ');
-  }
-  if (obs.observation_type === 'measurement') {
-    const m = obs.measurements?.[0];
-    if (!m) return 'Measured';
-    const parts: string[] = [];
-    if (m.height_cm != null) parts.push(formatHeight(m.height_cm, units));
-    if (m.leaf_count != null) parts.push(`${m.leaf_count} leaves`);
-    if (m.soil_moisture_percent != null) parts.push(`soil ${m.soil_moisture_percent}%`);
-    if (m.soil_state) parts.push(`soil ${m.soil_state}`);
-    if (m.health_score != null) parts.push(`health ${m.health_score}/5`);
-    return parts.length ? parts.join(' · ') : 'Measured';
-  }
-  if (obs.observation_type === 'photo') return 'Photo';
-  if (obs.observation_type === 'note') return null;
-  return obs.observation_type.replace('_', ' ');
 }
 
 function environmentLine(obs: Observation, units: Units): string | null {
