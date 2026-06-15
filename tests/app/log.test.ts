@@ -19,6 +19,18 @@ describe('buildLogPayload', () => {
     expect(payload.measurement).toBeUndefined();
   });
 
+  it('builds an unknown watering amount as null with no unit', () => {
+    const payload = buildLogPayload({
+      ...base,
+      treatment: { treatment_type: 'watering', amount_value: undefined, amount_unit: undefined },
+    });
+    expect(payload.treatment).toEqual({
+      user_id: 'u1',
+      treatment_type: 'watering',
+      amount_value: null,
+    });
+  });
+
   it('builds a measurement log and drops undefined values', () => {
     const payload = buildLogPayload({
       ...base,

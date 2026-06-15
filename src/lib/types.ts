@@ -26,6 +26,8 @@ export interface Species extends RowMeta {
 
 export type PlantStatus = 'active' | 'archived' | 'deceased' | 'gifted';
 export type PlacementType = 'indoor' | 'outdoor' | 'greenhouse' | 'balcony';
+export type SubstrateType = 'standard' | 'succulent_gritty' | 'chunky_aroid' | 'peat_seedling';
+export type LightLevel = 'low' | 'medium' | 'bright' | 'direct_sun';
 
 export interface UserLocation extends RowMeta {
   user_id: string;
@@ -54,17 +56,33 @@ export interface Plant extends RowMeta {
   location_id?: UserLocation | string | null;
   observations?: Observation[];
   insight_feedback?: InsightFeedback[];
+  moisture_feedback?: MoistureFeedback[];
   last_watered_at?: string | null;
   watering_count?: number | null;
   watering_cadence_days?: number | null;
   latest_photo_file_id?: string | null;
   latest_photo_observed_at?: string | null;
+  pot_diameter_cm?: number | null;
+  pot_height_cm?: number | null;
+  substrate_type?: SubstrateType | null;
+  pot_drains?: boolean | null;
+  light_level?: LightLevel | null;
 }
 
 export interface InsightFeedback extends RowMeta {
   user_id: string;
   insight_kind: string;
   helpful: boolean;
+}
+
+export type EstimateFeedback = 'wetter' | 'drier' | 'correct';
+
+export interface MoistureFeedback extends RowMeta {
+  user_id: string;
+  observed_at: string;
+  estimate_feedback: EstimateFeedback;
+  magnitude: number | null;
+  predicted_moisture_percent: number | null;
 }
 
 export type ObservationType =
@@ -95,6 +113,8 @@ export interface Treatment extends RowMeta {
   notes_private: string | null;
 }
 
+export type SoilState = 'dry' | 'moist' | 'wet';
+
 export interface Measurement extends RowMeta {
   user_id: string;
   height_cm: number | null;
@@ -103,6 +123,7 @@ export interface Measurement extends RowMeta {
   health_score: number | null;
   pest_severity_score: number | null;
   bloom_count: number | null;
+  soil_state?: SoilState | null;
   notes_private: string | null;
 }
 

@@ -301,3 +301,45 @@ The mobile redesign dashboard needs to display status indications like thirst st
 - Dashboard database queries and network payloads are scaled down significantly, loading only O(1) scalar fields per plant rather than O(N) timeline entries.
 - UI elements (thirst indicator, last watered date, latest photo) are rendered directly from these scalar summary fields.
 - Thirst calculation is simplified using pure summary helper functions, allowing easy offline unit testing.
+
+## ADR-012: Split Moisture Model Telemetry From Observations; Internal Capacity-Fraction Moisture Scale
+
+- **Status**: Accepted.
+- **Date**: 2026-06-14
+
+### Context
+
+The water-balance moisture inference engine (Indoor v1) needs (a) a way to
+collect user feedback on its moisture estimates to evaluate and tune the model,
+and (b) an internal moisture scale to reason about soil water content. Naively,
+feedback could be stored as another observation type, and the model's moisture
+percentage could be treated as directly comparable to a sensor reading
+(`measurements.soil_moisture_percent`). Both choices would blur the line between
+private model telemetry and user-authored, potentially-exportable observations,
+and would overstate the precision of an inferred value.
+
+### Decision
+
+- Store moisture-model feedback in a new private table, `moisture_feedback`,
+  related to `plants` (two-way, cascade delete) — **not** to `observations`.
+  This keeps it structurally unreachable by the observation-walking export
+  pipeline and out of `PUBLIC_EXPORT_FIELDS`, regardless of consent flags.
+- Keep `measurements.soil_state` (qualitative dry/moist/wet, added for this
+  same effort) as a normal observation field: it IS exportable when the user
+  consents, same as other measurements.
+- Treat the engine's computed moisture percentage as an **internal
+  capacity-fraction scale** — the fraction of the substrate's available water
+  capacity remaining — anchored to the qualitative Dry/Moist/Wet checks rather
+  than calibrated against any physical sensor. It is not presented as, or
+  compared directly to, a sensor-derived `soil_moisture_percent` reading.
+
+### Consequences
+
+- The export guarantee is structural, not just a field-allowlist check:
+  `moisture_feedback` has no path into `toPublicRow`/`PUBLIC_EXPORT_FIELDS`
+  because the export walks `observations`, never `plants.moisture_feedback`.
+- `soil_state` and model telemetry can evolve independently — adding feedback
+  columns never risks loosening the export allowlist.
+- UI and docs must consistently describe the engine's moisture percentage as an
+  estimate on an internal scale, not a sensor-equivalent percentage, to avoid
+  misleading comparisons with `soil_moisture_percent`.

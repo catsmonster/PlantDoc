@@ -28,7 +28,14 @@ This data can be used inside PlantDoc for user features and enrichment, but shou
 - weather API enrichment,
 - geocoded administrative regions,
 - sensor-derived environmental readings,
-- plant health trend summaries.
+- plant health trend summaries,
+- moisture-model telemetry (`moisture_feedback`): per-plant verdicts on the
+  water-balance moisture estimator (`estimate_feedback`, `magnitude`,
+  `predicted_moisture_percent`), stored as owner-only rows related to `plants`
+  (not `observations`). Never reachable by the export pipeline and never in
+  `PUBLIC_EXPORT_FIELDS`. Contrast with `measurements.soil_state` — a
+  qualitative dry/moist/wet check that IS an exportable observation when the
+  user consents.
 
 ### Public Export Data
 

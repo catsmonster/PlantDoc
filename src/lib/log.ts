@@ -1,4 +1,4 @@
-import type { ObservationType, TreatmentType } from './types';
+import type { ObservationType, SoilState, TreatmentType } from './types';
 
 /** Input collected by the logging UI for a single timeline entry. */
 export interface LogInput {
@@ -9,8 +9,8 @@ export interface LogInput {
   note?: string;
   treatment?: {
     treatment_type: TreatmentType;
-    amount_value?: number;
-    amount_unit?: string;
+    amount_value?: number | null;
+    amount_unit?: string | null;
     product_name?: string;
     method?: string;
   };
@@ -19,6 +19,7 @@ export interface LogInput {
     leaf_count?: number;
     soil_moisture_percent?: number;
     health_score?: number;
+    soil_state?: SoilState;
   };
 }
 
@@ -56,7 +57,14 @@ export function buildLogPayload(input: LogInput): LogPayload {
     },
   };
   if (input.treatment) {
-    payload.treatment = { user_id: input.userId, ...input.treatment };
+    const entries = Object.entries(input.treatment).filter(([, v]) => v !== undefined);
+    payload.treatment = { user_id: input.userId, ...Object.fromEntries(entries) };
+    if (
+      input.treatment.treatment_type === 'watering' &&
+      input.treatment.amount_value === undefined
+    ) {
+      payload.treatment.amount_value = null;
+    }
   }
   if (input.measurement) {
     const entries = Object.entries(input.measurement).filter(([, v]) => v !== undefined);

@@ -106,6 +106,11 @@ User-owned plant profiles.
 | `watering_cadence_days` | float | no | Private summary field: computed or default watering interval in days. |
 | `latest_photo_file_id` | string | no | Private summary field: Appwrite file ID of the most recent photo. |
 | `latest_photo_observed_at` | datetime | no | Private summary field: timestamp of the most recent photo observation. |
+| `pot_diameter_cm` | float | no | Top inner pot diameter (cm), 1–200. Feeds moisture inference. |
+| `pot_height_cm` | float | no | Soil depth (cm), 1–200. Feeds moisture inference. |
+| `substrate_type` | enum/string | no | `standard`, `succulent_gritty`, `chunky_aroid`, `peat_seedling`. Nullable = unknown; no DB default. |
+| `pot_drains` | boolean | no | Whether the pot drains. Nullable = unknown; no DB default. |
+| `light_level` | enum/string | no | `low`, `medium`, `bright`, `direct_sun`. |
 | `created_at` | datetime | yes | Server generated. |
 | `updated_at` | datetime | yes | Server generated. |
 
@@ -159,6 +164,7 @@ Quantitative plant state.
 | `health_score` | integer | no | 1-10 scale. |
 | `pest_severity_score` | integer | no | 0-10 scale. |
 | `bloom_count` | integer | no | Optional. |
+| `soil_state` | enum/string | no | `dry`, `moist`, `wet`. Qualitative soil check; feeds moisture inference. May be exported when consented. |
 | `notes_private` | string | no | Never exported directly. |
 
 ### `photos`
@@ -224,6 +230,27 @@ exports. The roadmap's optional AI features (photo insights, recognition
 labels, embeddings) are deferred pending an AI provider decision; their
 consent requirements are recorded in
 `docs/superpowers/specs/2026-06-10-phase-4-recommendations-design.md`.
+
+### `moisture_feedback`
+
+Added for the water-balance moisture inference engine. Per-plant model telemetry
+("was the estimate too wet, too dry, or correct?") used to evaluate and tune the
+estimator.
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `user_id` | string | yes | Owner Appwrite user ID. |
+| `plant_id` | relationship/string | yes | Two-way cascade (`plants.moisture_feedback`); telemetry is read through the plant and dies with it. |
+| `observed_at` | datetime | yes | When the feedback was given. |
+| `estimate_feedback` | enum/string | yes | `wetter`, `drier`, or `correct` — user's verdict on the model's moisture estimate. |
+| `magnitude` | integer | no | 1-5 scale, how far off the estimate felt. |
+| `predicted_moisture_percent` | float | no | 0-100, the model's estimate at the time of feedback. |
+
+**Private model telemetry, owner-scoped, never exported.** Unlike
+`measurements.soil_state` (an exportable observation when consented),
+`moisture_feedback` rows are not observations and are never reachable by the
+export pipeline — `plant_id` relates to `plants`, not `observations`, and the
+table is excluded from `PUBLIC_EXPORT_FIELDS` entirely.
 
 ## Open Plant Knowledge Tables
 

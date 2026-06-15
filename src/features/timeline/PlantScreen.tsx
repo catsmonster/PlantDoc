@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { errorMessage } from '../../lib/error';
-import { getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
-import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback } from '../../lib/types';
+import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto, type MoistureFeedbackInput } from '../../lib/repo';
+import type { LogInput } from '../../lib/log';
+import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback, SoilState, EstimateFeedback } from '../../lib/types';
+import { moistureForPlant } from '../../lib/moisture-read';
+import { moistureInsight, type WateringStatus } from '../../lib/moisture';
 import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
@@ -36,6 +39,121 @@ const treatmentLabels: Record<TreatmentType, string> = {
   relocation: 'Moved',
 };
 
+const soilStateLabels: Record<SoilState, string> = {
+  dry: 'Dry',
+  moist: 'Moist',
+  wet: 'Wet',
+};
+
+// eslint-disable-next-line react-refresh/only-export-components -- Pure helper exported for focused tests.
+export function buildSoilCheckLogInput({
+  userId,
+  plantId,
+  soilState,
+  contribute,
+  observedAt,
+}: {
+  userId: string;
+  plantId: string;
+  soilState: SoilState;
+  contribute: boolean;
+  observedAt: string;
+}): LogInput {
+  return {
+    userId,
+    plantId,
+    observedAt,
+    contribute,
+    measurement: { soil_state: soilState },
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- Submit helper exported for focused tests.
+export async function submitSoilCheck({
+  userId,
+  plantId,
+  soilState,
+  contribute,
+  now = () => new Date(),
+  createLog: createLogFn = createLog,
+  refresh,
+}: {
+  userId: string;
+  plantId: string;
+  soilState: SoilState;
+  contribute: boolean;
+  now?: () => Date;
+  createLog?: (input: LogInput) => Promise<Observation>;
+  refresh: () => void;
+}): Promise<void> {
+  await createLogFn(
+    buildSoilCheckLogInput({
+      userId,
+      plantId,
+      soilState,
+      contribute,
+      observedAt: now().toISOString(),
+    }),
+  );
+  refresh();
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- Pure helper exported for focused tests.
+export function buildMoistureFeedbackInput({
+  plantId,
+  estimateFeedback,
+  magnitude,
+  predictedMoisturePercent,
+  observedAt,
+}: {
+  plantId: string;
+  estimateFeedback: EstimateFeedback;
+  magnitude: number | null;
+  predictedMoisturePercent: number;
+  observedAt: string;
+}): MoistureFeedbackInput {
+  return {
+    plantId,
+    observedAt,
+    estimate_feedback: estimateFeedback,
+    magnitude: estimateFeedback === 'correct' ? null : magnitude,
+    predicted_moisture_percent: predictedMoisturePercent,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- Submit helper exported for focused tests.
+export async function submitMoistureFeedback({
+  userId,
+  plantId,
+  estimateFeedback,
+  magnitude,
+  predictedMoisturePercent,
+  now = () => new Date(),
+  createMoistureFeedback: createMoistureFeedbackFn = createMoistureFeedback,
+  refresh,
+}: {
+  userId: string;
+  plantId: string;
+  estimateFeedback: EstimateFeedback;
+  magnitude: number | null;
+  predictedMoisturePercent: number;
+  now?: () => Date;
+  createMoistureFeedback?: (userId: string, input: MoistureFeedbackInput) => Promise<unknown>;
+  refresh: () => void;
+}): Promise<void> {
+  await createMoistureFeedbackFn(
+    userId,
+    buildMoistureFeedbackInput({
+      plantId,
+      estimateFeedback,
+      magnitude,
+      predictedMoisturePercent,
+      observedAt: now().toISOString(),
+    }),
+  );
+  refresh();
+}
+
 function getIconName(obs: Observation): IconName {
   if (obs.observation_type === 'treatment') {
     const tType = obs.treatments?.[0]?.treatment_type;
@@ -61,7 +179,8 @@ function getIconName(obs: Observation): IconName {
   return map[obs.observation_type] || 'note';
 }
 
-function detailLine(obs: Observation, units: Units): string | null {
+// eslint-disable-next-line react-refresh/only-export-components -- Timeline detail helper exported for focused tests.
+export function detailLine(obs: Observation, units: Units): string | null {
   if (obs.observation_type === 'treatment') {
     const t = obs.treatments?.[0];
     if (!t) return 'Care';
@@ -84,6 +203,7 @@ function detailLine(obs: Observation, units: Units): string | null {
     if (m.height_cm != null) parts.push(formatHeight(m.height_cm, units));
     if (m.leaf_count != null) parts.push(`${m.leaf_count} leaves`);
     if (m.soil_moisture_percent != null) parts.push(`soil ${m.soil_moisture_percent}%`);
+    if (m.soil_state) parts.push(`soil ${m.soil_state}`);
     if (m.health_score != null) parts.push(`health ${m.health_score}/5`);
     return parts.length ? parts.join(' · ') : 'Measured';
   }
@@ -110,6 +230,22 @@ function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function moistureStatusColor(status: WateringStatus, isDark: boolean): string {
+  const dark: Record<WateringStatus, string> = {
+    comfortable: '#C7F24A',
+    drying: '#E0C56B',
+    water_now: '#E0A36B',
+    overwatered: '#7FC8E0',
+  };
+  const light: Record<WateringStatus, string> = {
+    comfortable: '#3C7140',
+    drying: '#A88A3C',
+    water_now: '#B07F57',
+    overwatered: '#3F7E91',
+  };
+  return (isDark ? dark : light)[status];
 }
 
 function getPlantTint(plantId: string): [string, string] {
@@ -196,6 +332,196 @@ function PhotoButton({ userId, plantId, profile, onUploaded, onError, isDark }: 
         <Icon name="camera" size={21} stroke={2} />
       </button>
     </>
+  );
+}
+
+function SoilCheckAction({
+  isDark,
+  open,
+  busy,
+  onToggle,
+  onSubmit,
+}: {
+  isDark: boolean;
+  open: boolean;
+  busy: boolean;
+  onToggle: () => void;
+  onSubmit: (soilState: SoilState) => void;
+}) {
+  const states: SoilState[] = ['dry', 'moist', 'wet'];
+  const border = isDark ? '1px solid rgba(255,255,255,.09)' : '1px solid #E7E0D2';
+  const background = isDark ? '#19231B' : '#FFFDF8';
+  const color = isDark ? '#F2F6EF' : '#3C7140';
+  const activeBackground = isDark ? '#243024' : '#EBF1E7';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: open ? 1.25 : '0 0 auto', minWidth: open ? 180 : 0 }}>
+      <button
+        type="button"
+        className={isDark ? 'b-tap' : 'a-tap'}
+        disabled={busy}
+        aria-expanded={open}
+        aria-controls={`soil-check-${isDark ? 'dark' : 'light'}`}
+        onClick={onToggle}
+        style={{
+          minHeight: 52,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          background,
+          color,
+          border,
+          borderRadius: isDark ? 15 : 16,
+          padding: '0 13px',
+          cursor: busy ? 'not-allowed' : 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 13.5,
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <Icon name="ruler" size={17} stroke={2.2} />
+        Check soil
+      </button>
+      {open && (
+        <div
+          id={`soil-check-${isDark ? 'dark' : 'light'}`}
+          role="group"
+          aria-label="Choose soil state"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}
+        >
+          {states.map((state) => (
+            <button
+              key={state}
+              type="button"
+              className={isDark ? 'b-tap' : 'a-tap'}
+              disabled={busy}
+              onClick={() => onSubmit(state)}
+              style={{
+                minHeight: 40,
+                border,
+                borderRadius: 12,
+                background: activeBackground,
+                color,
+                cursor: busy ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 12.5,
+                fontWeight: 700,
+              }}
+            >
+              {soilStateLabels[state]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const estimateFeedbackLabels: Record<EstimateFeedback, string> = {
+  wetter: 'Wetter',
+  correct: 'Spot-on',
+  drier: 'Drier',
+};
+
+function MoistureFeedbackPrompt({
+  isDark,
+  predictedMoisturePercent,
+  busy,
+  onSubmit,
+}: {
+  isDark: boolean;
+  predictedMoisturePercent: number;
+  busy: boolean;
+  onSubmit: (estimateFeedback: EstimateFeedback, magnitude: number | null) => void;
+}) {
+  const [selected, setSelected] = useState<'wetter' | 'drier' | null>(null);
+  const border = isDark ? '1px solid rgba(255,255,255,.09)' : '1px solid #E7E0D2';
+  const background = isDark ? '#111912' : '#FFFDF8';
+  const muted = isDark ? '#9BAA98' : '#6B7568';
+  const text = isDark ? '#F2F6EF' : '#23302A';
+  const accent = isDark ? '#C7F24A' : '#3C7140';
+  const activeBackground = isDark ? '#243024' : '#EBF1E7';
+
+  const choices: EstimateFeedback[] = ['wetter', 'correct', 'drier'];
+
+  const handleChoice = (choice: EstimateFeedback) => {
+    if (choice === 'correct') {
+      onSubmit('correct', null);
+      return;
+    }
+    setSelected(choice);
+  };
+
+  return (
+    <div style={{ marginTop: 14, padding: 12, borderRadius: isDark ? 14 : 16, border, background }}>
+      <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: text }}>Checked the soil?</p>
+      <p style={{ margin: '3px 0 0', fontSize: 11.5, lineHeight: 1.35, color: muted }}>
+        We estimated ~{Math.round(predictedMoisturePercent)}% — how was it?
+      </p>
+      <div
+        role="group"
+        aria-label="How did our estimate compare?"
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginTop: 10 }}
+      >
+        {choices.map((choice) => (
+          <button
+            key={choice}
+            type="button"
+            className={isDark ? 'b-tap' : 'a-tap'}
+            disabled={busy}
+            onClick={() => handleChoice(choice)}
+            style={{
+              minHeight: 40,
+              border,
+              borderRadius: 12,
+              background: selected === choice ? activeBackground : background,
+              color: text,
+              cursor: busy ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 12.5,
+              fontWeight: 700,
+            }}
+          >
+            {estimateFeedbackLabels[choice]}
+          </button>
+        ))}
+      </div>
+      {selected && (
+        <div
+          role="group"
+          aria-label="How far off?"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 6, marginTop: 8 }}
+        >
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={isDark ? 'b-tap' : 'a-tap'}
+              disabled={busy}
+              onClick={() => {
+                onSubmit(selected, n);
+                setSelected(null);
+              }}
+              style={{
+                minHeight: 36,
+                border,
+                borderRadius: 10,
+                background: activeBackground,
+                color: accent,
+                cursor: busy ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 12.5,
+                fontWeight: 700,
+              }}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -383,6 +709,9 @@ export function PlantScreen({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+  const [soilCheckOpen, setSoilCheckOpen] = useState(false);
+  const [soilCheckBusy, setSoilCheckBusy] = useState(false);
+  const [moistureFeedbackBusy, setMoistureFeedbackBusy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [verdicts, setVerdicts] = useState<Map<string, InsightFeedback>>(new Map());
   const [aiPreview, setAiPreview] = useState<AiPreviewState>(initialAiPreview);
@@ -437,7 +766,45 @@ export function PlantScreen({
 
   const refresh = () => {
     setLogOpen(false);
+    setSoilCheckOpen(false);
     setReloadKey((k) => k + 1);
+  };
+
+  const handleSoilCheck = async (soilState: SoilState) => {
+    if (!plant || soilCheckBusy) return;
+    setSoilCheckBusy(true);
+    try {
+      await submitSoilCheck({
+        userId,
+        plantId: plant.$id,
+        soilState,
+        contribute: profile.public_contribution_default,
+        refresh,
+      });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setSoilCheckBusy(false);
+    }
+  };
+
+  const handleMoistureFeedback = async (estimateFeedback: EstimateFeedback, magnitude: number | null) => {
+    if (!plant || !moisture || moistureFeedbackBusy) return;
+    setMoistureFeedbackBusy(true);
+    try {
+      await submitMoistureFeedback({
+        userId,
+        plantId: plant.$id,
+        estimateFeedback,
+        magnitude,
+        predictedMoisturePercent: Math.round(moisture.moisturePercent),
+        refresh,
+      });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setMoistureFeedbackBusy(false);
+    }
   };
 
   const handleFeedback = (kind: string, helpful: boolean) => {
@@ -503,6 +870,17 @@ export function PlantScreen({
   const tableMatch =
     tableProfile && tableProfile.speciesId === speciesRowId ? tableProfile.profile : null;
   const careProfile = tableMatch ?? careProfileForPlant(plant);
+  const moisture = moistureForPlant(plant, careProfile, plant.moisture_feedback ?? [], now);
+  const moistureSpeciesName =
+    careProfile?.scientificName ?? plant.species_id?.scientific_name ?? plant.common_name ?? null;
+  const moistureIns = moisture
+    ? moistureInsight(
+        { moisturePercent: moisture.moisturePercent, confidence: moisture.confidence },
+        moisture.recommendation,
+        moistureSpeciesName,
+        moisture.band,
+      )
+    : null;
 
   // Group timeline observations by day
   const groupedTimeline: [string, Observation[]][] = [];
@@ -681,6 +1059,18 @@ export function PlantScreen({
                 </div>
                 <p className="b-kicker" style={{ margin: '5px 0 0', fontSize: 10 }}>Cadence</p>
               </div>
+
+              {moisture && (
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                    <span style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-.02em', color: moistureStatusColor(moisture.recommendation.status, true) }}>
+                      {Math.round(moisture.moisturePercent)}
+                    </span>
+                    <span className="mono" style={{ fontSize: 12, color: '#67766A' }}>%</span>
+                  </div>
+                  <p className="b-kicker" style={{ margin: '5px 0 0', fontSize: 10 }}>Moisture</p>
+                </div>
+              )}
             </div>
 
             {/* Quick Actions Row */}
@@ -688,6 +1078,13 @@ export function PlantScreen({
               <button className="b-tap" onClick={() => setLogOpen(true)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, background: '#C7F24A', color: '#0E140F', border: 'none', borderRadius: 15, padding: '15px 0', cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", fontSize: 15.5, fontWeight: 700 }}>
                 <Icon name="droplet" size={19} stroke={2.4} /> Log care
               </button>
+              <SoilCheckAction
+                isDark
+                open={soilCheckOpen}
+                busy={soilCheckBusy}
+                onToggle={() => setSoilCheckOpen((open) => !open)}
+                onSubmit={(soilState) => void handleSoilCheck(soilState)}
+              />
               <PhotoButton userId={userId} plantId={plant.$id} profile={profile} onUploaded={refresh} onError={setError} isDark />
             </div>
 
@@ -707,6 +1104,24 @@ export function PlantScreen({
                   <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.09)' }}></span>
                   <span className="mono" style={{ fontSize: 9.5, letterSpacing: '.1em', color: '#0E140F', background: '#E0A36B', padding: '3px 7px', borderRadius: 5 }}>EXPERIMENTAL</span>
                 </div>
+                {moistureIns && moisture && (
+                  <div className="b-rise" style={{ borderLeft: '2px solid ' + (moistureIns.severity === 'warning' ? '#E0A36B' : '#C7F24A'), paddingLeft: 14, marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Icon name="droplet" size={15} stroke={2.2} style={{ color: moistureIns.severity === 'warning' ? '#E0A36B' : '#C7F24A' }} />
+                      <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#F2F6EF' }}>{moistureIns.title}</p>
+                    </div>
+                    <p style={{ margin: '5px 0 0', fontSize: 13, lineHeight: 1.5, color: '#9BAA98' }}>{moistureIns.detail}</p>
+                    <p className="mono" style={{ margin: '6px 0 0', fontSize: 10, color: '#67766A', letterSpacing: '.06em' }}>
+                      ESTIMATED · {moisture.confidence.toUpperCase()} CONFIDENCE
+                    </p>
+                    <MoistureFeedbackPrompt
+                      isDark
+                      predictedMoisturePercent={moisture.moisturePercent}
+                      busy={moistureFeedbackBusy}
+                      onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                    />
+                  </div>
+                )}
                 {insights.map((ins, i) => {
                   const warn = ins.severity === 'warning';
                   const verdict = verdicts.get(ins.kind);
@@ -914,6 +1329,13 @@ export function PlantScreen({
             <button className="a-tap" onClick={() => setLogOpen(true)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, background: '#3C7140', color: '#fff', border: 'none', borderRadius: 16, padding: '15px 0', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15.5, fontWeight: 600, boxShadow: '0 10px 22px -10px rgba(60,113,64,.7)' }}>
               <Icon name="droplet" size={19} stroke={2.2} /> Log care
             </button>
+            <SoilCheckAction
+              isDark={false}
+              open={soilCheckOpen}
+              busy={soilCheckBusy}
+              onToggle={() => setSoilCheckOpen((open) => !open)}
+              onSubmit={(soilState) => void handleSoilCheck(soilState)}
+            />
             <PhotoButton userId={userId} plantId={plant.$id} profile={profile} onUploaded={refresh} onError={setError} isDark={false} />
           </div>
 
@@ -958,6 +1380,17 @@ export function PlantScreen({
               </div>
               <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#9AA294', fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase' }}>Every</p>
             </div>
+
+            {moisture && (
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                  <span className="serif" style={{ fontSize: 24, fontWeight: 600, color: moistureStatusColor(moisture.recommendation.status, false) }}>
+                    {Math.round(moisture.moisturePercent)}%
+                  </span>
+                </div>
+                <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#9AA294', fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase' }}>Moisture</p>
+              </div>
+            )}
           </div>
 
           {/* Species care guide — sourced reference facts */}
@@ -976,11 +1409,29 @@ export function PlantScreen({
                 <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: '#23302A' }}>Care insights</h3>
                 <span className="a-chip" style={{ background: '#F1E7DC', color: '#B07F57', padding: '3px 8px', fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 700 }}>Experimental</span>
               </div>
+              {moistureIns && moisture && (
+                <div className="a-rise" style={{ display: 'flex', gap: 12, padding: '14px 0', borderTop: 'none' }}>
+                  <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: moistureIns.severity === 'warning' ? '#F1E7DC' : '#EBF1E7', color: moistureIns.severity === 'warning' ? '#B07F57' : '#3C7140' }}>
+                    <Icon name="droplet" size={18} stroke={2} />
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: '#23302A' }}>{moistureIns.title}</p>
+                    <p style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5, color: '#6B7568' }}>{moistureIns.detail}</p>
+                    <p style={{ margin: '6px 0 0', fontSize: 11, color: '#9AA294' }}>Estimated · {moisture.confidence} confidence</p>
+                    <MoistureFeedbackPrompt
+                      isDark={false}
+                      predictedMoisturePercent={moisture.moisturePercent}
+                      busy={moistureFeedbackBusy}
+                      onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                    />
+                  </div>
+                </div>
+              )}
               {insights.map((ins, i) => {
                 const warn = ins.severity === 'warning';
                 const verdict = verdicts.get(ins.kind);
                 return (
-                  <div key={ins.kind} className="a-rise" style={{ animationDelay: 80 + i * 80 + 'ms', display: 'flex', gap: 12, padding: '14px 0', borderTop: i ? '1px solid #E7E0D2' : 'none' }}>
+                  <div key={ins.kind} className="a-rise" style={{ animationDelay: 80 + i * 80 + 'ms', display: 'flex', gap: 12, padding: '14px 0', borderTop: (i || moistureIns) ? '1px solid #E7E0D2' : 'none' }}>
                     <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: warn ? '#F1E7DC' : '#EBF1E7', color: warn ? '#B07F57' : '#3C7140' }}>
                       <Icon name={warn ? 'sun' : ins.kind.includes('growth') ? 'arrowUp' : 'droplet'} size={18} stroke={2} />
                     </span>

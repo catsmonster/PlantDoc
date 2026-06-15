@@ -12,6 +12,7 @@ const REQUIRED_TABLES = [
   'photos',
   'environment_snapshots',
   'insight_feedback',
+  'moisture_feedback',
   'source_datasets',
   'taxon_references',
   'care_facts',
@@ -58,6 +59,7 @@ describe('schema coverage', () => {
       'photos',
       'environment_snapshots',
       'insight_feedback',
+      'moisture_feedback',
     ];
     for (const id of privateTables) {
       expect(TABLES.find((t) => t.id === id)!.permissions, id).toEqual(['create:users']);
@@ -132,6 +134,18 @@ describe('schema coverage', () => {
       expect(rel.relatedTableId).toBe('plants');
       expect(rel.twoWay).toBe(true);
       expect(rel.twoWayKey).toBe('insight_feedback');
+      expect(rel.onDelete).toBe('cascade');
+    }
+  });
+
+  it('moisture_feedback.plant_id is two-way with cascade delete', () => {
+    const feedback = TABLES.find((t) => t.id === 'moisture_feedback')!;
+    const rel = feedback.columns.find((c) => c.key === 'plant_id')!;
+    expect(rel.kind).toBe('relationship');
+    if (rel.kind === 'relationship') {
+      expect(rel.relatedTableId).toBe('plants');
+      expect(rel.twoWay).toBe(true);
+      expect(rel.twoWayKey).toBe('moisture_feedback');
       expect(rel.onDelete).toBe('cascade');
     }
   });

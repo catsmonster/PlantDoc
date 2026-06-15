@@ -67,7 +67,7 @@ export function clearLogDraft(store: DraftStore, key: string): void {
 export function isDefaultLogDraft(draft: LogDraft, contributeDefault: boolean): boolean {
   return (
     draft.mode === 'water' &&
-    draft.amount === '250' &&
+    draft.amount === '' &&
     draft.method === 'top water' &&
     draft.careType === 'fertilizing' &&
     draft.productName === '' &&
