@@ -27,6 +27,7 @@ import {
 } from '../../lib/gemini-preview';
 import {
   detailLine,
+  shouldPromptForPotSize,
   submitMoistureFeedback,
   submitSoilCheck,
 } from './plant-screen-logic';
@@ -356,6 +357,80 @@ function MoistureFeedbackPrompt({
         </div>
       )}
     </div>
+  );
+}
+
+function PotSizeMoistureNudge({
+  isDark,
+  onClick,
+}: {
+  isDark: boolean;
+  onClick: () => void;
+}) {
+  const border = isDark ? '1px solid rgba(255,255,255,.09)' : '1px solid #E7E0D2';
+  const background = isDark ? '#19231B' : '#FFFDF8';
+  const text = isDark ? '#F2F6EF' : '#23302A';
+  const muted = isDark ? '#9BAA98' : '#6B7568';
+  const accent = isDark ? '#C7F24A' : '#3C7140';
+
+  return (
+    <button
+      type="button"
+      className={isDark ? 'b-tap b-rise' : 'a-tap a-rise'}
+      aria-label="Add pot size to track soil moisture"
+      onClick={onClick}
+      style={{
+        width: '100%',
+        minHeight: 56,
+        marginTop: 12,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 11,
+        padding: '11px 13px',
+        border,
+        borderRadius: isDark ? 15 : 16,
+        background,
+        color: text,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        textAlign: 'left',
+      }}
+    >
+      <span
+        style={{
+          width: 34,
+          height: 34,
+          flexShrink: 0,
+          borderRadius: 11,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: isDark ? '#243024' : '#EBF1E7',
+          color: accent,
+        }}
+      >
+        <Icon name="pot" size={18} stroke={2.2} />
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 14, lineHeight: 1.25, fontWeight: 700 }}>
+          Add pot size to track soil moisture
+        </span>
+        <span style={{ display: 'block', marginTop: 2, fontSize: 12.5, lineHeight: 1.35, color: muted }}>
+          Pot dimensions keep the estimate from guessing.
+        </span>
+      </span>
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: accent,
+        }}
+      >
+        <Icon name="pencil" size={16} stroke={2.2} />
+      </span>
+    </button>
   );
 }
 
@@ -707,6 +782,7 @@ export function PlantScreen({
     tableProfile && tableProfile.speciesId === speciesRowId ? tableProfile.profile : null;
   const careProfile = tableMatch ?? careProfileForPlant(plant);
   const moisture = moistureForPlant(plant, careProfile, plant.moisture_feedback ?? [], now);
+  const showPotSizeMoistureNudge = !moisture && shouldPromptForPotSize(plant);
   const moistureSpeciesName =
     careProfile?.scientificName ?? plant.species_id?.scientific_name ?? plant.common_name ?? null;
   const moistureIns = moisture
@@ -910,6 +986,10 @@ export function PlantScreen({
                 </div>
               )}
             </div>
+
+            {showPotSizeMoistureNudge && (
+              <PotSizeMoistureNudge isDark onClick={() => onEdit(plant)} />
+            )}
 
             {/* Quick Actions Row */}
             <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
@@ -1244,6 +1324,9 @@ export function PlantScreen({
               </div>
             )}
           </div>
+          {showPotSizeMoistureNudge && (
+            <PotSizeMoistureNudge isDark={false} onClick={() => onEdit(plant)} />
+          )}
 
           {/* Species care guide — sourced reference facts */}
           {careProfile && (

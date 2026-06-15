@@ -14,6 +14,13 @@ import {
   type WateringRecommendation,
 } from './moisture';
 
+export type PotSizePromptPlant = Pick<Plant, 'placement_type' | 'pot_diameter_cm' | 'pot_height_cm'>;
+
+export function shouldPromptForPotSize(plant: PotSizePromptPlant): boolean {
+  if (plant.placement_type === 'outdoor' || plant.placement_type === 'balcony') return false;
+  return plant.pot_diameter_cm == null || plant.pot_height_cm == null;
+}
+
 export interface PlantMoisture {
   moisturePercent: number;
   confidence: Confidence;
@@ -37,7 +44,7 @@ export function moistureForPlant(
 ): PlantMoisture | null {
   // Only a missing pot hides the gauge; a 0/negative dimension is form-prevented and
   // flows through as ~0% via the capacity guard in estimateMoisture.
-  if (plant.pot_diameter_cm == null || plant.pot_height_cm == null) return null;
+  if (shouldPromptForPotSize(plant)) return null;
   if (plant.placement_type === 'outdoor' || plant.placement_type === 'balcony') return null;
 
   const { estimate, band, bandSourced } = buildMoistureInputs({ plant, careProfile, feedback, now });
