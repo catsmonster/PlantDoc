@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { errorMessage } from '../../lib/error';
-import { listPlants } from '../../lib/repo';
+import { listPlantsForDashboard, type DashboardPlant } from '../../lib/repo';
 import { isPlantThirstyFromSummary } from '../../lib/insights';
+import { moistureForPlant, type PlantMoisture } from '../../lib/moisture-read';
+import { moistureStatusColor } from '../../lib/moisture';
+import { careProfileForPlant } from '../../lib/knowledge/care-profiles';
 import type { Plant, Profile } from '../../lib/types';
 import { ErrorText } from '../../ui/Field';
 import { Spinner } from '../../ui/Spinner';
@@ -38,7 +41,7 @@ export function PlantsScreen({
 }) {
   const { signOut } = useAuthRedirect();
   const { theme, toggleTheme } = useTheme();
-  const [plants, setPlants] = useState<Plant[] | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardPlant[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -54,9 +57,9 @@ export function PlantsScreen({
 
   useEffect(() => {
     let cancelled = false;
-    listPlants(userId)
+    listPlantsForDashboard(userId)
       .then((rows) => {
-        if (!cancelled) setPlants(rows);
+        if (!cancelled) setDashboard(rows);
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(errorMessage(e));
@@ -82,7 +85,23 @@ export function PlantsScreen({
     );
   }
 
-  if (!plants) return <Spinner label="Loading your plants…" />;
+  if (!dashboard) return <Spinner label="Loading your plants…" />;
+
+  const plants = dashboard.map((d) => d.plant);
+  // Recompute each plant's inferred moisture live (same inputs as the detail
+  // screen): table-backed care profile when mined, else the bundled fallback.
+  // Null when the gauge should hide (no pot size / outdoors).
+  const moistureByPlant = new Map<string, PlantMoisture | null>(
+    dashboard.map((d) => [
+      d.plant.$id,
+      moistureForPlant(
+        d.plant,
+        d.careProfile ?? careProfileForPlant(d.plant),
+        d.plant.moisture_feedback ?? [],
+        now.getTime(),
+      ),
+    ]),
+  );
 
   const activePlants = plants.filter((p) => p.status === 'active');
   const visible = plants.filter((p) => (showArchived ? true : p.status === 'active'));
@@ -225,6 +244,7 @@ export function PlantsScreen({
                 : 0;
               const isThirsty = isPlantThirstyFromSummary(p, now);
               const speciesLine = p.common_name ?? p.species_text ?? '';
+              const m = moistureByPlant.get(p.$id) ?? null;
 
               return (
                 <button
@@ -258,11 +278,18 @@ export function PlantsScreen({
                         </span>
                       )}
                     </div>
-                    {isThirsty && (
-                      <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: '#C7F24A', color: '#0E140F', backdropFilter: 'blur(6px)' }}>
-                        <Icon name="droplet" size={11} stroke={2.6} /> Water
-                      </span>
-                    )}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {m && (
+                        <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: 'rgba(8,12,9,.55)', color: moistureStatusColor(m.recommendation.status, true), backdropFilter: 'blur(6px)' }}>
+                          <Icon name="droplet" size={11} stroke={2.6} /> {Math.round(m.moisturePercent)}%
+                        </span>
+                      )}
+                      {isThirsty && (
+                        <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', padding: '5px 9px', borderRadius: 7, background: '#C7F24A', color: '#0E140F', backdropFilter: 'blur(6px)' }}>
+                          <Icon name="droplet" size={11} stroke={2.6} /> Water
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div style={{ position: 'absolute', left: 16, right: 16, bottom: 15 }}>
                     <h3 style={{ margin: 0, fontSize: 27, fontWeight: 700, letterSpacing: '-.02em', lineHeight: 1, color: '#fff' }}>{p.nickname}</h3>
@@ -458,6 +485,7 @@ export function PlantsScreen({
               : 0;
             const isThirsty = isPlantThirstyFromSummary(p, now);
             const speciesLine = p.common_name ?? p.species_text ?? '';
+            const m = moistureByPlant.get(p.$id) ?? null;
 
             return (
               <button
@@ -506,6 +534,15 @@ export function PlantsScreen({
                     <span style={{ width: 3, height: 3, borderRadius: 9, background: '#9AA294', margin: '0 1px' }}></span>
                     <Icon name="droplet" size={13} stroke={2} />
                     {p.last_watered_at ? `${lastWateredDays}d ago` : 'never'}
+                    {m && (
+                      <>
+                        <span style={{ width: 3, height: 3, borderRadius: 9, background: '#9AA294', margin: '0 1px' }}></span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 600, color: moistureStatusColor(m.recommendation.status, false) }}>
+                          <Icon name="droplet" size={13} stroke={2.4} />
+                          {Math.round(m.moisturePercent)}%
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               </button>

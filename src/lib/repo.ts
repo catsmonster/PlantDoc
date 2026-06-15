@@ -236,6 +236,72 @@ export async function listPlants(userId: string): Promise<Plant[]> {
   return result.rows as unknown as Plant[];
 }
 
+export interface DashboardPlant {
+  plant: Plant;
+  /** Table-backed care profile (null when the species has no mined facts). The
+   *  dashboard applies the bundled editorial fallback at moisture-compute time,
+   *  mirroring the detail screen's `tableMatch ?? careProfileForPlant(plant)`. */
+  careProfile: SpeciesCareProfile | null;
+}
+
+/**
+ * Moisture-capable dashboard read. Unlike `listPlants` (scalar-only), this
+ * hydrates the relationship columns `moistureForPlant` needs — observations
+ * with treatments/measurements, private moisture_feedback, and the species
+ * `care_facts` that source the band — so each home card recomputes the same
+ * estimate the detail screen shows. Heavier than `listPlants` by design (the
+ * dashboard recomputes live rather than caching a denormalized scalar).
+ */
+export async function listPlantsForDashboard(userId: string): Promise<DashboardPlant[]> {
+  const result = await tablesDB.listRows({
+    databaseId: db,
+    tableId: 'plants',
+    queries: [
+      Query.equal('user_id', userId),
+      Query.orderDesc('$createdAt'),
+      Query.limit(100),
+      Query.select([
+        '*',
+        'species_id.*',
+        'species_id.care_facts.*',
+        'location_id.*',
+        'observations.*',
+        'observations.treatments.*',
+        'observations.measurements.*',
+        'moisture_feedback.*',
+      ]),
+    ],
+  });
+  const plants = result.rows as unknown as Plant[];
+  return plants.map((plant) => {
+    plant.observations = [...(plant.observations ?? [])].sort((a, b) =>
+      b.observed_at.localeCompare(a.observed_at),
+    );
+    return { plant, careProfile: careProfileFromHydratedSpecies(plant) };
+  });
+}
+
+/**
+ * Composes the table-backed care profile from a plant's already-hydrated
+ * `species_id` relation (with `care_facts.*` selected), reusing the same path
+ * as `getCareProfile`. Returns null when the species relation is absent or has
+ * no facts, so the caller can fall back to the bundled editorial profile.
+ */
+function careProfileFromHydratedSpecies(plant: Plant): SpeciesCareProfile | null {
+  const species = plant.species_id;
+  if (!species || typeof species !== 'object') return null;
+  const facts: CareFact[] = careFactsFromSpeciesRow(species as never, (id) =>
+    getSource(id) ? id : 'plantdoc-editorial',
+  );
+  const r = species as { scientific_name?: string; slug?: string; common_names?: string[]; $id?: string };
+  return composeCareProfile(r.scientific_name ?? '', facts, {
+    slug: r.slug ?? r.$id ?? '',
+    commonNames: r.common_names ?? [],
+    synonyms: [],
+    nameSourceId: 'powo',
+  });
+}
+
 export async function listPlantsWithTimeline(userId: string): Promise<Plant[]> {
   const result = await tablesDB.listRows({
     databaseId: db,
