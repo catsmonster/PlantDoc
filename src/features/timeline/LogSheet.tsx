@@ -9,8 +9,8 @@ import {
 } from '../../lib/drafts';
 import { enrichObservationWeather } from '../../lib/enrich';
 import { errorMessage } from '../../lib/error';
-import { createLog } from '../../lib/repo';
-import type { Profile, TreatmentType, UserLocation } from '../../lib/types';
+import { createLog, updatePlant, type PlantInput } from '../../lib/repo';
+import type { Profile, SubstrateType, TreatmentType, UserLocation } from '../../lib/types';
 import {
   normalizeWaterAmountText,
   parseWaterAmountMl,
@@ -152,12 +152,15 @@ export function LogSheet({
     draft?.contribute ?? profile.public_contribution_default,
   );
   const [note, setNote] = useState(draft?.note ?? '');
-  const [amount, setAmount] = useState(draft?.amount ?? '250');
+  const [amount, setAmount] = useState(draft?.amount ?? '');
   const [method, setMethod] = useState(draft?.method ?? waterMethods[0]);
   const [careType, setCareType] = useState<TreatmentType>(
     (draft?.careType as TreatmentType) ?? 'fertilizing',
   );
   const [productName, setProductName] = useState(draft?.productName ?? '');
+  const [repotDiameter, setRepotDiameter] = useState('');
+  const [repotHeight, setRepotHeight] = useState('');
+  const [repotSubstrate, setRepotSubstrate] = useState<SubstrateType | ''>('');
   const [height, setHeight] = useState(draft?.height ?? '');
   const [leafCount, setLeafCount] = useState(draft?.leafCount ?? '');
   const [soilMoisture, setSoilMoisture] = useState(draft?.soilMoisture ?? '');
@@ -237,6 +240,17 @@ export function LogSheet({
             product_name: productName.trim() || undefined,
           },
         });
+        if (careType === 'repotting') {
+          const potUpdate: Partial<PlantInput> = {};
+          if (repotDiameter.trim() && Number.isFinite(Number(repotDiameter))) {
+            potUpdate.pot_diameter_cm = Number(repotDiameter);
+          }
+          if (repotHeight.trim() && Number.isFinite(Number(repotHeight))) {
+            potUpdate.pot_height_cm = Number(repotHeight);
+          }
+          if (repotSubstrate) potUpdate.substrate_type = repotSubstrate;
+          if (Object.keys(potUpdate).length > 0) await updatePlant(plantId, potUpdate);
+        }
       } else if (mode === 'measure') {
         const heightCm = height ? (imperial ? Number(height) * 2.54 : Number(height)) : undefined;
         observation = await createLog({
@@ -345,6 +359,27 @@ export function LogSheet({
                     <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Product (optional)</span>
                     <input className="b-input" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="e.g. balanced 10-10-10" disabled={busy} maxLength={128} />
                   </label>
+                  {careType === 'repotting' && (
+                    <>
+                      <label style={{ display: 'block' }}>
+                        <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>New pot size (optional)</span>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                          <input className="b-input" type="number" inputMode="decimal" min={1} max={200} value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="New pot diameter in centimetres" />
+                          <input className="b-input" type="number" inputMode="decimal" min={1} max={200} value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="New pot height in centimetres" />
+                        </div>
+                      </label>
+                      <label style={{ display: 'block' }}>
+                        <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>New substrate (optional)</span>
+                        <select className="b-input" value={repotSubstrate} onChange={(e) => setRepotSubstrate(e.target.value as SubstrateType | '')} disabled={busy}>
+                          <option value="">— Unchanged —</option>
+                          <option value="standard">Standard potting mix</option>
+                          <option value="succulent_gritty">Succulent / cactus (gritty)</option>
+                          <option value="chunky_aroid">Chunky aroid mix</option>
+                          <option value="peat_seedling">Peat / seedling mix</option>
+                        </select>
+                      </label>
+                    </>
+                  )}
                 </>
               )}
 
@@ -528,6 +563,27 @@ export function LogSheet({
                   <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Product (optional)</span>
                   <input className="a-input" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="e.g. balanced 10-10-10" disabled={busy} maxLength={128} />
                 </label>
+                {careType === 'repotting' && (
+                  <>
+                    <label style={{ display: 'block' }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>New pot size (optional)</span>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <input className="a-input" type="number" inputMode="decimal" min={1} max={200} value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="New pot diameter in centimetres" />
+                        <input className="a-input" type="number" inputMode="decimal" min={1} max={200} value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="New pot height in centimetres" />
+                      </div>
+                    </label>
+                    <label style={{ display: 'block' }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>New substrate (optional)</span>
+                      <select className="a-input" value={repotSubstrate} onChange={(e) => setRepotSubstrate(e.target.value as SubstrateType | '')} disabled={busy}>
+                        <option value="">— Unchanged —</option>
+                        <option value="standard">Standard potting mix</option>
+                        <option value="succulent_gritty">Succulent / cactus (gritty)</option>
+                        <option value="chunky_aroid">Chunky aroid mix</option>
+                        <option value="peat_seedling">Peat / seedling mix</option>
+                      </select>
+                    </label>
+                  </>
+                )}
               </>
             )}
 

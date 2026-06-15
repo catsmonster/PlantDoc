@@ -23,7 +23,7 @@ function draft(overrides: Partial<LogDraft> = {}): LogDraft {
   return {
     v: 1,
     mode: 'water',
-    amount: '250',
+    amount: '',
     method: 'top water',
     careType: 'fertilizing',
     productName: '',
