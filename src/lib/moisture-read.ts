@@ -10,6 +10,7 @@ import {
   estimateMoisture,
   recommendWatering,
   type Confidence,
+  type MoistureBand,
   type WateringRecommendation,
 } from './moisture';
 
@@ -17,6 +18,7 @@ export interface PlantMoisture {
   moisturePercent: number;
   confidence: Confidence;
   recommendation: WateringRecommendation;
+  band: MoistureBand;
 }
 
 /** One tier down — an unsourced species band is a weaker prior. */
@@ -46,5 +48,6 @@ export function moistureForPlant(
     moisturePercent,
     confidence: bandSourced ? confidence : LOWER_CONFIDENCE[confidence],
     recommendation,
+    band,
   };
 }

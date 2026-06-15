@@ -519,6 +519,7 @@ describe('moistureInsight', () => {
       { moisturePercent: 41.6, confidence: 'high' },
       { status: 'comfortable' },
       'Monstera deliciosa',
+      null,
     );
 
     expect(insight.kind).toBe('soil_moisture');
@@ -534,6 +535,7 @@ describe('moistureInsight', () => {
       { moisturePercent: 10, confidence: 'medium' },
       { status: 'water_now' },
       'Monstera deliciosa',
+      null,
     );
 
     expect(insight.severity).toBe('warning');
@@ -545,6 +547,7 @@ describe('moistureInsight', () => {
       { moisturePercent: 92, confidence: 'medium' },
       { status: 'overwatered' },
       'Monstera deliciosa',
+      null,
     );
 
     expect(insight.severity).toBe('warning');
@@ -556,6 +559,7 @@ describe('moistureInsight', () => {
       { moisturePercent: 35, confidence: 'medium' },
       { status: 'drying' },
       'Monstera deliciosa',
+      null,
     );
 
     expect(insight.severity).toBe('suggestion');
@@ -567,16 +571,19 @@ describe('moistureInsight', () => {
       { moisturePercent: 50, confidence: 'low' },
       { status: 'comfortable' },
       'Monstera deliciosa',
+      null,
     );
     const medium = moistureInsight(
       { moisturePercent: 50, confidence: 'medium' },
       { status: 'comfortable' },
       'Monstera deliciosa',
+      null,
     );
     const high = moistureInsight(
       { moisturePercent: 50, confidence: 'high' },
       { status: 'comfortable' },
       'Monstera deliciosa',
+      null,
     );
 
     expect(low.detail.endsWith('Add your pot size and a soil check to sharpen this estimate.')).toBe(true);
@@ -585,8 +592,61 @@ describe('moistureInsight', () => {
   });
 
   it('omits the species clause when no species name is known', () => {
-    const insight = moistureInsight({ moisturePercent: 50, confidence: 'medium' }, { status: 'comfortable' }, null);
+    const insight = moistureInsight(
+      { moisturePercent: 50, confidence: 'medium' },
+      { status: 'comfortable' },
+      null,
+      null,
+    );
 
     expect(insight.detail).not.toContain(' for ');
+  });
+
+  it('colors the detail with the species band preference', () => {
+    const dry = moistureInsight(
+      { moisturePercent: 50, confidence: 'medium' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+      'dry',
+    );
+    const moist = moistureInsight(
+      { moisturePercent: 50, confidence: 'medium' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+      'moist',
+    );
+    const wet = moistureInsight(
+      { moisturePercent: 50, confidence: 'medium' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+      'wet',
+    );
+
+    expect(dry.detail).toContain('It prefers to dry out between waterings.');
+    expect(moist.detail).toContain('It likes evenly moist soil.');
+    expect(wet.detail).toContain('It likes staying consistently damp.');
+  });
+
+  it('uses "This plant" instead of "It" when no species name is known', () => {
+    const insight = moistureInsight(
+      { moisturePercent: 50, confidence: 'medium' },
+      { status: 'comfortable' },
+      null,
+      'moist',
+    );
+
+    expect(insight.detail).toContain('This plant likes evenly moist soil.');
+  });
+
+  it('omits the preference sentence when no band is provided', () => {
+    const insight = moistureInsight(
+      { moisturePercent: 50, confidence: 'medium' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+      null,
+    );
+
+    expect(insight.detail).not.toContain('likes');
+    expect(insight.detail).not.toContain('prefers');
   });
 });

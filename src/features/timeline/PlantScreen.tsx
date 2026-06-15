@@ -878,6 +878,7 @@ export function PlantScreen({
         { moisturePercent: moisture.moisturePercent, confidence: moisture.confidence },
         moisture.recommendation,
         moistureSpeciesName,
+        moisture.band,
       )
     : null;
 

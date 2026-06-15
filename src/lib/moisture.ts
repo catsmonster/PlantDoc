@@ -362,17 +362,28 @@ const MOISTURE_INSIGHT_STATUS_PHRASE: Record<WateringStatus, string> = {
 
 const MOISTURE_ENRICHMENT_NUDGE = 'Add your pot size and a soil check to sharpen this estimate.';
 
+const MOISTURE_BAND_PREFERENCE: Record<MoistureBand, string> = {
+  dry: 'prefers to dry out between waterings',
+  moist: 'likes evenly moist soil',
+  wet: 'likes staying consistently damp',
+};
+
 /** Experimental "soil moisture" insight built from a model estimate, not a timeline-entry count. */
 export function moistureInsight(
   estimate: { moisturePercent: number; confidence: Confidence },
   recommendation: WateringRecommendation,
   speciesName: string | null,
+  band: MoistureBand | null,
 ): Insight {
   const pct = Math.round(estimate.moisturePercent);
   const statusPhrase = MOISTURE_INSIGHT_STATUS_PHRASE[recommendation.status];
   const speciesClause = speciesName ? ` for ${speciesName}` : '';
 
   let detail = `Estimated around ${pct}% of capacity — ${statusPhrase}${speciesClause}.`;
+  if (band) {
+    const subject = speciesName ? 'It' : 'This plant';
+    detail += ` ${subject} ${MOISTURE_BAND_PREFERENCE[band]}.`;
+  }
   if (estimate.confidence === 'low') {
     detail += ` ${MOISTURE_ENRICHMENT_NUDGE}`;
   }
