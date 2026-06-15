@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { errorMessage } from '../../lib/error';
-import { getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
-import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback } from '../../lib/types';
+import { createLog, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
+import type { LogInput } from '../../lib/log';
+import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback, SoilState } from '../../lib/types';
 import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
@@ -36,6 +37,65 @@ const treatmentLabels: Record<TreatmentType, string> = {
   relocation: 'Moved',
 };
 
+const soilStateLabels: Record<SoilState, string> = {
+  dry: 'Dry',
+  moist: 'Moist',
+  wet: 'Wet',
+};
+
+// eslint-disable-next-line react-refresh/only-export-components -- Pure helper exported for focused tests.
+export function buildSoilCheckLogInput({
+  userId,
+  plantId,
+  soilState,
+  contribute,
+  observedAt,
+}: {
+  userId: string;
+  plantId: string;
+  soilState: SoilState;
+  contribute: boolean;
+  observedAt: string;
+}): LogInput {
+  return {
+    userId,
+    plantId,
+    observedAt,
+    contribute,
+    measurement: { soil_state: soilState },
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- Submit helper exported for focused tests.
+export async function submitSoilCheck({
+  userId,
+  plantId,
+  soilState,
+  contribute,
+  now = () => new Date(),
+  createLog: createLogFn = createLog,
+  refresh,
+}: {
+  userId: string;
+  plantId: string;
+  soilState: SoilState;
+  contribute: boolean;
+  now?: () => Date;
+  createLog?: (input: LogInput) => Promise<Observation>;
+  refresh: () => void;
+}): Promise<void> {
+  await createLogFn(
+    buildSoilCheckLogInput({
+      userId,
+      plantId,
+      soilState,
+      contribute,
+      observedAt: now().toISOString(),
+    }),
+  );
+  refresh();
+}
+
 function getIconName(obs: Observation): IconName {
   if (obs.observation_type === 'treatment') {
     const tType = obs.treatments?.[0]?.treatment_type;
@@ -61,7 +121,8 @@ function getIconName(obs: Observation): IconName {
   return map[obs.observation_type] || 'note';
 }
 
-function detailLine(obs: Observation, units: Units): string | null {
+// eslint-disable-next-line react-refresh/only-export-components -- Timeline detail helper exported for focused tests.
+export function detailLine(obs: Observation, units: Units): string | null {
   if (obs.observation_type === 'treatment') {
     const t = obs.treatments?.[0];
     if (!t) return 'Care';
@@ -84,6 +145,7 @@ function detailLine(obs: Observation, units: Units): string | null {
     if (m.height_cm != null) parts.push(formatHeight(m.height_cm, units));
     if (m.leaf_count != null) parts.push(`${m.leaf_count} leaves`);
     if (m.soil_moisture_percent != null) parts.push(`soil ${m.soil_moisture_percent}%`);
+    if (m.soil_state) parts.push(`soil ${m.soil_state}`);
     if (m.health_score != null) parts.push(`health ${m.health_score}/5`);
     return parts.length ? parts.join(' · ') : 'Measured';
   }
@@ -196,6 +258,90 @@ function PhotoButton({ userId, plantId, profile, onUploaded, onError, isDark }: 
         <Icon name="camera" size={21} stroke={2} />
       </button>
     </>
+  );
+}
+
+function SoilCheckAction({
+  isDark,
+  open,
+  busy,
+  onToggle,
+  onSubmit,
+}: {
+  isDark: boolean;
+  open: boolean;
+  busy: boolean;
+  onToggle: () => void;
+  onSubmit: (soilState: SoilState) => void;
+}) {
+  const states: SoilState[] = ['dry', 'moist', 'wet'];
+  const border = isDark ? '1px solid rgba(255,255,255,.09)' : '1px solid #E7E0D2';
+  const background = isDark ? '#19231B' : '#FFFDF8';
+  const color = isDark ? '#F2F6EF' : '#3C7140';
+  const activeBackground = isDark ? '#243024' : '#EBF1E7';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: open ? 1.25 : '0 0 auto', minWidth: open ? 180 : 0 }}>
+      <button
+        type="button"
+        className={isDark ? 'b-tap' : 'a-tap'}
+        disabled={busy}
+        aria-expanded={open}
+        aria-controls={`soil-check-${isDark ? 'dark' : 'light'}`}
+        onClick={onToggle}
+        style={{
+          minHeight: 52,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          background,
+          color,
+          border,
+          borderRadius: isDark ? 15 : 16,
+          padding: '0 13px',
+          cursor: busy ? 'not-allowed' : 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 13.5,
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <Icon name="ruler" size={17} stroke={2.2} />
+        Check soil
+      </button>
+      {open && (
+        <div
+          id={`soil-check-${isDark ? 'dark' : 'light'}`}
+          role="group"
+          aria-label="Choose soil state"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}
+        >
+          {states.map((state) => (
+            <button
+              key={state}
+              type="button"
+              className={isDark ? 'b-tap' : 'a-tap'}
+              disabled={busy}
+              onClick={() => onSubmit(state)}
+              style={{
+                minHeight: 40,
+                border,
+                borderRadius: 12,
+                background: activeBackground,
+                color,
+                cursor: busy ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 12.5,
+                fontWeight: 700,
+              }}
+            >
+              {soilStateLabels[state]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -383,6 +529,8 @@ export function PlantScreen({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+  const [soilCheckOpen, setSoilCheckOpen] = useState(false);
+  const [soilCheckBusy, setSoilCheckBusy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [verdicts, setVerdicts] = useState<Map<string, InsightFeedback>>(new Map());
   const [aiPreview, setAiPreview] = useState<AiPreviewState>(initialAiPreview);
@@ -437,7 +585,26 @@ export function PlantScreen({
 
   const refresh = () => {
     setLogOpen(false);
+    setSoilCheckOpen(false);
     setReloadKey((k) => k + 1);
+  };
+
+  const handleSoilCheck = async (soilState: SoilState) => {
+    if (!plant || soilCheckBusy) return;
+    setSoilCheckBusy(true);
+    try {
+      await submitSoilCheck({
+        userId,
+        plantId: plant.$id,
+        soilState,
+        contribute: profile.public_contribution_default,
+        refresh,
+      });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setSoilCheckBusy(false);
+    }
   };
 
   const handleFeedback = (kind: string, helpful: boolean) => {
@@ -688,6 +855,13 @@ export function PlantScreen({
               <button className="b-tap" onClick={() => setLogOpen(true)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, background: '#C7F24A', color: '#0E140F', border: 'none', borderRadius: 15, padding: '15px 0', cursor: 'pointer', fontFamily: "'Space Grotesk',sans-serif", fontSize: 15.5, fontWeight: 700 }}>
                 <Icon name="droplet" size={19} stroke={2.4} /> Log care
               </button>
+              <SoilCheckAction
+                isDark
+                open={soilCheckOpen}
+                busy={soilCheckBusy}
+                onToggle={() => setSoilCheckOpen((open) => !open)}
+                onSubmit={(soilState) => void handleSoilCheck(soilState)}
+              />
               <PhotoButton userId={userId} plantId={plant.$id} profile={profile} onUploaded={refresh} onError={setError} isDark />
             </div>
 
@@ -914,6 +1088,13 @@ export function PlantScreen({
             <button className="a-tap" onClick={() => setLogOpen(true)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, background: '#3C7140', color: '#fff', border: 'none', borderRadius: 16, padding: '15px 0', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15.5, fontWeight: 600, boxShadow: '0 10px 22px -10px rgba(60,113,64,.7)' }}>
               <Icon name="droplet" size={19} stroke={2.2} /> Log care
             </button>
+            <SoilCheckAction
+              isDark={false}
+              open={soilCheckOpen}
+              busy={soilCheckBusy}
+              onToggle={() => setSoilCheckOpen((open) => !open)}
+              onSubmit={(soilState) => void handleSoilCheck(soilState)}
+            />
             <PhotoButton userId={userId} plantId={plant.$id} profile={profile} onUploaded={refresh} onError={setError} isDark={false} />
           </div>
 
