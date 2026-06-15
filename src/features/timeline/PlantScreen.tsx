@@ -4,7 +4,7 @@ import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline
 import type { LogInput } from '../../lib/log';
 import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback, SoilState, EstimateFeedback } from '../../lib/types';
 import { moistureForPlant } from '../../lib/moisture-read';
-import { moistureInsight } from '../../lib/moisture';
+import { moistureInsight, type WateringStatus } from '../../lib/moisture';
 import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
@@ -230,6 +230,22 @@ function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function moistureStatusColor(status: WateringStatus, isDark: boolean): string {
+  const dark: Record<WateringStatus, string> = {
+    comfortable: '#C7F24A',
+    drying: '#E0C56B',
+    water_now: '#E0A36B',
+    overwatered: '#7FC8E0',
+  };
+  const light: Record<WateringStatus, string> = {
+    comfortable: '#3C7140',
+    drying: '#A88A3C',
+    water_now: '#B07F57',
+    overwatered: '#3F7E91',
+  };
+  return (isDark ? dark : light)[status];
 }
 
 function getPlantTint(plantId: string): [string, string] {
@@ -1042,6 +1058,18 @@ export function PlantScreen({
                 </div>
                 <p className="b-kicker" style={{ margin: '5px 0 0', fontSize: 10 }}>Cadence</p>
               </div>
+
+              {moisture && (
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                    <span style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-.02em', color: moistureStatusColor(moisture.recommendation.status, true) }}>
+                      {Math.round(moisture.moisturePercent)}
+                    </span>
+                    <span className="mono" style={{ fontSize: 12, color: '#67766A' }}>%</span>
+                  </div>
+                  <p className="b-kicker" style={{ margin: '5px 0 0', fontSize: 10 }}>Moisture</p>
+                </div>
+              )}
             </div>
 
             {/* Quick Actions Row */}
@@ -1351,6 +1379,17 @@ export function PlantScreen({
               </div>
               <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#9AA294', fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase' }}>Every</p>
             </div>
+
+            {moisture && (
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                  <span className="serif" style={{ fontSize: 24, fontWeight: 600, color: moistureStatusColor(moisture.recommendation.status, false) }}>
+                    {Math.round(moisture.moisturePercent)}%
+                  </span>
+                </div>
+                <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#9AA294', fontWeight: 600, letterSpacing: '.02em', textTransform: 'uppercase' }}>Moisture</p>
+              </div>
+            )}
           </div>
 
           {/* Species care guide — sourced reference facts */}
