@@ -37,6 +37,22 @@ const careTypes: { value: TreatmentType; label: string }[] = [
 
 const waterMethods = ['top water', 'bottom water', 'soak'];
 
+function buildRepotPlantUpdate(
+  repotDiameter: string,
+  repotHeight: string,
+  repotSubstrate: SubstrateType | '',
+): Partial<PlantInput> {
+  const potUpdate: Partial<PlantInput> = {};
+  if (repotDiameter.trim() && Number.isFinite(Number(repotDiameter))) {
+    potUpdate.pot_diameter_cm = Number(repotDiameter);
+  }
+  if (repotHeight.trim() && Number.isFinite(Number(repotHeight))) {
+    potUpdate.pot_height_cm = Number(repotHeight);
+  }
+  if (repotSubstrate) potUpdate.substrate_type = repotSubstrate;
+  return potUpdate;
+}
+
 function nowLocal(): string {
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -227,7 +243,7 @@ export function LogSheet({
           ...base,
           treatment: {
             treatment_type: 'watering',
-            amount_value: parsedAmount,
+            amount_value: parsedAmount ?? null,
             amount_unit: parsedAmount === undefined ? undefined : 'ml',
             method,
           },
@@ -241,14 +257,7 @@ export function LogSheet({
           },
         });
         if (careType === 'repotting') {
-          const potUpdate: Partial<PlantInput> = {};
-          if (repotDiameter.trim() && Number.isFinite(Number(repotDiameter))) {
-            potUpdate.pot_diameter_cm = Number(repotDiameter);
-          }
-          if (repotHeight.trim() && Number.isFinite(Number(repotHeight))) {
-            potUpdate.pot_height_cm = Number(repotHeight);
-          }
-          if (repotSubstrate) potUpdate.substrate_type = repotSubstrate;
+          const potUpdate = buildRepotPlantUpdate(repotDiameter, repotHeight, repotSubstrate);
           if (Object.keys(potUpdate).length > 0) await updatePlant(plantId, potUpdate);
         }
       } else if (mode === 'measure') {
