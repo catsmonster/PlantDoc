@@ -353,7 +353,8 @@ const MOISTURE_INSIGHT_TITLE: Record<WateringStatus, string> = {
   overwatered: 'Soil looks waterlogged',
 };
 
-const MOISTURE_INSIGHT_STATUS_PHRASE: Record<WateringStatus, string> = {
+/** Short human phrase per status — reused by the insight detail and the Gemini estimate summary. */
+export const MOISTURE_INSIGHT_STATUS_PHRASE: Record<WateringStatus, string> = {
   water_now: 'likely dry enough to water',
   drying: 'drying down',
   comfortable: 'comfortably moist',

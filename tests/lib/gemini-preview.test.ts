@@ -10,6 +10,8 @@ import {
   recordAiPreviewUse,
 } from '../../src/lib/gemini-preview';
 import type { Plant } from '../../src/lib/types';
+import type { PlantMoisture } from '../../src/lib/moisture-read';
+import type { SpeciesCareProfile } from '../../src/lib/knowledge/care-profiles';
 
 const NOW = new Date('2026-06-10T12:00:00.000Z');
 
@@ -161,6 +163,51 @@ describe('Gemini preview payload', () => {
       inline_data: { mime_type: 'image/jpeg', data: 'abc123' },
     });
     expect(JSON.stringify(request)).toContain('gemini-3.5-flash');
+  });
+
+  it('includes the derived moisture estimate and species care reference, never raw feedback', () => {
+    const moisture: PlantMoisture = {
+      moisturePercent: 17.6,
+      confidence: 'medium',
+      recommendation: { status: 'water_now', daysUntilDry: 0.42 },
+      band: 'dry',
+    };
+    const careProfile: SpeciesCareProfile = {
+      slug: 'monstera-deliciosa',
+      scientificName: 'Monstera deliciosa',
+      nameSourceId: 'powo',
+      commonNames: ['Swiss cheese plant'],
+      synonyms: [],
+      family: { value: 'Araceae', sourceId: 'powo' },
+      light: { value: 'Bright indirect light', sourceId: 'plantdoc-editorial' },
+      waterCadenceDays: { value: { min: 7, max: 10 }, sourceId: 'plantdoc-editorial' },
+      comfortableTemperatureC: { value: { min: 18, max: 27 }, sourceId: 'plantdoc-editorial' },
+      humidity: { value: 'Average to high', sourceId: 'plantdoc-editorial' },
+      toxicity: { value: 'Toxic to cats and dogs', sourceId: 'plantdoc-editorial' },
+      commonStressSigns: { value: ['Yellowing lower leaves'], sourceId: 'plantdoc-editorial' },
+      likelyPests: { value: ['Thrips', 'Spider mites'], sourceId: 'plantdoc-editorial' },
+      cultivationFacts: [{ attribute: 'growth_rate', label: 'Growth', value: 'Fast', sourceId: 'permapeople' }],
+    };
+
+    const payload = buildPlantGeminiPreviewPayload(plant(), 'metric', undefined, moisture, careProfile);
+    const serialized = JSON.stringify(payload);
+
+    expect(serialized).toContain('moistureEstimate');
+    expect(serialized).toContain('"percent":18'); // rounded from 17.6
+    expect(serialized).toContain('water_now'); // status surfaced
+    expect(serialized).toContain('"daysUntilDry":0.4'); // rounded to 1dp
+    expect(serialized).toContain('careReference');
+    expect(serialized).toContain('Thrips'); // care fact surfaced
+    expect(serialized).toContain('Fast'); // cultivation fact surfaced
+    // Privacy: only the derived estimate may leave the device, never raw telemetry.
+    expect(serialized).not.toContain('moisture_feedback');
+    expect(serialized).not.toContain('estimate_feedback');
+  });
+
+  it('omits the estimate and reference cleanly when they are not supplied', () => {
+    const serialized = JSON.stringify(buildPlantGeminiPreviewPayload(plant(), 'metric'));
+    expect(serialized).not.toContain('moistureEstimate');
+    expect(serialized).not.toContain('careReference');
   });
 
   it('parses text and returns a null result for an empty candidate', () => {

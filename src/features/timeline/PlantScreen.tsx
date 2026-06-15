@@ -757,6 +757,8 @@ export function PlantScreen({
       plant,
       profile.preferred_units,
       imageResult.image,
+      moisture,
+      careProfile,
     );
     recordAiPreviewUse(localStorage, userId, plant.$id);
     const afterRecord = canUseAiPreview(localStorage, userId, plant.$id);
