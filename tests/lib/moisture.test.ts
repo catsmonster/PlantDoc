@@ -4,6 +4,7 @@ import {
   dailyEtMl,
   estimateMoisture,
   INDOOR_DEFAULT_RH,
+  moistureInsight,
   potSoilVolumeMl,
   recommendWatering,
   seasonalIndoorTempC,
@@ -509,5 +510,83 @@ describe('watering recommendation', () => {
     const baseEt: EtInputs = { capacityMl: 1000, speciesDailyFraction: 0.12, tempC: 20, humidityPct: 50, light: 'medium' };
     expect(recommendWatering(15, { et: baseEt }).daysUntilDry).toBeUndefined();
     expect(recommendWatering(8, { et: baseEt }).daysUntilDry).toBeUndefined();
+  });
+});
+
+describe('moistureInsight', () => {
+  it('describes a comfortable estimate with species and rounded percent', () => {
+    const insight = moistureInsight(
+      { moisturePercent: 41.6, confidence: 'high' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+    );
+
+    expect(insight.kind).toBe('soil_moisture');
+    expect(insight.severity).toBe('info');
+    expect(insight.title).toBe('Soil moisture looks comfortable');
+    expect(insight.detail).toContain('42');
+    expect(insight.detail).toContain('Monstera deliciosa');
+    expect(insight.evidenceCount).toBe(0);
+  });
+
+  it('flags water_now as a warning with the right title', () => {
+    const insight = moistureInsight(
+      { moisturePercent: 10, confidence: 'medium' },
+      { status: 'water_now' },
+      'Monstera deliciosa',
+    );
+
+    expect(insight.severity).toBe('warning');
+    expect(insight.title).toBe('Time to water');
+  });
+
+  it('flags overwatered as a warning', () => {
+    const insight = moistureInsight(
+      { moisturePercent: 92, confidence: 'medium' },
+      { status: 'overwatered' },
+      'Monstera deliciosa',
+    );
+
+    expect(insight.severity).toBe('warning');
+    expect(insight.title).toBe('Soil looks waterlogged');
+  });
+
+  it('flags drying as a suggestion', () => {
+    const insight = moistureInsight(
+      { moisturePercent: 35, confidence: 'medium' },
+      { status: 'drying' },
+      'Monstera deliciosa',
+    );
+
+    expect(insight.severity).toBe('suggestion');
+    expect(insight.title).toBe('Starting to dry out');
+  });
+
+  it('appends an enrichment nudge only at low confidence', () => {
+    const low = moistureInsight(
+      { moisturePercent: 50, confidence: 'low' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+    );
+    const medium = moistureInsight(
+      { moisturePercent: 50, confidence: 'medium' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+    );
+    const high = moistureInsight(
+      { moisturePercent: 50, confidence: 'high' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+    );
+
+    expect(low.detail.endsWith('Add your pot size and a soil check to sharpen this estimate.')).toBe(true);
+    expect(medium.detail).not.toContain('sharpen');
+    expect(high.detail).not.toContain('sharpen');
+  });
+
+  it('omits the species clause when no species name is known', () => {
+    const insight = moistureInsight({ moisturePercent: 50, confidence: 'medium' }, { status: 'comfortable' }, null);
+
+    expect(insight.detail).not.toContain(' for ');
   });
 });

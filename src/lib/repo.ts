@@ -280,6 +280,7 @@ export async function getPlantWithTimeline(plantId: string): Promise<Plant> {
         'observations.photos.*',
         'observations.environment_snapshots.*',
         'insight_feedback.*',
+        'moisture_feedback.*',
       ]),
     ],
   });

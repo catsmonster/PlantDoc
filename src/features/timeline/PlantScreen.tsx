@@ -4,6 +4,7 @@ import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline
 import type { LogInput } from '../../lib/log';
 import type { Observation, Plant, Profile, TreatmentType, Units, InsightFeedback, SoilState, EstimateFeedback } from '../../lib/types';
 import { moistureForPlant } from '../../lib/moisture-read';
+import { moistureInsight } from '../../lib/moisture';
 import { formatHeight, formatTemperature, formatVolume } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
@@ -854,6 +855,15 @@ export function PlantScreen({
     tableProfile && tableProfile.speciesId === speciesRowId ? tableProfile.profile : null;
   const careProfile = tableMatch ?? careProfileForPlant(plant);
   const moisture = moistureForPlant(plant, careProfile, plant.moisture_feedback ?? [], now);
+  const moistureSpeciesName =
+    careProfile?.scientificName ?? plant.species_id?.scientific_name ?? plant.common_name ?? null;
+  const moistureIns = moisture
+    ? moistureInsight(
+        { moisturePercent: moisture.moisturePercent, confidence: moisture.confidence },
+        moisture.recommendation,
+        moistureSpeciesName,
+      )
+    : null;
 
   // Group timeline observations by day
   const groupedTimeline: [string, Observation[]][] = [];
@@ -1065,6 +1075,24 @@ export function PlantScreen({
                   <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.09)' }}></span>
                   <span className="mono" style={{ fontSize: 9.5, letterSpacing: '.1em', color: '#0E140F', background: '#E0A36B', padding: '3px 7px', borderRadius: 5 }}>EXPERIMENTAL</span>
                 </div>
+                {moistureIns && moisture && (
+                  <div className="b-rise" style={{ borderLeft: '2px solid ' + (moistureIns.severity === 'warning' ? '#E0A36B' : '#C7F24A'), paddingLeft: 14, marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Icon name="droplet" size={15} stroke={2.2} style={{ color: moistureIns.severity === 'warning' ? '#E0A36B' : '#C7F24A' }} />
+                      <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#F2F6EF' }}>{moistureIns.title}</p>
+                    </div>
+                    <p style={{ margin: '5px 0 0', fontSize: 13, lineHeight: 1.5, color: '#9BAA98' }}>{moistureIns.detail}</p>
+                    <p className="mono" style={{ margin: '6px 0 0', fontSize: 10, color: '#67766A', letterSpacing: '.06em' }}>
+                      ESTIMATED · {moisture.confidence.toUpperCase()} CONFIDENCE
+                    </p>
+                    <MoistureFeedbackPrompt
+                      isDark
+                      predictedMoisturePercent={moisture.moisturePercent}
+                      busy={moistureFeedbackBusy}
+                      onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                    />
+                  </div>
+                )}
                 {insights.map((ins, i) => {
                   const warn = ins.severity === 'warning';
                   const verdict = verdicts.get(ins.kind);
@@ -1100,14 +1128,6 @@ export function PlantScreen({
                     </div>
                   );
                 })}
-                {moisture && (
-                  <MoistureFeedbackPrompt
-                    isDark
-                    predictedMoisturePercent={moisture.moisturePercent}
-                    busy={moistureFeedbackBusy}
-                    onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
-                  />
-                )}
                 <AiPreviewBlock isDark state={aiPreview} onGenerate={() => void handleAiPreview()} />
               </div>
             )}
@@ -1349,6 +1369,24 @@ export function PlantScreen({
                 <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: '#23302A' }}>Care insights</h3>
                 <span className="a-chip" style={{ background: '#F1E7DC', color: '#B07F57', padding: '3px 8px', fontSize: 10.5, letterSpacing: '.04em', textTransform: 'uppercase', fontWeight: 700 }}>Experimental</span>
               </div>
+              {moistureIns && moisture && (
+                <div className="a-rise" style={{ display: 'flex', gap: 12, padding: '14px 0', borderTop: 'none' }}>
+                  <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: moistureIns.severity === 'warning' ? '#F1E7DC' : '#EBF1E7', color: moistureIns.severity === 'warning' ? '#B07F57' : '#3C7140' }}>
+                    <Icon name="droplet" size={18} stroke={2} />
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: '#23302A' }}>{moistureIns.title}</p>
+                    <p style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5, color: '#6B7568' }}>{moistureIns.detail}</p>
+                    <p style={{ margin: '6px 0 0', fontSize: 11, color: '#9AA294' }}>Estimated · {moisture.confidence} confidence</p>
+                    <MoistureFeedbackPrompt
+                      isDark={false}
+                      predictedMoisturePercent={moisture.moisturePercent}
+                      busy={moistureFeedbackBusy}
+                      onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                    />
+                  </div>
+                </div>
+              )}
               {insights.map((ins, i) => {
                 const warn = ins.severity === 'warning';
                 const verdict = verdicts.get(ins.kind);
@@ -1384,14 +1422,6 @@ export function PlantScreen({
                   </div>
                 );
               })}
-              {moisture && (
-                <MoistureFeedbackPrompt
-                  isDark={false}
-                  predictedMoisturePercent={moisture.moisturePercent}
-                  busy={moistureFeedbackBusy}
-                  onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
-                />
-              )}
               <AiPreviewBlock isDark={false} state={aiPreview} onGenerate={() => void handleAiPreview()} />
             </div>
           )}

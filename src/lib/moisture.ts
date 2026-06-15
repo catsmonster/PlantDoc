@@ -1,3 +1,4 @@
+import type { Insight, InsightSeverity } from './insights';
 import type { LightLevel, SubstrateType } from './types';
 
 export type { LightLevel } from './types';
@@ -336,4 +337,52 @@ export function recommendWatering(
   }
 
   return recommendation;
+}
+
+const MOISTURE_INSIGHT_SEVERITY: Record<WateringStatus, InsightSeverity> = {
+  water_now: 'warning',
+  overwatered: 'warning',
+  drying: 'suggestion',
+  comfortable: 'info',
+};
+
+const MOISTURE_INSIGHT_TITLE: Record<WateringStatus, string> = {
+  water_now: 'Time to water',
+  drying: 'Starting to dry out',
+  comfortable: 'Soil moisture looks comfortable',
+  overwatered: 'Soil looks waterlogged',
+};
+
+const MOISTURE_INSIGHT_STATUS_PHRASE: Record<WateringStatus, string> = {
+  water_now: 'likely dry enough to water',
+  drying: 'drying down',
+  comfortable: 'comfortably moist',
+  overwatered: 'wetter than ideal',
+};
+
+const MOISTURE_ENRICHMENT_NUDGE = 'Add your pot size and a soil check to sharpen this estimate.';
+
+/** Experimental "soil moisture" insight built from a model estimate, not a timeline-entry count. */
+export function moistureInsight(
+  estimate: { moisturePercent: number; confidence: Confidence },
+  recommendation: WateringRecommendation,
+  speciesName: string | null,
+): Insight {
+  const pct = Math.round(estimate.moisturePercent);
+  const statusPhrase = MOISTURE_INSIGHT_STATUS_PHRASE[recommendation.status];
+  const speciesClause = speciesName ? ` for ${speciesName}` : '';
+
+  let detail = `Estimated around ${pct}% of capacity — ${statusPhrase}${speciesClause}.`;
+  if (estimate.confidence === 'low') {
+    detail += ` ${MOISTURE_ENRICHMENT_NUDGE}`;
+  }
+
+  return {
+    kind: 'soil_moisture',
+    severity: MOISTURE_INSIGHT_SEVERITY[recommendation.status],
+    title: MOISTURE_INSIGHT_TITLE[recommendation.status],
+    detail,
+    // This is a model estimate, not an entry count — the card shows confidence, not an evidence tally.
+    evidenceCount: 0,
+  };
 }
