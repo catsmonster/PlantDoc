@@ -35,12 +35,16 @@ Six UX defects in the indoor soil-moisture feature:
 2. the **optimistic** local row appended to `plant` state, and
 3. the persisted write payload.
 
-The submit helpers stop generating their own timestamp — `observedAt` (ISO string) is passed in. Optimistic append:
+The submit helpers stop generating their own timestamp — `observedAt` (ISO string) is passed in.
 
-- Feedback: push a `MoistureFeedback`-shaped row onto `plant.moisture_feedback`.
-- Soil check: push a measurement `Observation` (with `soil_state`) onto `plant.observations`.
+**Optimistic rows live in dedicated pending state** (`pendingFeedback: MoistureFeedback[]`, `pendingObservations: Observation[]`), each tagged with a temporary `$id`. They are **never** written into the canonical `plant` object, so a re-fetch cannot silently drop them. The estimate recomputes from `canonical ++ pending`, deduped by `$id` (canonical wins). Reconciliation:
 
-The gauge/insight recompute synchronously from the optimistic state, so the change shows before the network round-trip and survives Appwrite read-after-write lag. `refresh()`'s re-fetch then replaces `plant` wholesale with canonical rows (no dedupe needed since the whole object is swapped; relies on Appwrite read-your-writes within the session).
+1. On submit: build the optimistic row with a temp `$id`, add it to pending, `setNow(observedAt.getTime())`.
+2. The write resolves to the persisted row — both `createMoistureFeedback` and `createLog` return it — so store the real `$id` back onto the pending row.
+3. `refresh()` re-fetches; in its resolution, drop a pending row only once its `$id` appears in the fetched canonical rows. Rows not yet present (Appwrite read-after-write lag) stay in pending and keep showing until a later refresh includes them.
+4. On write rejection: remove the pending row (rollback) and surface the error — the gauge never keeps a correction that never persisted.
+
+This resolves the earlier contradiction: the re-fetch refreshes canonical data without dropping un-reconciled optimistic rows, and failures roll back instead of leaving phantom state.
 
 ### Unit B — Recency-weighted corrections (#2 part A)
 
@@ -64,12 +68,14 @@ waterContentMl = clamp(weight·target + (1 − weight)·currentPrediction, resid
 
 where `currentPrediction` is the model's drift value immediately before the correction. `weight = 1` reproduces today's set-and-clamp behavior.
 
+**Confidence counting:** `groundTruthCount` becomes the **sum of effective correction weights**, not `corrections.length`. Today's `corrections.length` ([moisture-inputs.ts](../../../src/lib/moisture-inputs.ts)) feeds `score` in `estimateMoisture`, so weight-0 spam would still raise confidence and suppress the low-confidence nudge while the water balance ignores it. Summing weights makes a within-floor spam correction contribute ~0; the existing 0–3 normalization (`normalizedGroundTruthCount`) still applies, so all-full-weight corrections match today's integer count.
+
 ### Unit C — Feedback eligibility / button visibility (#2 part B)
 
 A pure helper decides whether the prompt is shown. Show when **any** of:
 
 - (a) no prior feedback row exists, or
-- (b) a watering, repot, or soil-check was logged with `observed_at` strictly after the latest feedback's `observed_at`, or
+- (b) a new **correction event** — a watering, repot, or any ground-truth soil measurement (`soil_state` *or* meter `soil_moisture_percent`) — was logged with `observed_at` strictly after the latest feedback's `observed_at`, or
 - (c) `|round(currentPercent) − effectiveAnchorPct| ≥ DRIFT_THRESHOLD_PCT` (8).
 
 `effectiveAnchorPct` is the **post-blend** value of the latest feedback, not the raw `predicted_moisture_percent`:
@@ -114,8 +120,10 @@ Pure-engine and logic tests (extend existing `tests/lib/*`, `tests/app/*`):
 
 - **Recency weight:** second correction within 20 min ⇒ weight 0; correction 6 h after the previous ⇒ weight 1; first correction ⇒ weight 1.
 - **Blend:** `weight=1` reproduces set-and-clamp; partial weight blends toward target.
+- **Confidence vs spam:** three corrections within 20 min (weights ≈ 0) do **not** raise `groundTruthCount` or suppress the nudge; spaced full-weight corrections do.
 - **Stale-now regression (#1):** a feedback row timestamped after the original `now` is excluded at the stale `now` but included once `now` advances to `observedAt`, changing the estimate.
-- **Eligibility (#2B):** prompt hidden immediately after a high-magnitude rating; reappears after a new watering/soil-check, or after drift ≥ 8 pts.
+- **Optimistic reconciliation (#1):** write success drops the pending row only after canonical includes it (no double-count); a lagging re-fetch keeps the pending row visible; write failure rolls the pending row back.
+- **Eligibility (#2B):** prompt hidden immediately after a high-magnitude rating; reappears after a new watering, after a new meter-% (`soil_moisture_percent`) measurement, or after drift ≥ 8 pts.
 - **Nudge (#4):** low-confidence text lists only missing signals; never says "pot size"; high confidence has no nudge.
 - **Repot parity (#5):** repot with dims persists pot fields and clears `shouldPromptForPotSize`.
 - **Imperial (#6):** `lengthInputToCm`/`volumeInputToMl` round-trips; repot in imperial stores metric; PlantForm save converts; water amount converts fl oz↔ml.
