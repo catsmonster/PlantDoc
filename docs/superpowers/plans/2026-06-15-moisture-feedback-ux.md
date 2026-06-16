@@ -476,6 +476,46 @@ export function isFeedbackEligible(args: {
 }
 ```
 
+- [ ] **Step 3b: Count fractional weight in confidence normalization**
+
+`groundTruthCount` is now a sum of weights, but `normalizedGroundTruthCount` in `src/lib/moisture.ts` (lines 242–244) truncates, so a 0.95-weight correction contributes 0. First add a failing test to `tests/lib/moisture.test.ts` (`estimateMoisture` is already imported):
+
+```ts
+describe('confidence counts effective (rounded) ground-truth weight', () => {
+  const pot = { diameterCm: 12, heightCm: 10, substrate: 'standard', drains: true } as const;
+  const t = Date.UTC(2026, 0, 1, 12);
+  const base = {
+    pot,
+    startMs: t,
+    endMs: t,
+    waterings: [] as { observedAtMs: number; amountMl?: number | null }[],
+    dailyClimate: () => ({ tempC: 20, humidityPct: 50, light: 'medium' }) as const,
+    speciesDailyFraction: 0.1,
+    corrections: [] as { observedAtMs: number; waterContentMl: number; weight?: number }[],
+    substratePresent: false,
+    amountMeasured: false,
+  };
+  it('rounds 1.6 effective weight up to a medium-confidence score', () => {
+    expect(estimateMoisture({ ...base, groundTruthCount: 1.6 }).confidence).toBe('medium');
+  });
+  it('rounds 0.4 effective weight down to low confidence', () => {
+    expect(estimateMoisture({ ...base, groundTruthCount: 0.4 }).confidence).toBe('low');
+  });
+});
+```
+
+Run: `npx vitest run tests/lib/moisture.test.ts -t "effective"` → FAIL (`trunc(1.6) = 1` ⇒ score 1 ⇒ `low`, not `medium`).
+
+Then change `normalizedGroundTruthCount` in `src/lib/moisture.ts` (lines 242–244) to round:
+
+```ts
+function normalizedGroundTruthCount(count: number): number {
+  return Number.isFinite(count) ? clamp(Math.round(count), 0, 3) : 0;
+}
+```
+
+Run again → PASS. (All existing call sites pass whole-number sums when weights are 1, so `round` ≡ the old `trunc` there — no regressions.)
+
 - [ ] **Step 4: Update the pre-existing `groundTruthCount` assertion**
 
 In `tests/lib/moisture-inputs.test.ts`, the first test (`maps waterings, ground-truth anchors, feedback…`) has `soil_state` and a feedback row both at `daysAgo(2)`; the second one sorted there gets weight 0. Change line 50:
@@ -931,7 +971,7 @@ Light theme (lines 565–567) — apply the same change with `a-input` class and
 - [ ] **Step 5: Run tests + typecheck**
 
 Run: `npx vitest run tests/app/logsheet.test.ts` → PASS.
-Run: `npm run typecheck` (or `npx tsc --noEmit`) → no errors in `LogSheet.tsx`/`logsheet-logic.ts`.
+Run: `npx tsc -b` (or `npx tsc --noEmit`) → no errors in `LogSheet.tsx`/`logsheet-logic.ts`.
 
 - [ ] **Step 6: Commit**
 
@@ -945,12 +985,69 @@ git commit -m "feat(logsheet): imperial-aware repot pot dimensions; lock repot�
 ## Task 7: Imperial-aware water amount field
 
 **Files:**
-- Modify: `src/features/timeline/LogSheet.tsx`
-- Test: `tests/lib/units.test.ts` (covered by Task 5; no new logic module)
+- Modify: `src/lib/water-amount.ts`, `src/features/timeline/LogSheet.tsx`
+- Test: `tests/lib/water-amount.test.ts` (create)
 
-The canonical `amount` state stays in **ml**; the field renders fl oz for imperial users and converts at the input boundary. `buildWateringTreatment(amount, ...)` is unchanged (still ml).
+The canonical `amount` state stays in **ml**; the field renders fl oz for imperial users and converts at the input boundary. The conversion boundary is extracted into two pure, tested helpers so the fl-oz⇄ml mapping is not buried in JSX. `buildWateringTreatment(amount, ...)` is unchanged (still ml).
 
-- [ ] **Step 1: Make `WaterAmountField` units-aware**
+- [ ] **Step 1: Write failing tests for the conversion boundary helpers**
+
+Create `tests/lib/water-amount.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { waterAmountFromDisplay, waterAmountToDisplay } from '../../src/lib/water-amount';
+
+describe('water amount display boundary', () => {
+  it('shows canonical ml unchanged for metric', () => {
+    expect(waterAmountToDisplay('250', 'metric')).toBe('250');
+    expect(waterAmountFromDisplay('250', 'metric')).toBe('250');
+  });
+  it('round-trips fl oz <-> ml for imperial, storing canonical ml', () => {
+    expect(waterAmountToDisplay('295.735', 'imperial')).toBe('10');
+    expect(waterAmountFromDisplay('10', 'imperial')).toBe('295.735');
+  });
+  it('passes through empty input', () => {
+    expect(waterAmountToDisplay('', 'imperial')).toBe('');
+    expect(waterAmountFromDisplay('', 'imperial')).toBe('');
+  });
+  it('returns the raw text when it is not a finite number', () => {
+    expect(waterAmountFromDisplay('abc', 'imperial')).toBe('abc');
+    expect(waterAmountToDisplay('abc', 'imperial')).toBe('');
+  });
+});
+```
+
+Run: `npx vitest run tests/lib/water-amount.test.ts` → FAIL (helpers not exported).
+
+- [ ] **Step 2: Implement the helpers in `water-amount.ts`**
+
+Append to `src/lib/water-amount.ts`:
+
+```ts
+import type { Units } from './types';
+import { mlToVolumeInput, volumeInputToMl } from './units';
+
+/** Canonical ml string -> the value shown in the field (fl oz for imperial). */
+export function waterAmountToDisplay(amountMl: string, units: Units): string {
+  if (amountMl.trim() === '') return '';
+  const ml = Number(amountMl);
+  if (!Number.isFinite(ml)) return '';
+  return String(mlToVolumeInput(ml, units));
+}
+
+/** A value typed into the field (fl oz for imperial) -> canonical ml string. */
+export function waterAmountFromDisplay(raw: string, units: Units): string {
+  if (raw.trim() === '') return '';
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return raw;
+  return String(volumeInputToMl(value, units));
+}
+```
+
+Run: `npx vitest run tests/lib/water-amount.test.ts` → PASS.
+
+- [ ] **Step 3: Make `WaterAmountField` units-aware (using the helpers)**
 
 Change the component signature and body in `src/features/timeline/LogSheet.tsx` (lines 49–131). Add a `units` prop and convert display/slider/labels:
 
@@ -971,15 +1068,10 @@ function WaterAmountField({
   const dark = tone === 'dark';
   const imperial = units === 'imperial';
   const unitLabel = imperial ? 'fl oz' : 'ml';
-  // Display value: canonical ml string -> shown unit.
-  const displayValue = amount.trim() === '' ? '' : String(mlToVolumeInput(Number(amount), units));
+  const displayValue = waterAmountToDisplay(amount, units);
   const minDisplay = mlToVolumeInput(WATER_AMOUNT_MIN_ML, units);
   const maxDisplay = mlToVolumeInput(WATER_AMOUNT_MAX_ML, units);
-  const onDisplayChange = (raw: string) => {
-    if (raw.trim() === '') { setAmount(''); return; }
-    const ml = imperial ? volumeInputToMl(Number(raw), units) : Number(raw);
-    setAmount(Number.isFinite(ml) ? String(ml) : raw);
-  };
+  const onDisplayChange = (raw: string) => setAmount(waterAmountFromDisplay(raw, units));
   const labelStyle = dark
     ? { display: 'block', marginBottom: 8 }
     : { display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 };
@@ -1055,13 +1147,22 @@ function WaterAmountField({
 
 > The slider stays in ml (its canonical domain); `setAmount(e.currentTarget.value)` from the range writes ml directly, which the number field re-renders as fl oz. This keeps one canonical value.
 
-- [ ] **Step 2: Add the `Units` import and pass `units` at both call sites**
+- [ ] **Step 4: Add imports and pass `units` at both call sites**
 
-In the top imports of `src/features/timeline/LogSheet.tsx`, add `Units` to the types import and the volume helpers:
+In `src/features/timeline/LogSheet.tsx`, add `Units` to the types import, add `mlToVolumeInput` from units, and add the two boundary helpers to the existing `../../lib/water-amount` import:
 
 ```ts
 import type { Profile, SubstrateType, TreatmentType, Units, UserLocation } from '../../lib/types';
-import { mlToVolumeInput, volumeInputToMl } from '../../lib/units';
+import { mlToVolumeInput } from '../../lib/units';
+import {
+  normalizeWaterAmountText,
+  waterAmountFromDisplay,
+  waterAmountToDisplay,
+  WATER_AMOUNT_MAX_ML,
+  WATER_AMOUNT_MIN_ML,
+  WATER_AMOUNT_STEP_ML,
+  waterAmountSliderValue,
+} from '../../lib/water-amount';
 ```
 
 Update both `<WaterAmountField ... />` usages (lines 327 and 531) to pass `units={profile.preferred_units}`:
@@ -1073,16 +1174,16 @@ Update both `<WaterAmountField ... />` usages (lines 327 and 531) to pass `units
                 <WaterAmountField amount={amount} setAmount={setAmount} busy={busy} tone="light" units={profile.preferred_units} />
 ```
 
-- [ ] **Step 3: Run typecheck + existing water tests**
+- [ ] **Step 5: Run typecheck + tests**
 
-Run: `npm run typecheck` → no errors.
-Run: `npx vitest run tests/app/logsheet.test.ts` → PASS (`buildWateringTreatment` unchanged; still ml).
+Run: `npx tsc -b` → no errors.
+Run: `npx vitest run tests/lib/water-amount.test.ts tests/app/logsheet.test.ts` → PASS (`buildWateringTreatment` unchanged; still ml).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/features/timeline/LogSheet.tsx
-git commit -m "feat(logsheet): imperial fl oz display for the water-amount field (ml canonical)"
+git add src/lib/water-amount.ts src/features/timeline/LogSheet.tsx tests/lib/water-amount.test.ts
+git commit -m "feat(logsheet): imperial fl oz water amount via tested ml-canonical boundary"
 ```
 
 ---
@@ -1090,15 +1191,68 @@ git commit -m "feat(logsheet): imperial fl oz display for the water-amount field
 ## Task 8: Thread units into PlantForm and convert pot dimensions
 
 **Files:**
+- Create: `src/features/plants/plant-form-logic.ts`
 - Modify: `src/features/plants/PlantForm.tsx`, `src/App.tsx`
+- Test: `tests/app/plant-form.test.ts` (create)
 
-- [ ] **Step 1: Accept `units` and convert prefill/save**
+- [ ] **Step 1: Write failing tests for the pot-dimension conversion boundary**
 
-In `src/features/plants/PlantForm.tsx`, add the import:
+Create `tests/app/plant-form.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { potDimensionInitialValue, potDimensionToCm } from '../../src/features/plants/plant-form-logic';
+
+describe('pot dimension conversion (PlantForm boundary)', () => {
+  it('saves metric input straight to cm', () => {
+    expect(potDimensionToCm('12', 'metric')).toBe(12);
+  });
+  it('saves imperial inches as cm', () => {
+    expect(potDimensionToCm('10', 'imperial')).toBeCloseTo(25.4);
+  });
+  it('returns null for blank or non-finite input', () => {
+    expect(potDimensionToCm('', 'imperial')).toBeNull();
+    expect(potDimensionToCm('abc', 'metric')).toBeNull();
+  });
+  it('prefills the editing field in the user unit', () => {
+    expect(potDimensionInitialValue(25.4, 'imperial')).toBe('10');
+    expect(potDimensionInitialValue(12, 'metric')).toBe('12');
+    expect(potDimensionInitialValue(null, 'imperial')).toBe('');
+  });
+});
+```
+
+Run: `npx vitest run tests/app/plant-form.test.ts` → FAIL (module missing).
+
+- [ ] **Step 2: Implement the conversion helpers**
+
+Create `src/features/plants/plant-form-logic.ts`:
+
+```ts
+import type { Units } from '../../lib/types';
+import { cmToLengthInput, lengthInputToCm } from '../../lib/units';
+
+/** A pot-dimension field value (cm or in) -> stored cm, or null when blank/invalid. */
+export function potDimensionToCm(value: string, units: Units): number | null {
+  if (!value.trim() || !Number.isFinite(Number(value))) return null;
+  return lengthInputToCm(Number(value), units);
+}
+
+/** Stored cm -> the field's initial value in the user's unit (empty when unset). */
+export function potDimensionInitialValue(cm: number | null | undefined, units: Units): string {
+  return cm != null ? String(cmToLengthInput(cm, units)) : '';
+}
+```
+
+Run: `npx vitest run tests/app/plant-form.test.ts` → PASS.
+
+- [ ] **Step 3: Accept `units` and use the helpers in `PlantForm`**
+
+In `src/features/plants/PlantForm.tsx`, add the imports:
 
 ```ts
 import type { LightLevel, PlacementType, Plant, PlantStatus, Species, SubstrateType, Units, UserLocation } from '../../lib/types';
-import { cmToLengthInput, lengthInputToCm } from '../../lib/units';
+import { potDimensionInitialValue, potDimensionToCm } from './plant-form-logic';
 ```
 
 Add `units` to the component props (after `onCancel`, around line 33–38):
@@ -1119,25 +1273,21 @@ export function PlantForm({
 }) {
 ```
 
-Change the pot-dimension prefill (lines 58–63) to display the user's unit:
+Change the pot-dimension prefill (lines 58–63) to use the helper:
 
 ```ts
-  const [potDiameter, setPotDiameter] = useState(
-    plant?.pot_diameter_cm != null ? String(cmToLengthInput(plant.pot_diameter_cm, units)) : '',
-  );
-  const [potHeight, setPotHeight] = useState(
-    plant?.pot_height_cm != null ? String(cmToLengthInput(plant.pot_height_cm, units)) : '',
-  );
+  const [potDiameter, setPotDiameter] = useState(potDimensionInitialValue(plant?.pot_diameter_cm, units));
+  const [potHeight, setPotHeight] = useState(potDimensionInitialValue(plant?.pot_height_cm, units));
 ```
 
 Change the save conversion (lines 151–152):
 
 ```ts
-      pot_diameter_cm: potDiameter.trim() && Number.isFinite(Number(potDiameter)) ? lengthInputToCm(Number(potDiameter), units) : null,
-      pot_height_cm: potHeight.trim() && Number.isFinite(Number(potHeight)) ? lengthInputToCm(Number(potHeight), units) : null,
+      pot_diameter_cm: potDimensionToCm(potDiameter, units),
+      pot_height_cm: potDimensionToCm(potHeight, units),
 ```
 
-- [ ] **Step 2: Localize the pot-size input labels (both themes)**
+- [ ] **Step 4: Localize the pot-size input labels (both themes)**
 
 Add `const imperial = units === 'imperial';` next to `const isDark = theme === 'dark';` (line 71).
 
@@ -1157,7 +1307,7 @@ Light theme pot inputs (lines 535–536): same change with `a-input`:
 
 Optionally update the "Pot size" `b-kicker`/label spans (lines 292 dark / its light twin) to read `Pot size ({imperial ? 'in' : 'cm'})`.
 
-- [ ] **Step 3: Pass `units` from `App.tsx`**
+- [ ] **Step 5: Pass `units` from `App.tsx`**
 
 In `src/App.tsx`, both `<PlantForm>` blocks (lines 70–84) gain `units={profile.preferred_units}`:
 
@@ -1183,16 +1333,16 @@ In `src/App.tsx`, both `<PlantForm>` blocks (lines 70–84) gain `units={profile
 
 Confirm `profile` is in scope in `App.tsx` (it is — used at lines 64 and 92).
 
-- [ ] **Step 4: Typecheck**
+- [ ] **Step 6: Typecheck + tests**
 
-Run: `npm run typecheck`
-Expected: no errors (a missing `units` prop on `PlantForm` would surface here).
+Run: `npx tsc -b` → no errors (a missing `units` prop on `PlantForm` would surface here).
+Run: `npx vitest run tests/app/plant-form.test.ts` → PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/features/plants/PlantForm.tsx src/App.tsx
-git commit -m "feat(plant-form): imperial-aware pot dimensions (metric storage)"
+git add src/features/plants/plant-form-logic.ts src/features/plants/PlantForm.tsx src/App.tsx tests/app/plant-form.test.ts
+git commit -m "feat(plant-form): imperial-aware pot dimensions via tested cm-canonical boundary"
 ```
 
 ---
@@ -1235,21 +1385,40 @@ In `tests/app/plant-screen-moisture-feedback.test.ts`, replace the `submits exac
     expect(result).toBe(created);
   });
 
-  it('mergeById appends pending rows the canonical set lacks; dropReconciledRows prunes the rest', () => {
+  it('mergeById appends pending feedback rows the canonical set lacks; dropReconciledRows prunes the rest', () => {
     const canonical = [{ $id: 'a' }];
     const pending = [{ $id: 'a' }, { $id: 'temp-1' }];
     expect(mergeById(canonical, pending)).toEqual([{ $id: 'a' }, { $id: 'temp-1' }]);
     expect(dropReconciledRows(pending, canonical)).toEqual([{ $id: 'temp-1' }]);
   });
+
+  it('mergeObservations prefers the hydrated optimistic soil-check over an un-hydrated canonical parent', () => {
+    const pending = [{ $id: 'o1', measurements: [{ soil_state: 'moist' }] }] as unknown as Observation[];
+    const parentOnly = [{ $id: 'o1' }] as unknown as Observation[];
+    const merged = mergeObservations(parentOnly, pending);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].measurements).toHaveLength(1); // keeps the soil-state child during read-after-write lag
+  });
+
+  it('dropReconciledObservations keeps a pending soil-check until the canonical row hydrates its measurement', () => {
+    const pending = [{ $id: 'o1', measurements: [{ soil_state: 'moist' }] }] as unknown as Observation[];
+    const parentOnly = [{ $id: 'o1' }] as unknown as Observation[];
+    const hydrated = [{ $id: 'o1', measurements: [{ soil_state: 'moist' }] }] as unknown as Observation[];
+    expect(dropReconciledObservations(pending, parentOnly)).toHaveLength(1); // parent-only -> keep
+    expect(dropReconciledObservations(pending, hydrated)).toHaveLength(0); // hydrated -> drop
+  });
 ```
 
-Add `mergeById, dropReconciledRows` to the import at the top of that test file:
+Add the new helpers (and `Observation`) to the imports at the top of that test file:
 
 ```ts
+import type { Observation } from '../../src/lib/types';
 import {
   buildMoistureFeedbackInput,
+  dropReconciledObservations,
   dropReconciledRows,
   mergeById,
+  mergeObservations,
   submitMoistureFeedback,
 } from '../../src/features/timeline/plant-screen-logic';
 ```
@@ -1353,10 +1522,36 @@ export function mergeById<T extends { $id: string }>(canonical: T[], pending: T[
   return [...canonical, ...pending.filter((p) => !ids.has(p.$id))];
 }
 
-/** Drop pending rows that the canonical re-fetch now includes (reconciled). */
+/** Drop pending rows that the canonical re-fetch now includes (reconciled). For flat
+ *  rows (moisture_feedback has no child relations) id presence means fully persisted. */
 export function dropReconciledRows<T extends { $id: string }>(pending: T[], canonical: T[]): T[] {
   const ids = new Set(canonical.map((r) => r.$id));
   return pending.filter((p) => !ids.has(p.$id));
+}
+
+/** Observations are written parent-then-child (createLog), so a canonical row can
+ *  appear before its measurement/treatment is visible. Hydration = child-relation
+ *  count; the more-hydrated version wins, so the optimistic soil-check's correction
+ *  survives read-after-write lag (spec Unit A / P1 review). */
+function observationHydration(o: Observation): number {
+  return (o.measurements?.length ?? 0) + (o.treatments?.length ?? 0) + (o.photos?.length ?? 0);
+}
+
+export function mergeObservations(canonical: Observation[], pending: Observation[]): Observation[] {
+  const byId = new Map<string, Observation>();
+  for (const o of canonical) byId.set(o.$id, o);
+  for (const p of pending) {
+    const existing = byId.get(p.$id);
+    if (!existing || observationHydration(p) > observationHydration(existing)) byId.set(p.$id, p);
+  }
+  return [...byId.values()];
+}
+
+/** Keep a pending observation until the canonical row for its id is at least as
+ *  hydrated — so a parent-only canonical row does not prematurely drop the child. */
+export function dropReconciledObservations(pending: Observation[], canonical: Observation[]): Observation[] {
+  const canonicalHydration = new Map(canonical.map((o) => [o.$id, observationHydration(o)] as const));
+  return pending.filter((p) => (canonicalHydration.get(p.$id) ?? 0) < observationHydration(p));
 }
 ```
 
@@ -1400,8 +1595,10 @@ Replace it with:
 ```ts
 import {
   detailLine,
+  dropReconciledObservations,
   dropReconciledRows,
   mergeById,
+  mergeObservations,
   shouldPromptForPotSize,
   submitMoistureFeedback,
   submitSoilCheck,
@@ -1430,7 +1627,7 @@ In the fetch effect (lines 638–653), prune reconciled pending rows after `setP
         setPlant(row);
         setVerdicts(new Map((row.insight_feedback ?? []).map((f) => [f.insight_kind, f])));
         setPendingFeedback((prev) => dropReconciledRows(prev, row.moisture_feedback ?? []));
-        setPendingObservations((prev) => dropReconciledRows(prev, row.observations ?? []));
+        setPendingObservations((prev) => dropReconciledObservations(prev, row.observations ?? []));
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(errorMessage(e));
@@ -1561,7 +1758,7 @@ Replace `handleSoilCheck` (lines 682–699):
 Replace the `observations` derivation (line 752) and the `moisture` line (line 784) so both include pending optimistic rows:
 
 ```ts
-  const observations = mergeById(plant.observations ?? [], pendingObservations).sort(
+  const observations = mergeObservations(plant.observations ?? [], pendingObservations).sort(
     (a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at),
   );
 ```
@@ -1673,7 +1870,7 @@ The `submits exact createLog payload` soil-check test was already moved to `obse
 
 - [ ] **Step 11: Typecheck + run full suite**
 
-Run: `npm run typecheck` → no errors.
+Run: `npx tsc -b` → no errors.
 Run: `npx vitest run` → all PASS.
 
 - [ ] **Step 12: Commit**
@@ -1696,7 +1893,7 @@ Expected: clean (fix any new issues in touched files).
 
 - [ ] **Step 2: Typecheck**
 
-Run: `npm run typecheck` (or `npx tsc --noEmit`)
+Run: `npx tsc -b` (or `npx tsc --noEmit`)
 Expected: no errors.
 
 - [ ] **Step 3: Full test suite**
@@ -1730,9 +1927,11 @@ git commit -m "fix(moisture): visual-check follow-ups"
 - #4 honest nudge → Tasks 3–4 + Task 10 Step 7.
 - #5 repot/pot parity → Task 6 (regression test) + storage stays metric.
 - #6 imperial → Tasks 5 (layer), 6 (repot), 7 (water), 8 (form).
-- Optimistic reconciliation (P1) → Task 9 utils + Task 10 reconcile/rollback.
-- Weighted confidence (P1) → Task 2 `groundTruthCount = Σ weight`.
+- Optimistic reconciliation (P1) → Task 9 utils + Task 10 reconcile/rollback; observations use **hydration-aware** merge/drop (`mergeObservations`/`dropReconciledObservations`) so a parent-only canonical row from `createLog`'s parent-then-child write can't drop the optimistic soil-state correction.
+- Weighted confidence (P1) → Task 2 `groundTruthCount = Σ weight`, **with `normalizedGroundTruthCount` rounding** (Step 3b) so fractional effective weight is counted, not truncated.
 - Meter-% eligibility (P2) → Task 2 (`source: 'measurement'` covers `soil_moisture_percent`; `lastNonFeedbackEventMs` notes it).
+- Imperial coverage (P2) → conversion boundaries extracted to tested pure helpers: `water-amount.ts` (Task 7) and `plant-form-logic.ts` (Task 8); repot covered in Task 6.
+- Verification commands use `npx tsc -b` (no `typecheck` npm script exists).
 
 **Type consistency:** `WaterContentCorrection.weight?`, `LatestFeedbackAnchor`, `isFeedbackEligible`, `MoistureInputs` extra fields, `PlantMoisture` extra fields, `mergeById`/`dropReconciledRows`, and the `units`/`observedAt` parameter changes are defined once and used consistently across tasks.
 
