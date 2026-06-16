@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMoistureInputs } from '../../src/lib/moisture-inputs';
+import { buildMoistureInputs, isFeedbackEligible, FEEDBACK_DRIFT_THRESHOLD_PCT } from '../../src/lib/moisture-inputs';
 import { ANCHORS, waterCapacityMl } from '../../src/lib/moisture';
 import type { MoistureFeedback, UserLocation } from '../../src/lib/types';
 import { baseProfile, daysAgo, makePlant, measurement, NOW, observation, treatment } from './moisture-fixtures';
@@ -47,7 +47,7 @@ describe('buildMoistureInputs', () => {
     expect(bandSourced).toBe(true);
     expect(estimate.repotBoundaryMs).toBe(Date.parse(daysAgo(40)));
     expect(estimate.substratePresent).toBe(true);
-    expect(estimate.groundTruthCount).toBe(3);
+    expect(estimate.groundTruthCount).toBeCloseTo(2); // soil_state(1) + meter@-1d(1) + feedback@same-as-soil_state(0)
 
     const climate = estimate.dailyClimate('2026-07-10');
     expect(climate.tempC).toBe(25); // July, northern hemisphere -> warm
@@ -153,5 +153,72 @@ describe('buildMoistureInputs', () => {
     ];
     const { estimate } = buildMoistureInputs({ plant: makePlant(), careProfile: null, feedback, now: NOW });
     expect(estimate.corrections[0].waterContentMl).toBeCloseTo(0.6 * CAPACITY);
+  });
+});
+
+describe('weighted confidence and eligibility data', () => {
+  it('counts effective correction weight, not raw count, so spam cannot inflate confidence', () => {
+    const base = Date.parse(daysAgo(1));
+    const minute = 60 * 1000;
+    const plant = makePlant({
+      observations: [
+        observation(new Date(base).toISOString(), {
+          observation_type: 'measurement', measurements: [measurement({ soil_state: 'moist' })],
+        }),
+        observation(new Date(base + 5 * minute).toISOString(), {
+          observation_type: 'measurement', measurements: [measurement({ soil_state: 'moist' })],
+        }),
+        observation(new Date(base + 10 * minute).toISOString(), {
+          observation_type: 'measurement', measurements: [measurement({ soil_state: 'moist' })],
+        }),
+      ],
+    });
+    const { estimate } = buildMoistureInputs({ plant, careProfile: null, feedback: [], now: NOW });
+    // First correction weight 1; the next two are <20 min later ⇒ weight 0.
+    expect(estimate.groundTruthCount).toBeCloseTo(1);
+    expect(estimate.corrections).toHaveLength(3);
+  });
+
+  it('gives a correction 6h after the previous one full weight', () => {
+    const base = Date.parse(daysAgo(2));
+    const sixHours = 6 * 60 * 60 * 1000;
+    const plant = makePlant({
+      observations: [
+        observation(new Date(base).toISOString(), {
+          observation_type: 'measurement', measurements: [measurement({ soil_state: 'moist' })],
+        }),
+        observation(new Date(base + sixHours).toISOString(), {
+          observation_type: 'measurement', measurements: [measurement({ soil_state: 'wet' })],
+        }),
+      ],
+    });
+    const { estimate } = buildMoistureInputs({ plant, careProfile: null, feedback: [], now: NOW });
+    expect(estimate.groundTruthCount).toBeCloseTo(2);
+  });
+});
+
+describe('isFeedbackEligible', () => {
+  const stepPct = ((ANCHORS.wet - ANCHORS.dry) / 5) * 100; // 14
+
+  it('is eligible when there is no prior feedback', () => {
+    expect(isFeedbackEligible({ currentPercent: 50, latestFeedback: null, lastNonFeedbackEventMs: null })).toBe(true);
+  });
+
+  it('hides immediately after a high-magnitude rating (anchor matches post-blend value)', () => {
+    const latestFeedback = { observedAtMs: NOW, predictedPercent: 60, dir: -1 as const, magnitude: 4, weight: 1 };
+    const currentPercent = 60 - 4 * stepPct; // post-blend value the engine now holds
+    expect(isFeedbackEligible({ currentPercent, latestFeedback, lastNonFeedbackEventMs: null })).toBe(false);
+  });
+
+  it('re-shows after a new correction event logged later than the feedback', () => {
+    const latestFeedback = { observedAtMs: NOW, predictedPercent: 60, dir: 0 as const, magnitude: 0, weight: 1 };
+    expect(isFeedbackEligible({ currentPercent: 60, latestFeedback, lastNonFeedbackEventMs: NOW + 1000 })).toBe(true);
+  });
+
+  it('re-shows once the estimate drifts past the threshold from the anchor', () => {
+    const latestFeedback = { observedAtMs: NOW, predictedPercent: 60, dir: 0 as const, magnitude: 0, weight: 1 };
+    const drifted = 60 - FEEDBACK_DRIFT_THRESHOLD_PCT;
+    expect(isFeedbackEligible({ currentPercent: drifted, latestFeedback, lastNonFeedbackEventMs: null })).toBe(true);
+    expect(isFeedbackEligible({ currentPercent: 60 - (FEEDBACK_DRIFT_THRESHOLD_PCT - 1), latestFeedback, lastNonFeedbackEventMs: null })).toBe(false);
   });
 });

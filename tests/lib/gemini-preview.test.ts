@@ -171,6 +171,9 @@ describe('Gemini preview payload', () => {
       confidence: 'medium',
       recommendation: { status: 'water_now', daysUntilDry: 0.42 },
       band: 'dry',
+      feedbackEligible: true,
+      needsSoilCheck: false,
+      needsSubstrate: false,
     };
     const careProfile: SpeciesCareProfile = {
       slug: 'monstera-deliciosa',

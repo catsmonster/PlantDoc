@@ -33,7 +33,7 @@ describe('moistureForPlant', () => {
       substrate_type: 'standard',
       observations: [
         observation(daysAgo(2), { observation_type: 'treatment', treatments: [treatment('watering', 200)] }),
-        observation(daysAgo(1), { observation_type: 'measurement', measurements: [measurement({ soil_state: 'moist' })] }),
+        observation(daysAgo(2), { observation_type: 'measurement', measurements: [measurement({ soil_state: 'moist' })] }),
         observation(daysAgo(1), { observation_type: 'measurement', measurements: [measurement({ soil_moisture_percent: 55 })] }),
       ],
     });
@@ -47,5 +47,26 @@ describe('moistureForPlant', () => {
     if (sourcedResult === null || fallbackResult === null) throw new Error('expected estimates');
     expect(sourcedResult.confidence).toBe('high');
     expect(fallbackResult.confidence).toBe('medium');
+  });
+});
+
+describe('moistureForPlant eligibility and enrichment', () => {
+  it('flags feedback eligible and both enrichment needs for a bare plant', () => {
+    const result = moistureForPlant(makePlant({ substrate_type: null }), null, [], NOW);
+    if (result === null) throw new Error('expected an estimate');
+    expect(result.feedbackEligible).toBe(true);
+    expect(result.needsSubstrate).toBe(true);
+    expect(result.needsSoilCheck).toBe(true);
+  });
+
+  it('clears needsSoilCheck once a soil check exists in-window', () => {
+    const plant = makePlant({
+      observations: [
+        observation(daysAgo(1), { observation_type: 'measurement', measurements: [measurement({ soil_state: 'moist' })] }),
+      ],
+    });
+    const result = moistureForPlant(plant, null, [], NOW);
+    if (result === null) throw new Error('expected an estimate');
+    expect(result.needsSoilCheck).toBe(false);
   });
 });

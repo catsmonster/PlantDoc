@@ -70,6 +70,7 @@ function SignedIn({ user }: { user: Models.User<Models.Preferences> }) {
         {route.name === 'add-plant' && (
           <PlantForm
             userId={user.$id}
+            units={profile.preferred_units}
             onSaved={() => navigate({ name: 'plants' })}
             onCancel={() => navigate({ name: 'plants' })}
           />
@@ -78,6 +79,7 @@ function SignedIn({ user }: { user: Models.User<Models.Preferences> }) {
           <PlantForm
             userId={user.$id}
             plant={editPlant}
+            units={profile.preferred_units}
             onSaved={(plant) => navigate({ name: 'plant', plantId: plant.$id })}
             onCancel={() => navigate({ name: 'plant', plantId: editPlant.$id })}
           />

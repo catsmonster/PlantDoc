@@ -33,6 +33,18 @@ export function waterCapacityMl(spec: PotSpec): number {
 
 export const ANCHORS = { dry: 0.15, moist: 0.5, wet: 0.85 } as const;
 
+/** Correction recency weighting (spec Unit B): a correction's influence ramps
+ *  from 0 at/below FLOOR to 1 at/above SATURATION, by the gap to the previous
+ *  correction. Spam (sub-floor) is ignored; well-spaced ground truth is trusted. */
+export const CORRECTION_WEIGHT_FLOOR_MS = 20 * 60 * 1000;
+export const CORRECTION_WEIGHT_SATURATION_MS = 6 * 60 * 60 * 1000;
+
+export function recencyWeight(gapMs: number): number {
+  if (gapMs >= CORRECTION_WEIGHT_SATURATION_MS) return 1;
+  const span = CORRECTION_WEIGHT_SATURATION_MS - CORRECTION_WEIGHT_FLOOR_MS;
+  return clamp((gapMs - CORRECTION_WEIGHT_FLOOR_MS) / span, 0, 1);
+}
+
 export const LIGHT_FACTOR: Record<LightLevel, number> = {
   low: 0.7,
   medium: 1,
@@ -77,6 +89,8 @@ export interface WateringEvent {
 export interface WaterContentCorrection {
   observedAtMs: number;
   waterContentMl: number;
+  /** Recency weight 0..1; omitted ⇒ 1 (full correction). Blended in simulateWaterContent. */
+  weight?: number;
 }
 
 export interface SimInput {
@@ -122,6 +136,7 @@ type TimelineEvent =
       kind: 'correction';
       observedAtMs: number;
       waterContentMl: number;
+      weight: number;
     };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -175,6 +190,7 @@ export function simulateWaterContent(input: SimInput): SimResult {
         kind: 'correction',
         observedAtMs: correction.observedAtMs,
         waterContentMl: correction.waterContentMl,
+        weight: correction.weight ?? 1,
       }),
     ),
   ]
@@ -200,7 +216,8 @@ export function simulateWaterContent(input: SimInput): SimResult {
           waterContentMl + (event.amountMl ?? capacityMl * UNKNOWN_WATERING_FRACTION),
         );
       } else {
-        waterContentMl = clamp(event.waterContentMl, residualMl, capacityMl);
+        const blended = event.weight * event.waterContentMl + (1 - event.weight) * waterContentMl;
+        waterContentMl = clamp(blended, residualMl, capacityMl);
       }
       nextEventIndex += 1;
     }
@@ -240,7 +257,7 @@ export function simulateWaterContent(input: SimInput): SimResult {
 }
 
 function normalizedGroundTruthCount(count: number): number {
-  return Number.isFinite(count) ? clamp(Math.trunc(count), 0, 3) : 0;
+  return Number.isFinite(count) ? clamp(Math.round(count), 0, 3) : 0;
 }
 
 function hasMeasuredWateringAmount(waterings: WateringEvent[]): boolean {
@@ -361,7 +378,16 @@ export const MOISTURE_INSIGHT_STATUS_PHRASE: Record<WateringStatus, string> = {
   overwatered: 'wetter than ideal',
 };
 
-const MOISTURE_ENRICHMENT_NUDGE = 'Add your pot size and a soil check to sharpen this estimate.';
+/** Low-confidence nudge built from only the missing signals (spec Unit E) — never
+ *  mentions pot size, which is always present when this card renders. */
+function enrichmentNudge(needsSoilCheck: boolean, needsSubstrate: boolean): string | null {
+  const actions: string[] = [];
+  if (needsSoilCheck) actions.push('log a soil check');
+  if (needsSubstrate) actions.push('set your soil type');
+  if (actions.length === 0) return null;
+  const joined = actions.length === 2 ? `${actions[0]} and ${actions[1]}` : actions[0];
+  return `${joined.charAt(0).toUpperCase()}${joined.slice(1)} to sharpen this estimate.`;
+}
 
 const MOISTURE_BAND_PREFERENCE: Record<MoistureBand, string> = {
   dry: 'prefers to dry out between waterings',
@@ -375,6 +401,7 @@ export function moistureInsight(
   recommendation: WateringRecommendation,
   speciesName: string | null,
   band: MoistureBand | null,
+  enrichment: { needsSoilCheck: boolean; needsSubstrate: boolean } = { needsSoilCheck: false, needsSubstrate: false },
 ): Insight {
   const pct = Math.round(estimate.moisturePercent);
   const statusPhrase = MOISTURE_INSIGHT_STATUS_PHRASE[recommendation.status];
@@ -386,7 +413,8 @@ export function moistureInsight(
     detail += ` ${subject} ${MOISTURE_BAND_PREFERENCE[band]}.`;
   }
   if (estimate.confidence === 'low') {
-    detail += ` ${MOISTURE_ENRICHMENT_NUDGE}`;
+    const nudge = enrichmentNudge(enrichment.needsSoilCheck, enrichment.needsSubstrate);
+    if (nudge) detail += ` ${nudge}`;
   }
 
   return {

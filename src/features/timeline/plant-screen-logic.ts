@@ -1,6 +1,6 @@
 import type { LogInput } from '../../lib/log';
 import type { MoistureFeedbackInput } from '../../lib/repo';
-import type { EstimateFeedback, Observation, SoilState, TreatmentType, Units } from '../../lib/types';
+import type { EstimateFeedback, MoistureFeedback, Observation, SoilState, TreatmentType, Units } from '../../lib/types';
 import { formatHeight, formatVolume } from '../../lib/units';
 
 export { shouldPromptForPotSize } from '../../lib/moisture-read';
@@ -43,7 +43,7 @@ export async function submitSoilCheck({
   plantId,
   soilState,
   contribute,
-  now = () => new Date(),
+  observedAt,
   createLog,
   refresh,
 }: {
@@ -51,20 +51,15 @@ export async function submitSoilCheck({
   plantId: string;
   soilState: SoilState;
   contribute: boolean;
-  now?: () => Date;
+  observedAt: string;
   createLog: (input: LogInput) => Promise<Observation>;
   refresh: () => void;
-}): Promise<void> {
-  await createLog(
-    buildSoilCheckLogInput({
-      userId,
-      plantId,
-      soilState,
-      contribute,
-      observedAt: now().toISOString(),
-    }),
+}): Promise<Observation> {
+  const observation = await createLog(
+    buildSoilCheckLogInput({ userId, plantId, soilState, contribute, observedAt }),
   );
   refresh();
+  return observation;
 }
 
 export function buildMoistureFeedbackInput({
@@ -95,7 +90,7 @@ export async function submitMoistureFeedback({
   estimateFeedback,
   magnitude,
   predictedMoisturePercent,
-  now = () => new Date(),
+  observedAt,
   createMoistureFeedback,
   refresh,
 }: {
@@ -104,21 +99,16 @@ export async function submitMoistureFeedback({
   estimateFeedback: EstimateFeedback;
   magnitude: number | null;
   predictedMoisturePercent: number;
-  now?: () => Date;
-  createMoistureFeedback: (userId: string, input: MoistureFeedbackInput) => Promise<unknown>;
+  observedAt: string;
+  createMoistureFeedback: (userId: string, input: MoistureFeedbackInput) => Promise<MoistureFeedback>;
   refresh: () => void;
-}): Promise<void> {
-  await createMoistureFeedback(
+}): Promise<MoistureFeedback> {
+  const created = await createMoistureFeedback(
     userId,
-    buildMoistureFeedbackInput({
-      plantId,
-      estimateFeedback,
-      magnitude,
-      predictedMoisturePercent,
-      observedAt: now().toISOString(),
-    }),
+    buildMoistureFeedbackInput({ plantId, estimateFeedback, magnitude, predictedMoisturePercent, observedAt }),
   );
   refresh();
+  return created;
 }
 
 export function detailLine(obs: Observation, units: Units): string | null {
@@ -151,4 +141,42 @@ export function detailLine(obs: Observation, units: Units): string | null {
   if (obs.observation_type === 'photo') return 'Photo';
   if (obs.observation_type === 'note') return null;
   return obs.observation_type.replace('_', ' ');
+}
+
+/** Merge canonical rows with optimistic pending rows, deduped by id. Canonical rows win. */
+export function mergeById<T extends { $id: string }>(canonical: T[], pending: T[]): T[] {
+  const ids = new Set(canonical.map((row) => row.$id));
+  return [...canonical, ...pending.filter((row) => !ids.has(row.$id))];
+}
+
+/** Drop pending flat rows once a canonical re-fetch includes the same id. */
+export function dropReconciledRows<T extends { $id: string }>(pending: T[], canonical: T[]): T[] {
+  const ids = new Set(canonical.map((row) => row.$id));
+  return pending.filter((row) => !ids.has(row.$id));
+}
+
+function observationHydration(observation: Observation): number {
+  return (
+    (observation.measurements?.length ?? 0) +
+    (observation.treatments?.length ?? 0) +
+    (observation.photos?.length ?? 0)
+  );
+}
+
+export function mergeObservations(canonical: Observation[], pending: Observation[]): Observation[] {
+  const byId = new Map<string, Observation>();
+  for (const observation of canonical) byId.set(observation.$id, observation);
+  for (const optimistic of pending) {
+    const existing = byId.get(optimistic.$id);
+    if (!existing || observationHydration(optimistic) > observationHydration(existing)) {
+      byId.set(optimistic.$id, optimistic);
+    }
+  }
+  return [...byId.values()];
+}
+
+/** Keep a pending observation until the canonical row is at least as hydrated. */
+export function dropReconciledObservations(pending: Observation[], canonical: Observation[]): Observation[] {
+  const canonicalHydration = new Map(canonical.map((observation) => [observation.$id, observationHydration(observation)] as const));
+  return pending.filter((observation) => (canonicalHydration.get(observation.$id) ?? 0) < observationHydration(observation));
 }

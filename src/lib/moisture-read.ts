@@ -5,7 +5,7 @@
  */
 import type { MoistureFeedback, Plant } from './types';
 import type { SpeciesCareProfile } from './knowledge/care-profiles';
-import { buildMoistureInputs } from './moisture-inputs';
+import { buildMoistureInputs, isFeedbackEligible } from './moisture-inputs';
 import {
   estimateMoisture,
   recommendWatering,
@@ -26,6 +26,12 @@ export interface PlantMoisture {
   confidence: Confidence;
   recommendation: WateringRecommendation;
   band: MoistureBand;
+  /** Whether the feedback prompt should be shown (spec Unit C). */
+  feedbackEligible: boolean;
+  /** No in-window soil check — used by the honest low-confidence nudge (spec Unit E). */
+  needsSoilCheck: boolean;
+  /** Substrate unset — used by the honest low-confidence nudge. */
+  needsSubstrate: boolean;
 }
 
 /** One tier down — an unsourced species band is a weaker prior. */
@@ -47,14 +53,19 @@ export function moistureForPlant(
   if (shouldPromptForPotSize(plant)) return null;
   if (plant.placement_type === 'outdoor' || plant.placement_type === 'balcony') return null;
 
-  const { estimate, band, bandSourced } = buildMoistureInputs({ plant, careProfile, feedback, now });
+  const { estimate, band, bandSourced, latestFeedback, lastNonFeedbackEventMs, hasRecentGroundTruth } =
+    buildMoistureInputs({ plant, careProfile, feedback, now });
   const { moisturePercent, confidence } = estimateMoisture(estimate);
   const recommendation = recommendWatering(moisturePercent, { band });
+  const feedbackEligible = isFeedbackEligible({ currentPercent: moisturePercent, latestFeedback, lastNonFeedbackEventMs });
 
   return {
     moisturePercent,
     confidence: bandSourced ? confidence : LOWER_CONFIDENCE[confidence],
     recommendation,
     band,
+    feedbackEligible,
+    needsSoilCheck: !hasRecentGroundTruth,
+    needsSubstrate: !estimate.substratePresent,
   };
 }

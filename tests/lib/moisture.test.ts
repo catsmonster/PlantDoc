@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   ANCHORS,
+  CORRECTION_WEIGHT_FLOOR_MS,
+  CORRECTION_WEIGHT_SATURATION_MS,
   dailyEtMl,
   estimateMoisture,
   INDOOR_DEFAULT_RH,
   moistureInsight,
   moistureStatusColor,
   potSoilVolumeMl,
+  recencyWeight,
   recommendWatering,
   seasonalIndoorTempC,
   simulateWaterContent,
@@ -410,7 +413,7 @@ describe('moisture estimate and confidence', () => {
         baseInput({
           substratePresent: true,
           amountMeasured: false,
-          groundTruthCount: 2.9,
+          groundTruthCount: 2.4, // rounds to 2 ⇒ score 1+0+2 = 3 ⇒ medium
         }),
       ).confidence,
     ).toBe('medium');
@@ -567,29 +570,41 @@ describe('moistureInsight', () => {
     expect(insight.title).toBe('Starting to dry out');
   });
 
-  it('appends an enrichment nudge only at low confidence', () => {
-    const low = moistureInsight(
+  it('builds the low-confidence nudge from only what is missing, never pot size', () => {
+    const soilOnly = moistureInsight(
       { moisturePercent: 50, confidence: 'low' },
       { status: 'comfortable' },
       'Monstera deliciosa',
       null,
+      { needsSoilCheck: true, needsSubstrate: false },
     );
-    const medium = moistureInsight(
+    const both = moistureInsight(
+      { moisturePercent: 50, confidence: 'low' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+      null,
+      { needsSoilCheck: true, needsSubstrate: true },
+    );
+    const nothingMissing = moistureInsight(
+      { moisturePercent: 50, confidence: 'low' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+      null,
+      { needsSoilCheck: false, needsSubstrate: false },
+    );
+    const mediumConfidence = moistureInsight(
       { moisturePercent: 50, confidence: 'medium' },
       { status: 'comfortable' },
       'Monstera deliciosa',
       null,
-    );
-    const high = moistureInsight(
-      { moisturePercent: 50, confidence: 'high' },
-      { status: 'comfortable' },
-      'Monstera deliciosa',
-      null,
+      { needsSoilCheck: true, needsSubstrate: true },
     );
 
-    expect(low.detail.endsWith('Add your pot size and a soil check to sharpen this estimate.')).toBe(true);
-    expect(medium.detail).not.toContain('sharpen');
-    expect(high.detail).not.toContain('sharpen');
+    expect(soilOnly.detail.endsWith('Log a soil check to sharpen this estimate.')).toBe(true);
+    expect(both.detail.endsWith('Log a soil check and set your soil type to sharpen this estimate.')).toBe(true);
+    expect(soilOnly.detail).not.toContain('pot size');
+    expect(nothingMissing.detail).not.toContain('sharpen');
+    expect(mediumConfidence.detail).not.toContain('sharpen');
   });
 
   it('omits the species clause when no species name is known', () => {
@@ -665,5 +680,71 @@ describe('moistureStatusColor', () => {
     expect(moistureStatusColor('drying', false)).toBe('#A88A3C');
     expect(moistureStatusColor('water_now', false)).toBe('#B07F57');
     expect(moistureStatusColor('overwatered', false)).toBe('#3F7E91');
+  });
+});
+
+describe('recencyWeight', () => {
+  it('is full at or beyond saturation', () => {
+    expect(recencyWeight(CORRECTION_WEIGHT_SATURATION_MS)).toBe(1);
+    expect(recencyWeight(CORRECTION_WEIGHT_SATURATION_MS * 2)).toBe(1);
+  });
+  it('is zero at or below the floor', () => {
+    expect(recencyWeight(0)).toBe(0);
+    expect(recencyWeight(CORRECTION_WEIGHT_FLOOR_MS)).toBe(0);
+    expect(recencyWeight(CORRECTION_WEIGHT_FLOOR_MS / 2)).toBe(0);
+  });
+  it('ramps linearly between floor and saturation', () => {
+    const mid = (CORRECTION_WEIGHT_FLOOR_MS + CORRECTION_WEIGHT_SATURATION_MS) / 2;
+    expect(recencyWeight(mid)).toBeCloseTo(0.5);
+  });
+});
+
+describe('weighted corrections', () => {
+  const pot = { diameterCm: 12, heightCm: 10, substrate: 'standard', drains: true } as const;
+  const capacityMl = waterCapacityMl(pot);
+  const dailyClimate = () => ({ tempC: 20, humidityPct: 50, light: 'medium' }) as const;
+  const t = Date.UTC(2026, 0, 1, 12);
+  const target = capacityMl * 0.6;
+  const run = (weight: number) =>
+    simulateWaterContent({
+      pot,
+      startMs: t,
+      endMs: t,
+      waterings: [{ observedAtMs: t, amountMl: capacityMl }],
+      dailyClimate,
+      speciesDailyFraction: 0,
+      corrections: [{ observedAtMs: t, waterContentMl: target, weight }],
+    }).waterContentMl;
+
+  it('weight 1 fully applies the correction', () => {
+    expect(run(1)).toBeCloseTo(target);
+  });
+  it('weight 0 ignores the correction (keeps the model prediction)', () => {
+    expect(run(0)).toBeCloseTo(capacityMl);
+  });
+  it('partial weight blends target and model prediction', () => {
+    expect(run(0.5)).toBeCloseTo(0.5 * target + 0.5 * capacityMl);
+  });
+});
+
+describe('confidence counts effective (rounded) ground-truth weight', () => {
+  const pot = { diameterCm: 12, heightCm: 10, substrate: 'standard', drains: true } as const;
+  const t = Date.UTC(2026, 0, 1, 12);
+  const base = {
+    pot,
+    startMs: t,
+    endMs: t,
+    waterings: [] as { observedAtMs: number; amountMl?: number | null }[],
+    dailyClimate: () => ({ tempC: 20, humidityPct: 50, light: 'medium' }) as const,
+    speciesDailyFraction: 0.1,
+    corrections: [] as { observedAtMs: number; waterContentMl: number; weight?: number }[],
+    substratePresent: false,
+    amountMeasured: false,
+  };
+  it('rounds 1.6 effective weight up to a medium-confidence score', () => {
+    expect(estimateMoisture({ ...base, groundTruthCount: 1.6 }).confidence).toBe('medium');
+  });
+  it('rounds 0.4 effective weight down to low confidence', () => {
+    expect(estimateMoisture({ ...base, groundTruthCount: 0.4 }).confidence).toBe('low');
   });
 });
