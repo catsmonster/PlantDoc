@@ -1,10 +1,12 @@
 /**
  * Read entry point (spec Unit D): a plant's inferred soil moisture, confidence,
- * and watering recommendation, composed from the pure engine. Pure — the caller
- * passes already-loaded data and `now`.
+ * and watering recommendation, composed from the pure engine. Pure: callers pass
+ * already-loaded data, weather state, and `now`.
  */
 import type { MoistureFeedback, Plant } from './types';
 import type { SpeciesCareProfile } from './knowledge/care-profiles';
+import type { WeatherSeries } from './openmeteo';
+import { hasMoistureAnchor } from './moisture-anchor';
 import { buildMoistureInputs, isFeedbackEligible } from './moisture-inputs';
 import {
   estimateMoisture,
@@ -18,7 +20,6 @@ import {
 export type PotSizePromptPlant = Pick<Plant, 'placement_type' | 'pot_diameter_cm' | 'pot_height_cm'>;
 
 export function shouldPromptForPotSize(plant: PotSizePromptPlant): boolean {
-  if (plant.placement_type === 'outdoor' || plant.placement_type === 'balcony') return false;
   return plant.pot_diameter_cm == null || plant.pot_height_cm == null;
 }
 
@@ -29,33 +30,61 @@ export interface PlantMoisture {
   band: MoistureBand;
   /** Whether the feedback prompt should be shown (spec Unit C). */
   feedbackEligible: boolean;
-  /** No in-window soil check — used by the honest low-confidence nudge (spec Unit E). */
+  /** No in-window soil check: used by the honest low-confidence nudge. */
   needsSoilCheck: boolean;
-  /** Substrate unset — used by the honest low-confidence nudge. */
+  /** Substrate unset: used by the honest low-confidence nudge. */
   needsSubstrate: boolean;
 }
 
-/** One tier down — an unsourced species band is a weaker prior. */
+export type WeatherState =
+  | { status: 'loading' }
+  | { status: 'ready'; series: WeatherSeries }
+  | { status: 'unavailable' };
+
+export type MoistureCardState =
+  | { kind: 'ready'; moisture: PlantMoisture }
+  | { kind: 'needs_pot' }
+  | { kind: 'needs_location' }
+  | { kind: 'needs_observation' }
+  | { kind: 'weather_loading' }
+  | { kind: 'weather_unavailable' };
+
+/** One tier down: an unsourced species band is a weaker prior. */
 const LOWER_CONFIDENCE: Record<Confidence, Confidence> = { high: 'medium', medium: 'low', low: 'low' };
 
-/**
- * Returns null — so the UI hides the gauge/insight — when the pot size is unknown
- * or the plant lives outdoors / on a balcony (outdoor inference is deferred to
- * v1.1). When the species band is an unsourced fallback, confidence drops a tier.
- */
-export function moistureForPlant(
+function isOutdoor(plant: Plant): boolean {
+  return plant.placement_type === 'outdoor' || plant.placement_type === 'balcony';
+}
+
+function hasLocationCoords(plant: Plant): boolean {
+  const loc = plant.location_id;
+  return !!loc && typeof loc === 'object' && Array.isArray((loc as { location?: unknown }).location);
+}
+
+export function moistureCardState(
   plant: Plant,
   careProfile: SpeciesCareProfile | null,
   feedback: MoistureFeedback[],
   now: number,
-): PlantMoisture | null {
-  // Only a missing pot hides the gauge; a 0/negative dimension is form-prevented and
-  // flows through as ~0% via the capacity guard in estimateMoisture.
-  if (shouldPromptForPotSize(plant)) return null;
-  if (plant.placement_type === 'outdoor' || plant.placement_type === 'balcony') return null;
+  weather: WeatherState | undefined,
+): MoistureCardState {
+  // Only a missing pot hides the gauge; a 0/negative dimension is form-prevented
+  // and flows through as ~0% via the capacity guard in estimateMoisture.
+  if (shouldPromptForPotSize(plant)) return { kind: 'needs_pot' };
+
+  let weatherSeries: WeatherSeries | undefined;
+  if (isOutdoor(plant)) {
+    if (!hasLocationCoords(plant)) return { kind: 'needs_location' };
+  }
+  if (!hasMoistureAnchor(plant)) return { kind: 'needs_observation' };
+  if (isOutdoor(plant)) {
+    if (!weather || weather.status === 'loading') return { kind: 'weather_loading' };
+    if (weather.status === 'unavailable') return { kind: 'weather_unavailable' };
+    weatherSeries = weather.series;
+  }
 
   const { estimate, band, bandSourced, latestFeedback, lastNonFeedbackEventMs, hasRecentGroundTruth } =
-    buildMoistureInputs({ plant, careProfile, feedback, now });
+    buildMoistureInputs({ plant, careProfile, feedback, now, weatherSeries });
   const { moisturePercent, confidence, capacityMl } = estimateMoisture(estimate);
   const recommendation = recommendWatering(moisturePercent, {
     band,
@@ -65,12 +94,34 @@ export function moistureForPlant(
   const feedbackEligible = isFeedbackEligible({ currentPercent: moisturePercent, latestFeedback, lastNonFeedbackEventMs });
 
   return {
-    moisturePercent,
-    confidence: bandSourced ? confidence : LOWER_CONFIDENCE[confidence],
-    recommendation,
-    band,
-    feedbackEligible,
-    needsSoilCheck: !hasRecentGroundTruth,
-    needsSubstrate: !estimate.substratePresent,
+    kind: 'ready',
+    moisture: {
+      moisturePercent,
+      confidence: bandSourced ? confidence : LOWER_CONFIDENCE[confidence],
+      recommendation,
+      band,
+      feedbackEligible,
+      needsSoilCheck: !hasRecentGroundTruth,
+      needsSubstrate: !estimate.substratePresent,
+    },
   };
+}
+
+/** Back-compat accessor: the moisture value when the card is ready, else null. */
+export function readyMoisture(state: MoistureCardState): PlantMoisture | null {
+  return state.kind === 'ready' ? state.moisture : null;
+}
+
+/**
+ * Returns null so legacy callers hide the gauge/insight for non-ready states.
+ * New UI should prefer `moistureCardState` to show the specific reason.
+ */
+export function moistureForPlant(
+  plant: Plant,
+  careProfile: SpeciesCareProfile | null,
+  feedback: MoistureFeedback[],
+  now: number,
+  weather?: WeatherState,
+): PlantMoisture | null {
+  return readyMoisture(moistureCardState(plant, careProfile, feedback, now, weather));
 }

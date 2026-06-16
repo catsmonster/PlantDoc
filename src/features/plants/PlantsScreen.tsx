@@ -5,6 +5,7 @@ import { isPlantThirstyFromSummary } from '../../lib/insights';
 import { moistureForPlant, shouldPromptForPotSize, type PlantMoisture } from '../../lib/moisture-read';
 import { moistureStatusColor } from '../../lib/moisture';
 import { careProfileForPlant } from '../../lib/knowledge/care-profiles';
+import { useWeatherSeries } from '../../lib/weather-series';
 import type { Plant, Profile } from '../../lib/types';
 import { ErrorText } from '../../ui/Field';
 import { Spinner } from '../../ui/Spinner';
@@ -69,6 +70,9 @@ export function PlantsScreen({
     };
   }, [userId]);
 
+  const plants = dashboard?.map((d) => d.plant) ?? [];
+  const weatherFor = useWeatherSeries(plants, now.getTime());
+
   if (error) {
     return (
       <div className={isDark ? 'b-root bg-[#0E140F] min-h-dvh p-6 text-[#F2F6EF]' : 'a-root bg-[#F4EFE4] min-h-dvh p-6 text-[#23302A]'}>
@@ -87,7 +91,6 @@ export function PlantsScreen({
 
   if (!dashboard) return <Spinner label="Loading your plants…" />;
 
-  const plants = dashboard.map((d) => d.plant);
   // Recompute each plant's inferred moisture live (same inputs as the detail
   // screen): table-backed care profile when mined, else the bundled fallback.
   // Null when the gauge should hide (no pot size / outdoors).
@@ -99,6 +102,7 @@ export function PlantsScreen({
         d.careProfile ?? careProfileForPlant(d.plant),
         d.plant.moisture_feedback ?? [],
         now.getTime(),
+        weatherFor(d.plant),
       ),
     ]),
   );

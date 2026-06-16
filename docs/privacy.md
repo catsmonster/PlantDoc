@@ -86,6 +86,8 @@ Geocoding (location setup) calls **Open-Meteo** first from the browser. If that 
 
 Weather enrichment (log entries) calls **Open-Meteo** directly from the browser with coordinates rounded to 1 decimal place (~11 km) plus dates. The location form discloses third-party location search and coordinate rounding in-app at the point of entry.
 
+`rain_exposed` (plants) is a coarse environmental flag, owner-scoped and **excluded from public export**, consistent with placement/substrate/light context. Outdoor moisture enrichment uses the plant's existing coarse location (ADR-007), and the daily weather series is transient model input that is never persisted to a public row.
+
 The optional **Gemini AI preview** calls Google Gemini 3.5 Flash through PlantDoc's `/api/gemini-insights` Worker route. The API key is server-side only and must never use a `VITE_` prefix. The preview is user-triggered from the plant detail screen and sends:
 
 - a sanitized structured summary of the plant and recent timeline entries,

@@ -132,6 +132,11 @@ describe('toPublicRow', () => {
     }
   });
 
+  it('does not carry rain_exposed into a public row', () => {
+    const row = toPublicRow(wateringObs(), OPTS)!;
+    expect(Object.keys(row)).not.toContain('rain_exposed');
+  });
+
   it('buckets dates to months and derives plant age', () => {
     const row = toPublicRow(wateringObs(), OPTS)!;
     expect(row.observed_month).toBe('2026-06');

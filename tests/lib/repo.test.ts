@@ -80,6 +80,27 @@ describe('listSpecies', () => {
   });
 });
 
+describe('listPlants', () => {
+  beforeEach(() => {
+    mocks.listRows.mockReset();
+  });
+
+  it('selects rain_exposed with the lightweight scalar plant fields', async () => {
+    mocks.listRows.mockResolvedValueOnce({ rows: [] });
+
+    const { listPlants } = await import('../../src/lib/repo');
+    await listPlants('u1');
+
+    expect(mocks.listRows).toHaveBeenCalledWith({
+      databaseId: 'db',
+      tableId: 'plants',
+      queries: expect.arrayContaining([
+        expect.stringContaining('rain_exposed'),
+      ]),
+    });
+  });
+});
+
 describe('listPlantsForDashboard', () => {
   beforeEach(() => {
     mocks.listRows.mockReset();

@@ -15,7 +15,7 @@ import { PlantImageSlot } from '../../ui/PlantImageSlot';
 import { SpeciesNameResolver } from '../knowledge/SpeciesNameResolver';
 import { SpeciesAutocomplete } from '../knowledge/SpeciesAutocomplete';
 import { speciesCatalogLabel, speciesSelectionFromSuggestion, type SpeciesSuggestion } from '../../lib/knowledge/species-suggest';
-import { potDimensionInitialValue, potDimensionToCm } from './plant-form-logic';
+import { placementNeedsRainAnswer, potDimensionInitialValue, potDimensionToCm, resolveRainExposed } from './plant-form-logic';
 
 function speciesIdOf(plant: Plant | undefined): string {
   if (!plant?.species_id) return '';
@@ -54,6 +54,7 @@ export function PlantForm({
     plant?.placement_type ?? 'indoor',
   );
   const [placementLabel, setPlacementLabel] = useState(plant?.placement_label ?? '');
+  const [rainExposed, setRainExposed] = useState<boolean | null>(plant?.rain_exposed ?? null);
   const [acquiredOn, setAcquiredOn] = useState(plant?.acquired_on?.slice(0, 10) ?? '');
   const [status, setStatus] = useState<PlantStatus>(plant?.status ?? 'active');
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +140,11 @@ export function PlantForm({
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    // Outdoor/balcony moisture inference needs an explicit rain answer (spec Unit 4).
+    if (placementNeedsRainAnswer(placementType) && rainExposed === null) {
+      setError('Tell us whether this plant is exposed to rain.');
+      return;
+    }
     void save({
       nickname: nickname.trim(),
       common_name: commonName.trim() || null,
@@ -153,6 +159,7 @@ export function PlantForm({
       substrate_type: substrateType || null,
       pot_drains: potDrains,
       light_level: lightLevel || null,
+      rain_exposed: resolveRainExposed(placementType, rainExposed),
       ...(editing ? { status } : {}),
     });
   }
@@ -278,6 +285,20 @@ export function PlantForm({
                 ))}
               </div>
             </label>
+
+            {/* Rain exposure — explicit, no default, required for outdoor/balcony (spec Unit 4) */}
+            {placementNeedsRainAnswer(placementType) && (
+              <div style={{ display: 'block' }} role="group" aria-labelledby="rain-exposure-label-dark">
+                <span id="rain-exposure-label-dark" className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Exposed to rain?</span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {([{ v: true, l: 'Yes' }, { v: false, l: 'No' }] as const).map((o) => (
+                    <button key={o.l} type="button" className={'b-pillopt b-tap' + (rainExposed === o.v ? ' on' : '')} onClick={() => setRainExposed(o.v)} disabled={busy} style={{ flex: 1, textAlign: 'center' }}>
+                      {o.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Spot label */}
             <label style={{ display: 'block' }}>
@@ -520,6 +541,20 @@ export function PlantForm({
               ))}
             </div>
           </label>
+
+          {/* Rain exposure — explicit, no default, required for outdoor/balcony (spec Unit 4) */}
+          {placementNeedsRainAnswer(placementType) && (
+            <div style={{ display: 'block' }} role="group" aria-labelledby="rain-exposure-label-light">
+              <span id="rain-exposure-label-light" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Exposed to rain?</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {([{ v: true, l: 'Yes' }, { v: false, l: 'No' }] as const).map((o) => (
+                  <button key={o.l} type="button" className={'a-pillopt a-tap' + (rainExposed === o.v ? ' on' : '')} onClick={() => setRainExposed(o.v)} disabled={busy} style={{ flex: 1, textAlign: 'center' }}>
+                    {o.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Spot label */}
           <label style={{ display: 'block' }}>

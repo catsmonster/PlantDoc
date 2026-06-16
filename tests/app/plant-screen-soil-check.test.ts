@@ -113,8 +113,8 @@ describe('PlantScreen missing pot-size moisture nudge', () => {
     expect(shouldPromptForPotSize?.(makePlant({ pot_diameter_cm: null }))).toBe(true);
     expect(shouldPromptForPotSize?.(makePlant({ pot_height_cm: null }))).toBe(true);
     expect(shouldPromptForPotSize?.(makePlant({ placement_type: 'greenhouse', pot_height_cm: null }))).toBe(true);
-    expect(shouldPromptForPotSize?.(makePlant({ placement_type: 'outdoor', pot_diameter_cm: null }))).toBe(false);
-    expect(shouldPromptForPotSize?.(makePlant({ placement_type: 'balcony', pot_height_cm: null }))).toBe(false);
+    expect(shouldPromptForPotSize?.(makePlant({ placement_type: 'outdoor', pot_diameter_cm: null }))).toBe(true);
+    expect(shouldPromptForPotSize?.(makePlant({ placement_type: 'balcony', pot_height_cm: null }))).toBe(true);
     expect(shouldPromptForPotSize?.(makePlant())).toBe(false);
   });
 

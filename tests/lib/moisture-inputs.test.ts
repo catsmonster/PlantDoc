@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildMoistureInputs, isFeedbackEligible, FEEDBACK_DRIFT_THRESHOLD_PCT } from '../../src/lib/moisture-inputs';
 import { ANCHORS, waterCapacityMl } from '../../src/lib/moisture';
+import type { WeatherSeries } from '../../src/lib/openmeteo';
 import type { MoistureFeedback, UserLocation } from '../../src/lib/types';
 import { baseProfile, daysAgo, makePlant, measurement, NOW, observation, treatment } from './moisture-fixtures';
 
@@ -92,6 +93,28 @@ describe('buildMoistureInputs', () => {
     const { estimate } = buildMoistureInputs({ plant, careProfile: profile, feedback: [], now: NOW });
     expect(estimate.speciesDailyFraction).toBeCloseTo(0.08);
     expect(estimate.dailyClimate('2026-07-10').tempC).toBe(23); // July in the south -> cool
+  });
+
+  it('uses the weather series for outdoor temp/RH and wires rain only when exposed', () => {
+    const series: WeatherSeries = new Map([
+      ['2026-06-15', { tempC: 30, humidityPct: 35, precipMm: 12 }],
+    ]);
+    const outdoor = { ...makePlant(), placement_type: 'outdoor' as const, rain_exposed: true };
+
+    const built = buildMoistureInputs({ plant: outdoor, careProfile: null, feedback: [], now: NOW, weatherSeries: series });
+    const climate = built.estimate.dailyClimate('2026-06-15');
+    expect(climate.tempC).toBe(30);
+    expect(climate.humidityPct).toBe(35);
+    expect(built.estimate.dailyRainMm?.('2026-06-15')).toBe(12);
+
+    const notExposed = buildMoistureInputs({
+      plant: { ...outdoor, rain_exposed: false },
+      careProfile: null,
+      feedback: [],
+      now: NOW,
+      weatherSeries: series,
+    });
+    expect(notExposed.estimate.dailyRainMm).toBeUndefined();
   });
 
   it('excludes corrections and feedback older than the 60-day window', () => {

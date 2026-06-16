@@ -232,6 +232,7 @@ export async function listPlants(userId: string): Promise<Plant[]> {
         'watering_cadence_days',
         'latest_photo_file_id',
         'latest_photo_observed_at',
+        'rain_exposed',
       ]),
     ],
   });
