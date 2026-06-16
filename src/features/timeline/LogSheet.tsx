@@ -10,9 +10,12 @@ import {
 import { enrichObservationWeather } from '../../lib/enrich';
 import { errorMessage } from '../../lib/error';
 import { createLog, updatePlant } from '../../lib/repo';
-import type { Profile, SubstrateType, TreatmentType, UserLocation } from '../../lib/types';
+import type { Profile, SubstrateType, TreatmentType, Units, UserLocation } from '../../lib/types';
+import { mlToVolumeInput } from '../../lib/units';
 import {
   normalizeWaterAmountText,
+  waterAmountFromDisplay,
+  waterAmountToDisplay,
   WATER_AMOUNT_MAX_ML,
   WATER_AMOUNT_MIN_ML,
   WATER_AMOUNT_STEP_ML,
@@ -51,13 +54,21 @@ function WaterAmountField({
   setAmount,
   busy,
   tone,
+  units,
 }: {
   amount: string;
   setAmount: (value: string) => void;
   busy: boolean;
   tone: 'light' | 'dark';
+  units: Units;
 }) {
   const dark = tone === 'dark';
+  const imperial = units === 'imperial';
+  const unitLabel = imperial ? 'fl oz' : 'ml';
+  const displayValue = waterAmountToDisplay(amount, units);
+  const minDisplay = mlToVolumeInput(WATER_AMOUNT_MIN_ML, units);
+  const maxDisplay = mlToVolumeInput(WATER_AMOUNT_MAX_ML, units);
+  const onDisplayChange = (raw: string) => setAmount(waterAmountFromDisplay(raw, units));
   const labelStyle = dark
     ? { display: 'block', marginBottom: 8 }
     : { display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 };
@@ -72,17 +83,17 @@ function WaterAmountField({
       <div style={{ display: 'grid', gap: 10 }}>
         <div style={{ position: 'relative' }}>
           <input
-            aria-label="Water amount in milliliters"
+            aria-label={`Water amount in ${imperial ? 'fluid ounces' : 'milliliters'}`}
             className={dark ? 'b-input' : 'a-input'}
-            value={amount}
-            onChange={(e) => setAmount(e.currentTarget.value)}
+            value={displayValue}
+            onChange={(e) => onDisplayChange(e.currentTarget.value)}
             onBlur={() => setAmount(normalizeWaterAmountText(amount))}
             type="number"
             inputMode="decimal"
-            min={WATER_AMOUNT_MIN_ML}
-            max={WATER_AMOUNT_MAX_ML}
+            min={minDisplay}
+            max={maxDisplay}
             step="any"
-            placeholder="250"
+            placeholder={imperial ? '8' : '250'}
             disabled={busy}
             style={{ paddingRight: 52 }}
           />
@@ -99,7 +110,7 @@ function WaterAmountField({
               pointerEvents: 'none',
             }}
           >
-            ml
+            {unitLabel}
           </span>
         </div>
         <input
@@ -122,8 +133,8 @@ function WaterAmountField({
             fontWeight: dark ? 700 : 600,
           }}
         >
-          <span>{WATER_AMOUNT_MIN_ML} ml</span>
-          <span>{WATER_AMOUNT_MAX_ML} ml</span>
+          <span>{minDisplay} {unitLabel}</span>
+          <span>{maxDisplay} {unitLabel}</span>
         </div>
       </div>
     </label>
@@ -325,7 +336,7 @@ export function LogSheet({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 20 }}>
               {mode === 'water' && (
                 <>
-                  <WaterAmountField amount={amount} setAmount={setAmount} busy={busy} tone="dark" />
+                  <WaterAmountField amount={amount} setAmount={setAmount} busy={busy} tone="dark" units={profile.preferred_units} />
                   <label style={{ display: 'block' }}>
                     <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Method</span>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -529,7 +540,7 @@ export function LogSheet({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 18 }}>
             {mode === 'water' && (
               <>
-                <WaterAmountField amount={amount} setAmount={setAmount} busy={busy} tone="light" />
+                <WaterAmountField amount={amount} setAmount={setAmount} busy={busy} tone="light" units={profile.preferred_units} />
                 <label style={{ display: 'block' }}>
                   <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Method</span>
                   <div style={{ display: 'flex', gap: 8 }}>

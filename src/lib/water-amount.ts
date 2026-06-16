@@ -1,3 +1,6 @@
+import type { Units } from './types';
+import { mlToVolumeInput, volumeInputToMl } from './units';
+
 export const WATER_AMOUNT_MIN_ML = 10;
 export const WATER_AMOUNT_MAX_ML = 2000;
 export const WATER_AMOUNT_STEP_ML = 10;
@@ -42,4 +45,20 @@ export function waterAmountSliderValue(value: string): number {
 
   const stepped = Math.round(amount / WATER_AMOUNT_STEP_ML) * WATER_AMOUNT_STEP_ML;
   return clampWaterAmountMl(stepped);
+}
+
+/** Canonical ml string -> the value shown in the field (fl oz for imperial). */
+export function waterAmountToDisplay(amountMl: string, units: Units): string {
+  if (amountMl.trim() === '') return '';
+  const ml = Number(amountMl);
+  if (!Number.isFinite(ml)) return '';
+  return String(mlToVolumeInput(ml, units));
+}
+
+/** A value typed into the field (fl oz for imperial) -> canonical ml string. */
+export function waterAmountFromDisplay(raw: string, units: Units): string {
+  if (raw.trim() === '') return '';
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return raw;
+  return String(volumeInputToMl(value, units));
 }
