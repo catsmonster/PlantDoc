@@ -257,7 +257,7 @@ export function simulateWaterContent(input: SimInput): SimResult {
 }
 
 function normalizedGroundTruthCount(count: number): number {
-  return Number.isFinite(count) ? clamp(Math.trunc(count), 0, 3) : 0;
+  return Number.isFinite(count) ? clamp(Math.round(count), 0, 3) : 0;
 }
 
 function hasMeasuredWateringAmount(waterings: WateringEvent[]): boolean {

@@ -413,7 +413,7 @@ describe('moisture estimate and confidence', () => {
         baseInput({
           substratePresent: true,
           amountMeasured: false,
-          groundTruthCount: 2.9,
+          groundTruthCount: 2.4, // rounds to 2 ⇒ score 1+0+2 = 3 ⇒ medium
         }),
       ).confidence,
     ).toBe('medium');
@@ -712,5 +712,27 @@ describe('weighted corrections', () => {
   });
   it('partial weight blends target and model prediction', () => {
     expect(run(0.5)).toBeCloseTo(0.5 * target + 0.5 * capacityMl);
+  });
+});
+
+describe('confidence counts effective (rounded) ground-truth weight', () => {
+  const pot = { diameterCm: 12, heightCm: 10, substrate: 'standard', drains: true } as const;
+  const t = Date.UTC(2026, 0, 1, 12);
+  const base = {
+    pot,
+    startMs: t,
+    endMs: t,
+    waterings: [] as { observedAtMs: number; amountMl?: number | null }[],
+    dailyClimate: () => ({ tempC: 20, humidityPct: 50, light: 'medium' }) as const,
+    speciesDailyFraction: 0.1,
+    corrections: [] as { observedAtMs: number; waterContentMl: number; weight?: number }[],
+    substratePresent: false,
+    amountMeasured: false,
+  };
+  it('rounds 1.6 effective weight up to a medium-confidence score', () => {
+    expect(estimateMoisture({ ...base, groundTruthCount: 1.6 }).confidence).toBe('medium');
+  });
+  it('rounds 0.4 effective weight down to low confidence', () => {
+    expect(estimateMoisture({ ...base, groundTruthCount: 0.4 }).confidence).toBe('low');
   });
 });
