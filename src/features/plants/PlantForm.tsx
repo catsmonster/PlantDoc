@@ -7,7 +7,7 @@ import {
   updatePlant,
   type PlantInput,
 } from '../../lib/repo';
-import type { LightLevel, PlacementType, Plant, PlantStatus, Species, SubstrateType, UserLocation } from '../../lib/types';
+import type { LightLevel, PlacementType, Plant, PlantStatus, Species, SubstrateType, Units, UserLocation } from '../../lib/types';
 import { ErrorText } from '../../ui/Field';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon } from '../../ui/Icon';
@@ -15,6 +15,7 @@ import { PlantImageSlot } from '../../ui/PlantImageSlot';
 import { SpeciesNameResolver } from '../knowledge/SpeciesNameResolver';
 import { SpeciesAutocomplete } from '../knowledge/SpeciesAutocomplete';
 import { speciesCatalogLabel, speciesSelectionFromSuggestion, type SpeciesSuggestion } from '../../lib/knowledge/species-suggest';
+import { potDimensionInitialValue, potDimensionToCm } from './plant-form-logic';
 
 function speciesIdOf(plant: Plant | undefined): string {
   if (!plant?.species_id) return '';
@@ -29,11 +30,13 @@ function locationIdOf(plant: Plant | undefined): string {
 export function PlantForm({
   userId,
   plant,
+  units,
   onSaved,
   onCancel,
 }: {
   userId: string;
   plant?: Plant;
+  units: Units;
   onSaved: (plant: Plant) => void;
   onCancel: () => void;
 }) {
@@ -55,12 +58,8 @@ export function PlantForm({
   const [status, setStatus] = useState<PlantStatus>(plant?.status ?? 'active');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [potDiameter, setPotDiameter] = useState(
-    plant?.pot_diameter_cm != null ? String(plant.pot_diameter_cm) : '',
-  );
-  const [potHeight, setPotHeight] = useState(
-    plant?.pot_height_cm != null ? String(plant.pot_height_cm) : '',
-  );
+  const [potDiameter, setPotDiameter] = useState(potDimensionInitialValue(plant?.pot_diameter_cm, units));
+  const [potHeight, setPotHeight] = useState(potDimensionInitialValue(plant?.pot_height_cm, units));
   const [substrateType, setSubstrateType] = useState<SubstrateType | ''>(plant?.substrate_type ?? '');
   const [potDrains, setPotDrains] = useState<boolean>(plant?.pot_drains ?? true);
   const [lightLevel, setLightLevel] = useState<LightLevel | ''>(plant?.light_level ?? '');
@@ -69,6 +68,7 @@ export function PlantForm({
   );
 
   const isDark = theme === 'dark';
+  const imperial = units === 'imperial';
 
   // When a catalog species is chosen, show its name from the catalog — or, while
   // editing before the catalog loads, from the plant's already-hydrated relation.
@@ -148,8 +148,8 @@ export function PlantForm({
       placement_label: placementLabel.trim() || null,
       acquired_on: acquiredOn ? new Date(acquiredOn).toISOString() : null,
       location_id: locationId || null,
-      pot_diameter_cm: potDiameter.trim() && Number.isFinite(Number(potDiameter)) ? Number(potDiameter) : null,
-      pot_height_cm: potHeight.trim() && Number.isFinite(Number(potHeight)) ? Number(potHeight) : null,
+      pot_diameter_cm: potDimensionToCm(potDiameter, units),
+      pot_height_cm: potDimensionToCm(potHeight, units),
       substrate_type: substrateType || null,
       pot_drains: potDrains,
       light_level: lightLevel || null,
@@ -289,10 +289,10 @@ export function PlantForm({
                 numbers are placeholders only, so an untouched field stays unknown
                 (no false confidence). */}
             <label style={{ display: 'block' }}>
-              <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Pot size</span>
+              <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Pot size ({imperial ? 'in' : 'cm'})</span>
               <div style={{ display: 'flex', gap: 10 }}>
-                <input className="b-input" type="number" inputMode="decimal" min={1} max={200} value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="Pot diameter in centimetres" />
-                <input className="b-input" type="number" inputMode="decimal" min={1} max={200} value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="Pot height in centimetres" />
+                <input className="b-input" type="number" inputMode="decimal" min={1} max={imperial ? 80 : 200} value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder={imperial ? 'Width 5 in' : 'Width 12 cm'} disabled={busy} aria-label={`Pot diameter in ${imperial ? 'inches' : 'centimetres'}`} />
+                <input className="b-input" type="number" inputMode="decimal" min={1} max={imperial ? 80 : 200} value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder={imperial ? 'Height 4 in' : 'Height 10 cm'} disabled={busy} aria-label={`Pot height in ${imperial ? 'inches' : 'centimetres'}`} />
               </div>
             </label>
 
@@ -530,10 +530,10 @@ export function PlantForm({
           {/* Pot size — physics prior for the moisture model; friendly numbers are
               placeholders only, so an untouched field stays unknown (no false confidence). */}
           <label style={{ display: 'block' }}>
-            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Pot size</span>
+            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Pot size ({imperial ? 'in' : 'cm'})</span>
             <div style={{ display: 'flex', gap: 10 }}>
-              <input className="a-input" type="number" inputMode="decimal" min={1} max={200} value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="Pot diameter in centimetres" />
-              <input className="a-input" type="number" inputMode="decimal" min={1} max={200} value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="Pot height in centimetres" />
+              <input className="a-input" type="number" inputMode="decimal" min={1} max={imperial ? 80 : 200} value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder={imperial ? 'Width 5 in' : 'Width 12 cm'} disabled={busy} aria-label={`Pot diameter in ${imperial ? 'inches' : 'centimetres'}`} />
+              <input className="a-input" type="number" inputMode="decimal" min={1} max={imperial ? 80 : 200} value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder={imperial ? 'Height 4 in' : 'Height 10 cm'} disabled={busy} aria-label={`Pot height in ${imperial ? 'inches' : 'centimetres'}`} />
             </div>
           </label>
 
