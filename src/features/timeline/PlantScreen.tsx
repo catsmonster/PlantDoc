@@ -640,6 +640,7 @@ export function PlantScreen({
   const [reloadKey, setReloadKey] = useState(0);
   const [verdicts, setVerdicts] = useState<Map<string, InsightFeedback>>(new Map());
   const [aiPreview, setAiPreview] = useState<AiPreviewState>(initialAiPreview);
+  const pendingIdRef = useRef(0);
 
   const isDark = theme === 'dark';
   const [now, setNow] = useState(() => Date.now());
@@ -694,7 +695,7 @@ export function PlantScreen({
   const refresh = () => {
     setLogOpen(false);
     setSoilCheckOpen(false);
-    setNow(Date.now());
+    setNow(new Date().getTime());
     setReloadKey((k) => k + 1);
   };
 
@@ -703,7 +704,8 @@ export function PlantScreen({
     setSoilCheckBusy(true);
     const observedAt = new Date();
     const observedAtIso = observedAt.toISOString();
-    const tempId = `pending-${observedAt.getTime()}-${Math.random().toString(36).slice(2)}`;
+    pendingIdRef.current += 1;
+    const tempId = `pending-${observedAt.getTime()}-${pendingIdRef.current}`;
     const optimistic: Observation = {
       $id: tempId,
       $createdAt: observedAtIso,
@@ -756,7 +758,8 @@ export function PlantScreen({
     setMoistureFeedbackBusy(true);
     const observedAt = new Date();
     const observedAtIso = observedAt.toISOString();
-    const tempId = `pending-${observedAt.getTime()}-${Math.random().toString(36).slice(2)}`;
+    pendingIdRef.current += 1;
+    const tempId = `pending-${observedAt.getTime()}-${pendingIdRef.current}`;
     const optimistic: MoistureFeedback = {
       $id: tempId,
       $createdAt: observedAtIso,
