@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   ANCHORS,
+  CORRECTION_WEIGHT_FLOOR_MS,
+  CORRECTION_WEIGHT_SATURATION_MS,
   dailyEtMl,
   estimateMoisture,
   INDOOR_DEFAULT_RH,
   moistureInsight,
   moistureStatusColor,
   potSoilVolumeMl,
+  recencyWeight,
   recommendWatering,
   seasonalIndoorTempC,
   simulateWaterContent,
@@ -665,5 +668,49 @@ describe('moistureStatusColor', () => {
     expect(moistureStatusColor('drying', false)).toBe('#A88A3C');
     expect(moistureStatusColor('water_now', false)).toBe('#B07F57');
     expect(moistureStatusColor('overwatered', false)).toBe('#3F7E91');
+  });
+});
+
+describe('recencyWeight', () => {
+  it('is full at or beyond saturation', () => {
+    expect(recencyWeight(CORRECTION_WEIGHT_SATURATION_MS)).toBe(1);
+    expect(recencyWeight(CORRECTION_WEIGHT_SATURATION_MS * 2)).toBe(1);
+  });
+  it('is zero at or below the floor', () => {
+    expect(recencyWeight(0)).toBe(0);
+    expect(recencyWeight(CORRECTION_WEIGHT_FLOOR_MS)).toBe(0);
+    expect(recencyWeight(CORRECTION_WEIGHT_FLOOR_MS / 2)).toBe(0);
+  });
+  it('ramps linearly between floor and saturation', () => {
+    const mid = (CORRECTION_WEIGHT_FLOOR_MS + CORRECTION_WEIGHT_SATURATION_MS) / 2;
+    expect(recencyWeight(mid)).toBeCloseTo(0.5);
+  });
+});
+
+describe('weighted corrections', () => {
+  const pot = { diameterCm: 12, heightCm: 10, substrate: 'standard', drains: true } as const;
+  const capacityMl = waterCapacityMl(pot);
+  const dailyClimate = () => ({ tempC: 20, humidityPct: 50, light: 'medium' }) as const;
+  const t = Date.UTC(2026, 0, 1, 12);
+  const target = capacityMl * 0.6;
+  const run = (weight: number) =>
+    simulateWaterContent({
+      pot,
+      startMs: t,
+      endMs: t,
+      waterings: [{ observedAtMs: t, amountMl: capacityMl }],
+      dailyClimate,
+      speciesDailyFraction: 0,
+      corrections: [{ observedAtMs: t, waterContentMl: target, weight }],
+    }).waterContentMl;
+
+  it('weight 1 fully applies the correction', () => {
+    expect(run(1)).toBeCloseTo(target);
+  });
+  it('weight 0 ignores the correction (keeps the model prediction)', () => {
+    expect(run(0)).toBeCloseTo(capacityMl);
+  });
+  it('partial weight blends target and model prediction', () => {
+    expect(run(0.5)).toBeCloseTo(0.5 * target + 0.5 * capacityMl);
   });
 });
