@@ -4,7 +4,7 @@ import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline
 import type { Observation, Plant, Profile, Units, InsightFeedback, MoistureFeedback, SoilState, EstimateFeedback } from '../../lib/types';
 import { moistureForPlant } from '../../lib/moisture-read';
 import { moistureInsight, moistureStatusColor } from '../../lib/moisture';
-import { formatHeight, formatTemperature } from '../../lib/units';
+import { formatHeight, formatSuggestedWater, formatTemperature } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon, healthLabel, type IconName } from '../../ui/Icon';
@@ -871,6 +871,11 @@ export function PlantScreen({
         { needsSoilCheck: moisture.needsSoilCheck, needsSubstrate: moisture.needsSubstrate },
       )
     : null;
+  // Species-driven "how much to water" — only at water_now with a sourced band (spec Unit 1).
+  const suggestedWater =
+    moisture?.recommendation.status === 'water_now' && moisture.recommendation.suggestedWaterMl !== undefined
+      ? formatSuggestedWater(moisture.recommendation.suggestedWaterMl, profile.preferred_units)
+      : null;
 
   // Group timeline observations by day
   const groupedTimeline: [string, Observation[]][] = [];
@@ -1114,6 +1119,11 @@ export function PlantScreen({
                         <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#F2F6EF' }}>{moistureIns.title}</p>
                       </div>
                       <p style={{ margin: '5px 0 0', fontSize: 13, lineHeight: 1.5, color: '#9BAA98' }}>{moistureIns.detail}</p>
+                      {suggestedWater && (
+                        <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.5, fontWeight: 600, color: '#E0A36B' }}>
+                          Add about {suggestedWater} to water thoroughly.
+                        </p>
+                      )}
                       <p className="mono" style={{ margin: '6px 0 0', fontSize: 10, color: '#67766A', letterSpacing: '.06em' }}>
                         ESTIMATED · {moisture.confidence.toUpperCase()} CONFIDENCE
                       </p>
@@ -1439,6 +1449,11 @@ export function PlantScreen({
                     <div style={{ flex: 1 }}>
                       <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: '#23302A' }}>{moistureIns.title}</p>
                       <p style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5, color: '#6B7568' }}>{moistureIns.detail}</p>
+                      {suggestedWater && (
+                        <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.5, fontWeight: 600, color: '#B07F57' }}>
+                          Add about {suggestedWater} to water thoroughly.
+                        </p>
+                      )}
                       <p style={{ margin: '6px 0 0', fontSize: 11, color: '#9AA294' }}>Estimated · {moisture.confidence} confidence</p>
                       {moisture.feedbackEligible && (
                         <MoistureFeedbackPrompt
