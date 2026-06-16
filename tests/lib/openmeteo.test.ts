@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fetchClimateNormals, fetchDailyWeather, geocodeCity } from '../../src/lib/openmeteo';
+import { fetchClimateNormals, fetchDailyWeather, fetchWeatherSeries, geocodeCity } from '../../src/lib/openmeteo';
 
 type FetchFn = typeof fetch;
 
@@ -220,5 +220,44 @@ describe('fetchDailyWeather', () => {
 
   it('returns null on API failure', async () => {
     expect(await fetchDailyWeather({ lat: 0, lon: 0 }, '2026-01-15', failingFetch())).toBeNull();
+  });
+});
+
+describe('fetchWeatherSeries', () => {
+  const coords = { lat: 52.2, lon: 4.9 };
+
+  it('merges archive + forecast, forecast wins on overlapping dates', async () => {
+    const archive = response({
+      daily: {
+        time: ['2026-06-10', '2026-06-11'],
+        temperature_2m_max: [20, 22],
+        temperature_2m_min: [10, 12],
+        relative_humidity_2m_mean: [60, 62],
+        precipitation_sum: [0, 5],
+      },
+    });
+    const forecast = response({
+      daily: {
+        time: ['2026-06-11', '2026-06-12'], // 06-11 overlaps archive
+        temperature_2m_max: [30, 32],
+        temperature_2m_min: [20, 22],
+        relative_humidity_2m_mean: [40, 42],
+        precipitation_sum: [99, 1],
+      },
+    });
+    let call = 0;
+    const fetchFn = (async () => (call++ === 0 ? archive : forecast)) as unknown as typeof fetch;
+
+    const series = await fetchWeatherSeries(coords, '2026-06-10', '2026-06-12', fetchFn);
+    expect(series).not.toBeNull();
+    expect(series!.get('2026-06-10')).toEqual({ tempC: 15, humidityPct: 60, precipMm: 0 });
+    // 06-11 comes from forecast, not archive
+    expect(series!.get('2026-06-11')).toEqual({ tempC: 25, humidityPct: 40, precipMm: 99 });
+    expect(series!.get('2026-06-12')).toEqual({ tempC: 27, humidityPct: 42, precipMm: 1 });
+  });
+
+  it('returns null when both endpoints fail', async () => {
+    const fetchFn = (async () => ({ ok: false }) as Response) as unknown as typeof fetch;
+    expect(await fetchWeatherSeries(coords, '2026-06-10', '2026-06-12', fetchFn)).toBeNull();
   });
 });

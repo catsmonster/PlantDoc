@@ -228,3 +228,75 @@ export async function fetchDailyWeather(
     return null;
   }
 }
+
+export interface DayWeather {
+  tempC: number;
+  humidityPct: number;
+  precipMm: number;
+}
+
+export type WeatherSeries = Map<string, DayWeather>;
+
+const SERIES_DAILY_VARS =
+  'temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean,precipitation_sum';
+
+function fillSeries(target: WeatherSeries, body: DailyResponse): void {
+  const daily = body.daily;
+  if (!daily?.time) return;
+  daily.time.forEach((iso, i) => {
+    const max = daily.temperature_2m_max?.[i];
+    const min = daily.temperature_2m_min?.[i];
+    const rh = daily.relative_humidity_2m_mean?.[i];
+    const precip = daily.precipitation_sum?.[i];
+    if (max == null || min == null || rh == null || precip == null) return;
+    target.set(iso, {
+      tempC: Math.round(((max + min) / 2) * 10) / 10,
+      humidityPct: rh,
+      precipMm: precip,
+    });
+  });
+}
+
+/**
+ * Daily temp/RH/precip across [startIso, endIso]. One archive call for the
+ * window plus one forecast call for recent/near-present days; on overlapping
+ * dates the forecast value wins (fresher endpoint). Null when both fail.
+ */
+export async function fetchWeatherSeries(
+  coords: Coords,
+  startIso: string,
+  endIso: string,
+  fetchFn: FetchFn = fetch,
+): Promise<WeatherSeries | null> {
+  const { lat, lon } = forApi(coords);
+  const base = { latitude: String(lat), longitude: String(lon), daily: SERIES_DAILY_VARS, timezone: 'UTC' };
+  const archiveUrl =
+    'https://archive-api.open-meteo.com/v1/archive?' +
+    new URLSearchParams({ ...base, start_date: startIso, end_date: endIso });
+  const forecastUrl =
+    'https://api.open-meteo.com/v1/forecast?' +
+    new URLSearchParams({ ...base, past_days: '7', forecast_days: '7' });
+
+  const series: WeatherSeries = new Map();
+  let any = false;
+  try {
+    const res = await fetchFn(archiveUrl);
+    if (res.ok) {
+      fillSeries(series, (await res.json()) as DailyResponse);
+      any = true;
+    }
+  } catch {
+    /* archive optional */
+  }
+  try {
+    const res = await fetchFn(forecastUrl);
+    if (res.ok) {
+      // Forecast applied after archive so overlapping dates are overwritten (forecast wins).
+      fillSeries(series, (await res.json()) as DailyResponse);
+      any = true;
+    }
+  } catch {
+    /* forecast optional */
+  }
+  return any && series.size > 0 ? series : null;
+}
