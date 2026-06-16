@@ -59,14 +59,14 @@ Private location records used for climate lookup and user features.
 | `city` | string | no | Private by default. |
 | `postal_code_prefix` | string | no | Never store full postal code unless needed. |
 | `location` | point/spatial | no | `[longitude, latitude]`; private. |
-| `location_precision` | enum/string | yes | `exact`, `local`, `regional`, `climate`, or `country`. |
+| `location_precision` | enum/string | yes | Public sharing tier: `regional`, `climate`, or `country` in the current UI; legacy/import values `exact` and `local` are accepted and export no finer than `regional`. |
 | `climate_zone` | string | no | Derived when known. |
 | `created_at` | datetime | yes | Server generated. |
 | `updated_at` | datetime | yes | Server generated. |
 
 Indexes: spatial index on `location` if geo queries are enabled; index `user_id`.
 
-**As implemented (Phase 3)**: locations are created through a city search against the keyless Open-Meteo geocoding API; coordinates are rounded to 2 decimal places (~1.1 km) before storage and 1 decimal place (~11 km) before any external API call (`src/lib/geo.ts`), so exact GPS never persists and never leaves the device. `climate_zone` is computed in-app at save time: 5 complete years of Open-Meteo archive daily data are aggregated into monthly normals and classified with the Köppen-Geiger rules (`src/lib/koppen.ts`). `location_precision` is chosen by the user at creation (default `climate`) and gates what geography the export pipeline may publish — see `docs/open-data.md`.
+**As implemented (Phase 3, amended 2026-06-15)**: locations are created through user-triggered place search. Open-Meteo geocoding is tried first, comma-separated queries retry the leading place token, and PlantDoc's first-party `/api/geocode-location` Worker route is a no-result fallback for neighborhood/locality text through OpenStreetMap Nominatim. The Worker rejects likely street-address queries, filters out street/building/amenity/highway results, adds identifying request headers, caches successful responses, and applies a small per-isolate throttle. Returned coordinates are rounded to 2 decimal places (~1.1 km) before storage and weather/climate API calls round to 1 decimal place (~11 km) via `src/lib/geo.ts`, so exact GPS/geocoder coordinates never persist and weather providers never receive finer than ~11 km. `climate_zone` is computed in-app at save time: 5 complete years of Open-Meteo archive daily data are aggregated into monthly normals and classified with the Köppen-Geiger rules (`src/lib/koppen.ts`). `location_precision` stores the user's public sharing tier (default `climate`) and gates what geography the export pipeline may publish — see `docs/open-data.md`.
 
 ### `species`
 

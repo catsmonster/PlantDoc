@@ -13,6 +13,13 @@ function stubFetch(payload: unknown, capture: { url?: string } = {}): FetchFn {
   }) as FetchFn;
 }
 
+function response(payload: unknown): Response {
+  return {
+    ok: true,
+    json: async () => payload,
+  } as Response;
+}
+
 function failingFetch(): FetchFn {
   return (async () => {
     throw new Error('network down');
@@ -36,6 +43,7 @@ describe('geocodeCity', () => {
     expect(results[0]).toEqual({
       name: 'Madrid',
       region: 'Madrid',
+      subregion: null,
       country: 'Spain',
       latitude: 40.4165,
       longitude: -3.7026,
@@ -46,6 +54,87 @@ describe('geocodeCity', () => {
 
   it('returns empty array when there are no results', async () => {
     expect(await geocodeCity('Xyzzy', stubFetch({}))).toEqual([]);
+  });
+
+  it('retries comma-separated queries with the leading place token', async () => {
+    const calls: string[] = [];
+    const fetchFn = (async (input: Parameters<FetchFn>[0]) => {
+      const url = new URL(String(input));
+      calls.push(url.toString());
+      return response(
+        url.searchParams.get('name') === 'Tlaquepaque'
+          ? {
+              results: [
+                {
+                  name: 'Tlaquepaque',
+                  latitude: 20.6407,
+                  longitude: -103.2933,
+                  country: 'Mexico',
+                  admin1: 'Jalisco',
+                  admin2: 'San Pedro Tlaquepaque',
+                },
+              ],
+            }
+          : {},
+      );
+    }) as FetchFn;
+
+    const results = await geocodeCity('Tlaquepaque, Guadalajara, Jalisco', fetchFn);
+
+    expect(calls.map((url) => new URL(url).searchParams.get('name'))).toEqual([
+      'Tlaquepaque, Guadalajara, Jalisco',
+      'Tlaquepaque',
+    ]);
+    expect(results).toEqual([
+      {
+        name: 'Tlaquepaque',
+        region: 'Jalisco',
+        subregion: 'San Pedro Tlaquepaque',
+        country: 'Mexico',
+        latitude: 20.6407,
+        longitude: -103.2933,
+      },
+    ]);
+  });
+
+  it('falls back to the PlantDoc geocode proxy for neighborhood text when the city gazetteer has no match', async () => {
+    const calls: string[] = [];
+    const fetchFn = (async (input: Parameters<FetchFn>[0]) => {
+      const rawUrl = String(input);
+      calls.push(rawUrl);
+      const url = new URL(rawUrl, 'https://plantdoc.test');
+      if (url.hostname === 'geocoding-api.open-meteo.com') return response({});
+      return response([
+        {
+          name: 'Manuel Gomez Pedraza',
+          region: 'Jalisco',
+          subregion: 'Guadalajara',
+          country: 'Mexico',
+          latitude: 20.6851,
+          longitude: -103.3529,
+        },
+      ]);
+    }) as FetchFn;
+
+    const results = await geocodeCity('Manuel Gomez Pedraza', fetchFn);
+
+    expect(calls.map((url) => new URL(url, 'https://plantdoc.test').host)).toEqual([
+      'geocoding-api.open-meteo.com',
+      'plantdoc.test',
+    ]);
+    const proxyUrl = new URL(calls[1], 'https://plantdoc.test');
+    expect(proxyUrl.pathname).toBe('/api/geocode-location');
+    expect(proxyUrl.searchParams.get('query')).toBe('Manuel Gomez Pedraza');
+    expect(results).toEqual([
+      {
+        name: 'Manuel Gomez Pedraza',
+        region: 'Jalisco',
+        subregion: 'Guadalajara',
+        country: 'Mexico',
+        latitude: 20.6851,
+        longitude: -103.3529,
+      },
+    ]);
   });
 });
 

@@ -1,5 +1,5 @@
 // Cloudflare Workers config: serves the built Vite SPA as static assets plus
-// the narrow API routes that need server-side secrets.
+// narrow API routes for secrets, privacy filtering, and provider-policy proxies.
 // The custom-domain route only creates the plantdoc.galvando.com record;
 // it never modifies other DNS records on the zone (ADR-009).
 {

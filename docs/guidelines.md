@@ -34,7 +34,7 @@
 
 - Use Appwrite permissions so users can read and write only their own private rows/documents.
 - Keep private image originals and public derivatives in separate storage buckets or clearly separated paths.
-- Run public export generation, image processing, and persistent model jobs in Appwrite Functions or a trusted server job. Browser-direct climate enrichment is accepted by ADR-007 while Open-Meteo remains keyless and no secret is involved. The transient Gemini preview is accepted by ADR-010 only through the Cloudflare Worker proxy because it needs a server-side API key.
+- Run public export generation, image processing, and persistent model jobs in Appwrite Functions or a trusted server job. Browser-direct weather enrichment and Open-Meteo geocoding are accepted by ADR-007 while the providers remain keyless and no secret is involved; Nominatim must stay behind PlantDoc's first-party geocode proxy and must not become autocomplete, bulk geocoding, or street-address collection. The transient Gemini preview is accepted by ADR-010 only through the Cloudflare Worker proxy because it needs a server-side API key.
 - Do not put service-role keys, API secrets, or private storage paths in client code.
 
 ## Code Quality

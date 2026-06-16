@@ -94,7 +94,7 @@ export function LocationsScreen({ userId, onBack }: { userId: string; onBack: ()
 
           <div style={{ padding: '8px 22px 40px' }}>
             <p style={{ margin: '0 0 16px', fontSize: 13.5, color: '#9BAA98', lineHeight: 1.5 }}>
-              Assign a location to a plant for weather context. Precision controls how much geography can ever appear in shared open data.
+              Assign a location to a plant for weather context. Sharing tier controls how much geography can ever appear in open data.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -116,7 +116,7 @@ export function LocationsScreen({ userId, onBack }: { userId: string; onBack: ()
                         </span>
                       )}
                       <span className="mono" style={{ fontSize: 10, letterSpacing: '.06em', color: '#E0A36B', border: '1px solid rgba(255,255,255,.09)', borderRadius: 6, padding: '3px 7px', textTransform: 'uppercase' }}>
-                        {l.location_precision}
+                        sharing: {l.location_precision}
                       </span>
                     </div>
                   </div>
@@ -177,7 +177,7 @@ export function LocationsScreen({ userId, onBack }: { userId: string; onBack: ()
 
         <div style={{ padding: '8px 22px 40px' }}>
           <p style={{ margin: '0 0 16px', fontSize: 13.5, color: '#6B7568', lineHeight: 1.5 }}>
-            Assign a location to a plant for weather context. Precision controls how much geography can ever appear in shared open data.
+            Assign a location to a plant for weather context. Sharing tier controls how much geography can ever appear in open data.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -199,7 +199,7 @@ export function LocationsScreen({ userId, onBack }: { userId: string; onBack: ()
                       </span>
                     )}
                     <span className="a-chip" style={{ background: '#F1E7DC', color: '#B07F57', padding: '3px 9px', fontSize: 11 }}>
-                      {l.location_precision}
+                      sharing: {l.location_precision}
                     </span>
                   </div>
                 </div>

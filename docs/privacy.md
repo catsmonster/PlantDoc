@@ -61,27 +61,30 @@ Allowed public fields include:
 - Users can revoke contribution for future exports.
 - The app must clearly explain that public exports are open data and may be copied after release.
 
-## Location Precision
+## Location Sharing Tiers
 
-Use precision tiers:
+The current UI exposes public sharing tiers, not a stored coordinate precision control:
 
-1. **Exact**: stored privately for user features and climate lookup.
-2. **Local**: city or postal-code prefix, app-internal only unless explicitly allowed.
-3. **Regional**: region/state/province, acceptable for public export when cohort size is safe.
-4. **Climate**: climate zone or broad geo cell, preferred default for public export.
-5. **Country only**: fallback when finer geography could identify a user.
+1. **Regional**: country, region/state/province, and climate zone may export when cohort size is safe.
+2. **Climate**: country and climate zone may export; this is the default.
+3. **Country only**: only country may export.
 
-Public exports should prefer climate zone and coarse region over exact city. Add k-anonymity or minimum cohort checks before publishing small geographic/species groups.
+Legacy/import values `exact` and `local` may still exist in stored rows, but `exportGeo` caps both at regional geography. Exact GPS never persists, and these legacy values do not allow public city, postal prefix, or coordinates.
+
+Public exports should prefer climate zone and coarse region over finer geography. City and postal prefix never appear in public exports. Add k-anonymity or minimum cohort checks before publishing small geographic/species groups.
 
 ### As Implemented (Phase 3)
 
 - Coordinates are rounded to **2 decimal places (~1.1 km) before storage** in `user_locations`; the exact device/geocoder value is discarded and never persists anywhere.
-- Every outbound weather/geocoding API call rounds further to **1 decimal place (~11 km)**, so no third party ever receives finer than ~11 km.
-- Geography reaches the public export only through the precision-tier projection in docs/open-data.md (country/region/climate zone at most); city, postal prefix, coordinates, and location labels never export.
+- Weather and climate API calls round coordinates further to **1 decimal place (~11 km)**, so those third parties never receive finer than ~11 km.
+- Location search sends the user's typed place text to geocoding providers, not device coordinates. The form asks for a city, neighborhood, or municipality and warns users not to enter a street address.
+- Geography reaches the public export only through the sharing-tier projection in docs/open-data.md (country/region/climate zone at most); city, postal prefix, coordinates, and location labels never export.
 
 ## Third-Party Services
 
-Geocoding (location setup) and weather enrichment (log entries) call **Open-Meteo** directly from the browser. These requests are keyless, carry no account identity, and include only coordinates rounded to 1 decimal place (~11 km) plus dates. The location form discloses this in-app at the point of entry.
+Geocoding (location setup) calls **Open-Meteo** first from the browser. If that city gazetteer has no match, the app calls PlantDoc's first-party `/api/geocode-location` Worker route, which rejects likely street-address queries before proxying to **OpenStreetMap Nominatim**, filters out street/building/amenity/highway results, adds identifying headers, caches successful responses, and applies a small per-isolate throttle. These requests are keyless, carry no PlantDoc account identity to Nominatim, and send typed place text rather than device coordinates. PlantDoc must not use Nominatim for autocomplete, bulk/systematic geocoding, or street-address collection; if public traffic grows, move this behind a durable cache/rate limiter, switch providers, or self-host before relying on the public endpoint.
+
+Weather enrichment (log entries) calls **Open-Meteo** directly from the browser with coordinates rounded to 1 decimal place (~11 km) plus dates. The location form discloses third-party location search and coordinate rounding in-app at the point of entry.
 
 The optional **Gemini AI preview** calls Google Gemini 3.5 Flash through PlantDoc's `/api/gemini-insights` Worker route. The API key is server-side only and must never use a `VITE_` prefix. The preview is user-triggered from the plant detail screen and sends:
 

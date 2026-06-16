@@ -4,7 +4,7 @@
 
 PlantDoc should start with a stack that is open-source friendly, low-cost while usage is small, and able to scale without a rewrite once the user base grows. Given the current project constraints, the default is:
 
-- **Frontend hosting and DNS**: Cloudflare Workers static assets with a subdomain on the user's Cloudflare-managed domain, plus narrow Worker API routes only where server-side secrets are required. The apex/root domain is already in use and must not be repointed for PlantDoc.
+- **Frontend hosting and DNS**: Cloudflare Workers static assets with a subdomain on the user's Cloudflare-managed domain, plus narrow Worker API routes for server-side secrets and first-party provider-policy/privacy proxies. The apex/root domain is already in use and must not be repointed for PlantDoc.
 - **Backend platform**: Appwrite Cloud while the student pack/free tier is available.
 - **App backend**: Appwrite Auth, Databases/TablesDB, Storage, Functions, Realtime, and Sites where useful.
 - **Future analytics path**: Supabase/Postgres/PostGIS or another analytical store only if the public dataset outgrows Appwrite's query/export model.
@@ -15,7 +15,7 @@ This keeps the launch architecture inexpensive and simple while avoiding a dead 
 
 - **Framework**: React + TypeScript + Vite.
 - **App shape**: PWA-style responsive web app with mobile-first logging flows.
-- **Hosting**: Cloudflare Workers static assets, per ADR-009, with the Gemini preview Worker route from ADR-010.
+- **Hosting**: Cloudflare Workers static assets, per ADR-009, with the Gemini preview Worker route from ADR-010 and the first-party geocode fallback route from ADR-007.
 - **Domain**: use a Cloudflare-managed subdomain for production, preferably `plantdoc.galvando.com`. Other acceptable options are `plants.galvando.com` or `app.galvando.com`.
 - **Styling**: Tailwind CSS with project design tokens.
 - **Data fetching**: Appwrite Web SDK plus TanStack Query once async workflows become non-trivial.
@@ -29,7 +29,7 @@ This keeps the launch architecture inexpensive and simple while avoiding a dead 
 - **Database**: Appwrite Databases/TablesDB for plant profiles, observations, treatments, measurements, environment snapshots, and public export records.
 - **Geo features**: Appwrite spatial columns and geo queries for location-aware functionality.
 - **Storage**: Appwrite Storage for plant images and public export files.
-- **Functions**: Appwrite Functions for climate enrichment, image sanitization, export generation, and future recommendation jobs.
+- **Functions**: Appwrite Functions for image sanitization, export generation, and future recommendation jobs. Browser-direct location/weather enrichment is acceptable while providers are keyless and no server secret is involved (ADR-007).
 - **Realtime**: use Appwrite Realtime sparingly for timelines or dashboards that benefit from live updates.
 
 ## Domain Layout

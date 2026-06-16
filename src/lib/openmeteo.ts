@@ -1,43 +1,100 @@
 /**
- * Thin Open-Meteo client (keyless, CORS-enabled, browser-direct). Every
- * request gets coordinates rounded to ~11 km via forApi — exact coordinates
- * never leave the device. All functions resolve to null/[] on failure;
- * callers decide whether that is fatal (location form) or silent (log-time
- * enrichment).
+ * Thin browser-direct clients for location search and Open-Meteo weather.
+ * Weather requests get coordinates rounded to ~11 km via forApi — exact
+ * coordinates never leave the device. Geocoding sends user-entered place text
+ * only. All functions resolve to null/[] on failure; callers decide whether
+ * that is fatal (location form) or silent (log-time enrichment).
  */
 import { forApi, type Coords } from './geo';
+import type { GeocodeResult as SharedGeocodeResult } from './geocoding';
 import { aggregateMonthly, type MonthlyNormals } from './koppen';
 
 type FetchFn = typeof fetch;
 
-export interface GeocodeResult {
-  name: string;
-  region: string | null;
-  country: string | null;
-  latitude: number;
-  longitude: number;
-}
+export type GeocodeResult = SharedGeocodeResult;
 
 export async function geocodeCity(name: string, fetchFn: FetchFn = fetch): Promise<GeocodeResult[]> {
+  const query = name.trim();
+  if (!query) return [];
+
+  const rawResults = await searchOpenMeteo(query, fetchFn);
+  if (rawResults.length > 0) return rawResults;
+
+  const leadingToken = leadingCommaToken(query);
+  if (leadingToken && leadingToken !== query) {
+    const tokenResults = await searchOpenMeteo(leadingToken, fetchFn);
+    if (tokenResults.length > 0) return tokenResults;
+  }
+
+  return searchPlantDocGeocoder(query, fetchFn);
+}
+
+interface OpenMeteoGeocodeRow {
+  name: string;
+  latitude: number;
+  longitude: number;
+  country?: string;
+  admin1?: string;
+  admin2?: string;
+}
+
+async function searchOpenMeteo(name: string, fetchFn: FetchFn): Promise<GeocodeResult[]> {
   try {
     const url =
       'https://geocoding-api.open-meteo.com/v1/search?' +
-      new URLSearchParams({ name, count: '5', language: 'en', format: 'json' });
+      new URLSearchParams({ name, count: '10', language: 'en', format: 'json' });
     const response = await fetchFn(url);
     if (!response.ok) return [];
-    const body = (await response.json()) as {
-      results?: { name: string; latitude: number; longitude: number; country?: string; admin1?: string }[];
-    };
+    const body = (await response.json()) as { results?: OpenMeteoGeocodeRow[] };
     return (body.results ?? []).map((r) => ({
       name: r.name,
-      region: r.admin1 ?? null,
-      country: r.country ?? null,
+      region: cleanText(r.admin1),
+      subregion: cleanText(r.admin2),
+      country: cleanText(r.country),
       latitude: r.latitude,
       longitude: r.longitude,
     }));
   } catch {
     return [];
   }
+}
+
+async function searchPlantDocGeocoder(query: string, fetchFn: FetchFn): Promise<GeocodeResult[]> {
+  try {
+    const url =
+      '/api/geocode-location?' +
+      new URLSearchParams({ query });
+    const response = await fetchFn(url);
+    if (!response.ok) return [];
+    const body = (await response.json()) as unknown;
+    if (!Array.isArray(body)) return [];
+    return body.filter(isGeocodeResult);
+  } catch {
+    return [];
+  }
+}
+
+function leadingCommaToken(query: string): string | null {
+  const token = query.split(',')[0]?.trim();
+  return token && token.length > 1 ? token : null;
+}
+
+function cleanText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function isGeocodeResult(value: unknown): value is GeocodeResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.name === 'string' &&
+    (typeof row.region === 'string' || row.region === null) &&
+    (typeof row.subregion === 'string' || row.subregion === null) &&
+    (typeof row.country === 'string' || row.country === null) &&
+    typeof row.latitude === 'number' &&
+    typeof row.longitude === 'number'
+  );
 }
 
 interface DailyResponse {

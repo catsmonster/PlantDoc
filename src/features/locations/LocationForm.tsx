@@ -9,21 +9,38 @@ import { ErrorText } from '../../ui/Field';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon } from '../../ui/Icon';
 
-const PRECISION_OPTIONS: { value: LocationPrecision; label: string }[] = [
-  { value: 'exact', label: 'Exact (~1 km) — best weather accuracy' },
-  { value: 'local', label: 'Local — city level' },
-  { value: 'regional', label: 'Regional — region/state' },
-  { value: 'climate', label: 'Climate zone (recommended)' },
+const SHARING_OPTIONS: { value: LocationPrecision; label: string }[] = [
+  { value: 'regional', label: 'Region + climate zone' },
+  { value: 'climate', label: 'Climate zone + country (recommended)' },
   { value: 'country', label: 'Country only' },
 ];
 
-const PRECISION_EXPORT_HINT: Record<LocationPrecision, string> = {
+const SHARING_HINT: Record<LocationPrecision, string> = {
   exact: 'Shared data may include region, country, and climate zone — never your city or coordinates.',
   local: 'Shared data may include region, country, and climate zone — never your city.',
-  regional: 'Shared data may include region, country, and climate zone.',
-  climate: 'Shared data may include climate zone and country only.',
-  country: 'Shared data may include country only.',
+  regional: 'Shared data may include region, country, and climate zone — never your city or coordinates.',
+  climate: 'Shared data may include climate zone and country only — never your region, city, or coordinates.',
+  country: 'Shared data may include country only — never your region, city, or coordinates.',
 };
+
+function uniqueParts(parts: Array<string | null>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of parts) {
+    const cleaned = part?.trim();
+    if (!cleaned) continue;
+    const key = cleaned.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+  }
+  return out;
+}
+
+function resultLabel(r: GeocodeResult): string {
+  const place = uniqueParts([r.name, r.subregion, r.region]).join(', ');
+  return r.country ? `${place} — ${r.country}` : place;
+}
 
 export function LocationForm({
   userId,
@@ -47,6 +64,7 @@ export function LocationForm({
 
   async function search() {
     setError(null);
+    setSelected(null);
     setBusy(true);
     try {
       const found = await geocodeCity(query.trim());
@@ -82,7 +100,7 @@ export function LocationForm({
     }
   }
 
-  const hint = PRECISION_EXPORT_HINT[precision];
+  const hint = SHARING_HINT[precision];
 
   if (isDark) {
     // Direction B — Atlas (Dark Mode Location Form)
@@ -121,15 +139,15 @@ export function LocationForm({
 
           <div style={{ padding: '8px 22px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <p style={{ margin: 0, fontSize: 13, color: '#9BAA98', lineHeight: 1.5 }}>
-              City search uses the free Open-Meteo API. Coordinates are rounded before any lookup — your exact position is never stored.
+              Search for a city, neighborhood, or municipality. Open-Meteo is tried first; OpenStreetMap helps with neighborhood matches. Do not enter a street address. Coordinates are rounded before storage and weather lookup.
             </p>
 
             {/* City search input row */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block' }}>
-                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>City</span>
-                  <input className="b-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Lisbon" disabled={busy} maxLength={128} />
+                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>City, neighborhood, or municipality</span>
+                  <input className="b-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Tlaquepaque, Jalisco" disabled={busy} maxLength={128} />
                 </label>
               </div>
               <button type="button" className="b-tap" onClick={() => void search()} disabled={busy || !query.trim()} style={{ borderRadius: 13, border: 'none', background: query.trim() ? '#C7F24A' : '#19231B', color: query.trim() ? '#0E140F' : '#67766A', padding: '13px 18px', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 14.5, cursor: query.trim() ? 'pointer' : 'default', height: '48px' }}>
@@ -144,7 +162,7 @@ export function LocationForm({
                   const active = selected === r;
                   return (
                     <button key={i} type="button" className="b-tap" onClick={() => setSelected(r)} style={{ textAlign: 'left', borderRadius: 13, border: '1px solid ' + (active ? '#C7F24A' : 'rgba(255,255,255,.09)'), background: active ? 'rgba(199,242,74,.12)' : '#19231B', color: active ? '#C7F24A' : '#F2F6EF', padding: '13px 14px', fontFamily: "'Space Grotesk',sans-serif", fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>
-                      {r.name}{r.region ? `, ${r.region}` : ''} — {r.country}
+                      {resultLabel(r)}
                     </button>
                   );
                 })}
@@ -159,11 +177,11 @@ export function LocationForm({
                   <input className="b-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Home" disabled={busy} maxLength={128} />
                 </label>
 
-                {/* Precision select */}
+                {/* Public sharing select */}
                 <label style={{ display: 'block' }}>
-                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Location precision</span>
+                  <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Public sharing</span>
                   <select className="b-input" value={precision} onChange={(e) => setPrecision(e.target.value as LocationPrecision)} disabled={busy}>
-                    {PRECISION_OPTIONS.map((o) => (
+                    {SHARING_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
                       </option>
@@ -225,15 +243,15 @@ export function LocationForm({
 
         <div style={{ padding: '8px 22px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           <p style={{ margin: 0, fontSize: 13, color: '#6B7568', lineHeight: 1.5 }}>
-            City search uses the free Open-Meteo API. Coordinates are rounded before any lookup — your exact position is never stored.
+            Search for a city, neighborhood, or municipality. Open-Meteo is tried first; OpenStreetMap helps with neighborhood matches. Do not enter a street address. Coordinates are rounded before storage and weather lookup.
           </p>
 
           {/* City search input row */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block' }}>
-                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>City</span>
-                <input className="a-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Lisbon" disabled={busy} maxLength={128} />
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>City, neighborhood, or municipality</span>
+                <input className="a-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Tlaquepaque, Jalisco" disabled={busy} maxLength={128} />
               </label>
             </div>
             <button type="button" className="a-tap" onClick={() => void search()} disabled={busy || !query.trim()} style={{ borderRadius: 14, border: 'none', background: query.trim() ? '#3C7140' : '#9CC49A', color: '#fff', padding: '13px 18px', fontFamily: 'inherit', fontWeight: 700, fontSize: 14.5, cursor: query.trim() ? 'pointer' : 'default', height: '48px' }}>
@@ -248,7 +266,7 @@ export function LocationForm({
                 const active = selected === r;
                 return (
                   <button key={i} type="button" className="a-tap" onClick={() => setSelected(r)} style={{ textAlign: 'left', borderRadius: 14, border: '1px solid ' + (active ? '#3C7140' : '#E7E0D2'), background: active ? '#EBF1E7' : '#fff', color: active ? '#3C7140' : '#23302A', padding: '13px 14px', fontFamily: 'inherit', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>
-                    {r.name}{r.region ? `, ${r.region}` : ''} — {r.country}
+                    {resultLabel(r)}
                   </button>
                 );
               })}
@@ -263,11 +281,11 @@ export function LocationForm({
                 <input className="a-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Home" disabled={busy} maxLength={128} />
               </label>
 
-              {/* Precision select */}
+              {/* Public sharing select */}
               <label style={{ display: 'block' }}>
-                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Location precision</span>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Public sharing</span>
                 <select className="a-input" value={precision} onChange={(e) => setPrecision(e.target.value as LocationPrecision)} disabled={busy}>
-                  {PRECISION_OPTIONS.map((o) => (
+                  {SHARING_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>

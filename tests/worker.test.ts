@@ -104,3 +104,137 @@ describe('Worker Gemini preview route', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+describe('Worker geocode route', () => {
+  it('proxies locality searches to Nominatim with identifying headers and caches responses', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            class: 'place',
+            type: 'neighbourhood',
+            name: 'Manuel Gomez Pedraza',
+            lat: '20.6851',
+            lon: '-103.3529',
+            address: {
+              neighbourhood: 'Manuel Gomez Pedraza',
+              city: 'Guadalajara',
+              county: 'Guadalajara',
+              state: 'Jalisco',
+              country: 'Mexico',
+            },
+          },
+        ]),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const geocodeCache = {
+      match: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const response = await handleRequest(
+      new Request('https://plantdoc.example/api/geocode-location?query=Manuel%20Gomez%20Pedraza'),
+      { ...env(fetcher), geocodeCache } as WorkerEnv,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual([
+      {
+        name: 'Manuel Gomez Pedraza',
+        region: 'Jalisco',
+        subregion: 'Guadalajara',
+        country: 'Mexico',
+        latitude: 20.6851,
+        longitude: -103.3529,
+      },
+    ]);
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    const [url, init] = fetcher.mock.calls[0];
+    const upstream = new URL(String(url));
+    expect(upstream.hostname).toBe('nominatim.openstreetmap.org');
+    expect(upstream.searchParams.get('q')).toBe('Manuel Gomez Pedraza');
+    const headers = init?.headers as Headers;
+    expect(headers.get('user-agent')).toContain('PlantDoc');
+    expect(headers.get('referer')).toBe('https://plantdoc.example/');
+    expect(geocodeCache.match).toHaveBeenCalledOnce();
+    expect(geocodeCache.put).toHaveBeenCalledOnce();
+  });
+
+  it('does not fail a geocode response when cache storage fails', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            class: 'place',
+            type: 'city',
+            name: 'Guadalajara',
+            lat: '20.6767',
+            lon: '-103.3475',
+            address: { city: 'Guadalajara', state: 'Jalisco', country: 'Mexico' },
+          },
+        ]),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const geocodeCache = {
+      match: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockRejectedValue(new Error('cache unavailable')),
+    };
+
+    const response = await handleRequest(
+      new Request('https://plantdoc.example/api/geocode-location?query=Guadalajara', {
+        headers: { 'cf-connecting-ip': '203.0.113.9' },
+      }),
+      { ...env(fetcher), geocodeCache } as WorkerEnv,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual([
+      {
+        name: 'Guadalajara',
+        region: 'Jalisco',
+        subregion: 'Guadalajara',
+        country: 'Mexico',
+        latitude: 20.6767,
+        longitude: -103.3475,
+      },
+    ]);
+    expect(geocodeCache.put).toHaveBeenCalledOnce();
+  });
+
+  it('rejects likely street-address queries before calling Nominatim', async () => {
+    const fetcher = vi.fn<typeof fetch>();
+
+    const response = await handleRequest(
+      new Request('https://plantdoc.example/api/geocode-location?query=123%20Main%20Street'),
+      env(fetcher),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'Search by city, neighborhood, or municipality.' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits repeated uncached geocode proxy requests by client', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('[]', { headers: { 'content-type': 'application/json' } }),
+    );
+    const geocodeThrottle = new Map<string, number>();
+    const now = vi.fn().mockReturnValueOnce(1_000).mockReturnValueOnce(1_250);
+    const workerEnv = { ...env(fetcher), geocodeThrottle, now } as WorkerEnv;
+    const request = () =>
+      new Request('https://plantdoc.example/api/geocode-location?query=Guadalajara', {
+        headers: { 'cf-connecting-ip': '203.0.113.4' },
+      });
+
+    const first = await handleRequest(request(), workerEnv);
+    const second = await handleRequest(request(), workerEnv);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(429);
+    await expect(second.json()).resolves.toEqual({ error: 'Location search is rate-limited. Try again shortly.' });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+});
