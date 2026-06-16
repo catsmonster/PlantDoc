@@ -7,6 +7,8 @@ const source = readFileSync(
   'utf8',
 );
 
+const privacy = readFileSync(join(process.cwd(), 'docs', 'privacy.md'), 'utf8');
+
 describe('LocationForm geocoding and sharing copy', () => {
   it('labels location_precision as a public sharing tier, not pin precision', () => {
     expect(source).toContain('Public sharing');
@@ -22,5 +24,17 @@ describe('LocationForm geocoding and sharing copy', () => {
 
   it('includes subregion/admin2 context in geocoder result labels', () => {
     expect(source).toContain('r.subregion');
+  });
+
+  it('clears stale result selection before each new search', () => {
+    const searchBody = source.slice(source.indexOf('async function search()'), source.indexOf('async function save'));
+    expect(searchBody).toContain('setSelected(null)');
+  });
+
+  it('documents sharing tiers without implying exact GPS persists or city can export', () => {
+    expect(privacy).toContain('The current UI exposes public sharing tiers');
+    expect(privacy).toContain('Exact GPS never persists');
+    expect(privacy).toContain('City and postal prefix never appear in public exports');
+    expect(privacy).not.toContain('unless explicitly allowed');
   });
 });

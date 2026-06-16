@@ -6,18 +6,12 @@
  * that is fatal (location form) or silent (log-time enrichment).
  */
 import { forApi, type Coords } from './geo';
+import type { GeocodeResult as SharedGeocodeResult } from './geocoding';
 import { aggregateMonthly, type MonthlyNormals } from './koppen';
 
 type FetchFn = typeof fetch;
 
-export interface GeocodeResult {
-  name: string;
-  region: string | null;
-  subregion: string | null;
-  country: string | null;
-  latitude: number;
-  longitude: number;
-}
+export type GeocodeResult = SharedGeocodeResult;
 
 export async function geocodeCity(name: string, fetchFn: FetchFn = fetch): Promise<GeocodeResult[]> {
   const query = name.trim();
@@ -32,7 +26,7 @@ export async function geocodeCity(name: string, fetchFn: FetchFn = fetch): Promi
     if (tokenResults.length > 0) return tokenResults;
   }
 
-  return searchNominatim(query, fetchFn);
+  return searchPlantDocGeocoder(query, fetchFn);
 }
 
 interface OpenMeteoGeocodeRow {
@@ -65,83 +59,24 @@ async function searchOpenMeteo(name: string, fetchFn: FetchFn): Promise<GeocodeR
   }
 }
 
-function leadingCommaToken(query: string): string | null {
-  const token = query.split(',')[0]?.trim();
-  return token && token.length > 1 ? token : null;
-}
-
-interface NominatimAddress {
-  neighbourhood?: string;
-  suburb?: string;
-  quarter?: string;
-  city_district?: string;
-  municipality?: string;
-  city?: string;
-  town?: string;
-  village?: string;
-  county?: string;
-  state?: string;
-  region?: string;
-  province?: string;
-  country?: string;
-}
-
-interface NominatimRow {
-  name?: string;
-  display_name?: string;
-  lat?: string;
-  lon?: string;
-  address?: NominatimAddress;
-}
-
-async function searchNominatim(query: string, fetchFn: FetchFn): Promise<GeocodeResult[]> {
+async function searchPlantDocGeocoder(query: string, fetchFn: FetchFn): Promise<GeocodeResult[]> {
   try {
     const url =
-      'https://nominatim.openstreetmap.org/search?' +
-      new URLSearchParams({
-        q: query,
-        format: 'jsonv2',
-        addressdetails: '1',
-        limit: '5',
-      });
+      '/api/geocode-location?' +
+      new URLSearchParams({ query });
     const response = await fetchFn(url);
     if (!response.ok) return [];
     const body = (await response.json()) as unknown;
     if (!Array.isArray(body)) return [];
-    return body.map(nominatimResult).filter((result): result is GeocodeResult => result !== null);
+    return body.filter(isGeocodeResult);
   } catch {
     return [];
   }
 }
 
-function nominatimResult(row: NominatimRow): GeocodeResult | null {
-  const latitude = Number(row.lat);
-  const longitude = Number(row.lon);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-
-  const address = row.address ?? {};
-  const displayName = row.display_name?.split(',')[0];
-  const name = firstText(
-    row.name,
-    address.neighbourhood,
-    address.suburb,
-    address.quarter,
-    address.city_district,
-    address.city,
-    address.town,
-    address.village,
-    displayName,
-  );
-  if (!name) return null;
-
-  return {
-    name,
-    region: firstText(address.state, address.region, address.province),
-    subregion: firstText(address.county, address.municipality, address.city, address.town),
-    country: cleanText(address.country),
-    latitude,
-    longitude,
-  };
+function leadingCommaToken(query: string): string | null {
+  const token = query.split(',')[0]?.trim();
+  return token && token.length > 1 ? token : null;
 }
 
 function cleanText(value: string | null | undefined): string | null {
@@ -149,12 +84,17 @@ function cleanText(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-function firstText(...values: (string | null | undefined)[]): string | null {
-  for (const value of values) {
-    const cleaned = cleanText(value);
-    if (cleaned) return cleaned;
-  }
-  return null;
+function isGeocodeResult(value: unknown): value is GeocodeResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.name === 'string' &&
+    (typeof row.region === 'string' || row.region === null) &&
+    (typeof row.subregion === 'string' || row.subregion === null) &&
+    (typeof row.country === 'string' || row.country === null) &&
+    typeof row.latitude === 'number' &&
+    typeof row.longitude === 'number'
+  );
 }
 
 interface DailyResponse {

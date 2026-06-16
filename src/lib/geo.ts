@@ -2,7 +2,7 @@
  * Pure coordinate-privacy helpers. Exact GPS never persists and never leaves
  * the device unrounded: storage keeps ~1.1 km precision, third-party API
  * calls get ~11 km. `exportGeo` is the single mapping from a location's
- * precision tier to what the public dataset may carry (docs/privacy.md).
+ * sharing tier to what the public dataset may carry (docs/privacy.md).
  */
 
 export type LocationPrecision = 'exact' | 'local' | 'regional' | 'climate' | 'country';

@@ -174,15 +174,15 @@ Phase 3 needs geocoding (location setup), a climate zone per location, and per-o
 ### Decision
 
 - Call Open-Meteo directly from the browser at log time; no Appwrite Function, no API key, no backend transit of coordinates.
-- For location setup, try Open-Meteo geocoding first. If a comma-separated query has no match, retry the leading place token because Open-Meteo's gazetteer expects a place/postal name rather than a full address string. If Open-Meteo still has no match, fall back to OpenStreetMap Nominatim for the same user-triggered query so neighborhoods/localities can resolve.
-- Do not use the public Nominatim endpoint for autocomplete, bulk/systematic geocoding, or street-address collection. The UI must warn users to search by city, neighborhood, or municipality rather than street address. If traffic grows beyond small/moderate use, add a cache/proxy, switch providers, or self-host before relying on public Nominatim.
+- For location setup, try Open-Meteo geocoding first. If a comma-separated query has no match, retry the leading place token because Open-Meteo's gazetteer expects a place/postal name rather than a full address string. If Open-Meteo still has no match, call PlantDoc's first-party `/api/geocode-location` Worker route so neighborhoods/localities can resolve through OpenStreetMap Nominatim without exposing a browser-direct public endpoint dependency.
+- Do not use Nominatim for autocomplete, bulk/systematic geocoding, or street-address collection. The Worker rejects likely street-address queries, filters out street/building/amenity/highway results, adds identifying request headers, caches successful responses, and applies a small per-isolate throttle. If traffic grows beyond small/moderate use, add durable cache/rate limiting, switch providers, or self-host before relying on public Nominatim.
 - Round coordinates in two tiers: **2 decimal places (~1.1 km) for storage** in `user_locations`, **1 decimal place (~11 km) for every outbound API call**. Exact device/geocoder coordinates are discarded after rounding.
 - Compute the Köppen-Geiger climate zone in-app from 5-year Open-Meteo archive monthly normals instead of bundling a raster dataset or calling a zone-lookup service.
 - Store weather context as `environment_snapshots` rows linked to observations via a two-way cascade relationship (consistent with ADR-006 timeline children); enrichment is best-effort and never blocks saving a log entry.
 
 ### Consequences
 
-- No server secret exists for weather/geocoding, and `APPWRITE_API_KEY` stays out of every enrichment path.
+- No server secret exists for weather/geocoding, and `APPWRITE_API_KEY` stays out of every enrichment path; the geocoding Worker route exists for privacy filtering, cache/rate-limit behavior, and provider-policy compliance rather than secret protection.
 - Published or stored geography can never be finer than ~1.1 km. Weather/climate providers never see better than ~11 km; geocoding providers receive only user-entered place text, not device coordinates.
 - Offline or failed enrichment degrades to a log entry without weather context — acceptable by design.
 - If Open-Meteo or Nominatim changes terms or rate limits, enrichment switches providers or moves server-side under a new ADR; rows already written are unaffected.

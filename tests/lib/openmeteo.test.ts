@@ -97,39 +97,34 @@ describe('geocodeCity', () => {
     ]);
   });
 
-  it('falls back to Nominatim for neighborhood text when the city gazetteer has no match', async () => {
+  it('falls back to the PlantDoc geocode proxy for neighborhood text when the city gazetteer has no match', async () => {
     const calls: string[] = [];
     const fetchFn = (async (input: Parameters<FetchFn>[0]) => {
-      const url = new URL(String(input));
-      calls.push(url.toString());
+      const rawUrl = String(input);
+      calls.push(rawUrl);
+      const url = new URL(rawUrl, 'https://plantdoc.test');
       if (url.hostname === 'geocoding-api.open-meteo.com') return response({});
       return response([
         {
           name: 'Manuel Gomez Pedraza',
-          lat: '20.6851',
-          lon: '-103.3529',
-          address: {
-            neighbourhood: 'Manuel Gomez Pedraza',
-            city: 'Guadalajara',
-            county: 'Guadalajara',
-            state: 'Jalisco',
-            country: 'Mexico',
-          },
+          region: 'Jalisco',
+          subregion: 'Guadalajara',
+          country: 'Mexico',
+          latitude: 20.6851,
+          longitude: -103.3529,
         },
       ]);
     }) as FetchFn;
 
     const results = await geocodeCity('Manuel Gomez Pedraza', fetchFn);
 
-    expect(calls.map((url) => new URL(url).hostname)).toEqual([
+    expect(calls.map((url) => new URL(url, 'https://plantdoc.test').host)).toEqual([
       'geocoding-api.open-meteo.com',
-      'nominatim.openstreetmap.org',
+      'plantdoc.test',
     ]);
-    const nominatimUrl = new URL(calls[1]);
-    expect(nominatimUrl.searchParams.get('q')).toBe('Manuel Gomez Pedraza');
-    expect(nominatimUrl.searchParams.get('format')).toBe('jsonv2');
-    expect(nominatimUrl.searchParams.get('addressdetails')).toBe('1');
-    expect(nominatimUrl.searchParams.get('limit')).toBe('5');
+    const proxyUrl = new URL(calls[1], 'https://plantdoc.test');
+    expect(proxyUrl.pathname).toBe('/api/geocode-location');
+    expect(proxyUrl.searchParams.get('query')).toBe('Manuel Gomez Pedraza');
     expect(results).toEqual([
       {
         name: 'Manuel Gomez Pedraza',

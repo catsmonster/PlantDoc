@@ -64,6 +64,7 @@ export function LocationForm({
 
   async function search() {
     setError(null);
+    setSelected(null);
     setBusy(true);
     try {
       const found = await geocodeCity(query.trim());
