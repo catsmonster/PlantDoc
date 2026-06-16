@@ -303,6 +303,9 @@ export function seasonalIndoorTempC(iso: string, hemisphere: Hemisphere): number
 
 export type MoistureBand = 'dry' | 'moist' | 'wet';
 
+/** Post-watering fill target as a fraction of capacity, by mined species band (spec Unit 1). */
+export const TARGET_BY_BAND: Record<MoistureBand, number> = { dry: 0.4, moist: 0.6, wet: 0.8 };
+
 export type WateringStatus = 'water_now' | 'drying' | 'comfortable' | 'overwatered';
 
 export interface RecommendOptions {
@@ -310,12 +313,17 @@ export interface RecommendOptions {
   band?: MoistureBand;
   /** When provided, projects forward to estimate days until the Dry anchor. */
   et?: EtInputs;
+  /** Fill-to fraction of capacity; with capacityMl, yields suggestedWaterMl at water_now. */
+  targetFraction?: number;
+  capacityMl?: number;
 }
 
 export interface WateringRecommendation {
   status: WateringStatus;
   /** Days until soil reaches the Dry anchor — present only when `opts.et` is supplied and soil sits above it. */
   daysUntilDry?: number;
+  /** ml to add to reach the species target. Present only at water_now with a positive amount. */
+  suggestedWaterMl?: number;
 }
 
 /**
@@ -351,6 +359,13 @@ export function recommendWatering(
     if (dailyLoss > 0 && aboveDryMl > 0) {
       recommendation.daysUntilDry = aboveDryMl / dailyLoss;
     }
+  }
+
+  if (status === 'water_now' && opts.targetFraction !== undefined && opts.capacityMl !== undefined) {
+    const target = clamp(opts.targetFraction, 0, 1);
+    const current = clamp(pct / 100, 0, 1);
+    const amount = (target - current) * opts.capacityMl;
+    if (amount > 0) recommendation.suggestedWaterMl = amount;
   }
 
   return recommendation;
