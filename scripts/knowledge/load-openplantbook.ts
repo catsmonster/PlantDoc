@@ -16,7 +16,7 @@
  * Pure shaping is tested in tests/lib/knowledge-openplantbook.test.ts; this file
  * is thin SDK + fetch glue, matching scripts/knowledge/load-knowledge.ts.
  */
-import { ID, Query } from 'node-appwrite';
+import { ID, Query, type TablesDB } from 'node-appwrite';
 import { DATABASE_ID } from '../../appwrite/schema';
 import { createAdminContext } from '../appwrite/client';
 import { buildSourceRows } from '../../src/lib/knowledge/load-rows';
@@ -52,6 +52,36 @@ function factSource(f: ExistingFact): string {
     : String((f.source_id as { $id?: string })?.$id ?? '');
 }
 
+/**
+ * Slugs of species that already hold at least one openplantbook care_fact,
+ * gathered in one paginated pass (≈ catalog/100 Appwrite reads — no OpenPlantbook
+ * quota) so a resume run decides skips without a getRow per species. source_id is
+ * a relationship, so we resolve it via factSource on the nested rows rather than
+ * filtering the care_facts table by a relationship key.
+ */
+async function collectOpenPlantbookCoveredSlugs(tablesDB: TablesDB, db: string): Promise<Set<string>> {
+  const covered = new Set<string>();
+  let cursor: string | undefined;
+  for (;;) {
+    const queries = [Query.limit(100), Query.select(['*', 'care_facts.*'])];
+    if (cursor) queries.push(Query.cursorAfter(cursor));
+    const res = await tablesDB.listRows({ databaseId: db, tableId: 'species', queries });
+    const rows = (res.rows ?? []) as unknown as {
+      $id: string;
+      slug?: string;
+      care_facts?: ExistingFact[];
+    }[];
+    for (const r of rows) {
+      if ((r.care_facts ?? []).some((f) => factSource(f) === 'openplantbook')) {
+        covered.add(r.slug ?? r.$id);
+      }
+    }
+    if (rows.length < 100) break;
+    cursor = rows[rows.length - 1].$id;
+  }
+  return covered;
+}
+
 async function main(): Promise<void> {
   const ctx = await createAdminContext(); // also loads .env into process.env
   const creds = resolveCreds();
@@ -71,6 +101,10 @@ async function main(): Promise<void> {
   if (!token) throw new Error('OpenPlantbook authentication failed (check credentials).');
 
   const catalog = await listAllSpecies(ctx.tablesDB, db);
+  // Resume mode precomputes the covered set in one paginated pass; refresh re-pulls all.
+  const coveredSlugs = refresh
+    ? new Set<string>()
+    : await collectOpenPlantbookCoveredSlugs(ctx.tablesDB, db);
   console.log(
     `${catalog.length} species in catalog; mode: ${refresh ? 'refresh (re-pull all)' : 'resume (skip already-covered)'}`,
   );
@@ -78,19 +112,9 @@ async function main(): Promise<void> {
   let covered = 0;
   let failed = 0;
   for (const p of catalog) {
-    // Read existing facts first (Appwrite call — costs no OpenPlantbook quota).
-    const species = await ctx.tablesDB.getRow({
-      databaseId: db,
-      tableId: 'species',
-      rowId: p.slug,
-      queries: [Query.select(['*', 'care_facts.*'])],
-    });
-    const existing = (species as unknown as { care_facts?: ExistingFact[] }).care_facts ?? [];
-    const existingOpb = existing.filter((f) => factSource(f) === 'openplantbook');
-
-    // Resume mode: a species that already has openplantbook facts is done — skip
-    // it before spending any request so the daily quota goes to uncovered species.
-    if (!refresh && existingOpb.length > 0) {
+    // A species that already has openplantbook facts is done — skip it before
+    // spending any request so the daily quota goes to uncovered species.
+    if (!refresh && coveredSlugs.has(p.slug)) {
       covered++;
       continue;
     }
@@ -103,10 +127,20 @@ async function main(): Promise<void> {
       await sleep(200);
       continue;
     }
-    // Clear this source's stale facts (a no-op in resume mode, where existingOpb
-    // is empty by definition) before writing the fresh pull.
-    for (const f of existingOpb) {
-      await ctx.tablesDB.deleteRow({ databaseId: db, tableId: 'care_facts', rowId: f.$id });
+    // Only --refresh needs to clear: it re-pulls species that may already hold
+    // this source's facts. In resume mode we only reach here for uncovered
+    // species (zero openplantbook facts), so there is nothing to delete.
+    if (refresh) {
+      const species = await ctx.tablesDB.getRow({
+        databaseId: db,
+        tableId: 'species',
+        rowId: p.slug,
+        queries: [Query.select(['*', 'care_facts.*'])],
+      });
+      const existing = (species as unknown as { care_facts?: ExistingFact[] }).care_facts ?? [];
+      for (const f of existing.filter((x) => factSource(x) === 'openplantbook')) {
+        await ctx.tablesDB.deleteRow({ databaseId: db, tableId: 'care_facts', rowId: f.$id });
+      }
     }
     for (const fact of facts) {
       await ctx.tablesDB.createRow({
