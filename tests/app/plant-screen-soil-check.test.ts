@@ -86,7 +86,7 @@ describe('PlantScreen soil check quick action', () => {
       plantId: 'plant-1',
       soilState: 'wet',
       contribute: false,
-      now: () => new Date('2026-06-15T11:00:00.000Z'),
+      observedAt: '2026-06-15T11:00:00.000Z',
       createLog,
       refresh,
     });
