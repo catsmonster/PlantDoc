@@ -201,6 +201,8 @@ export interface PlantInput {
   substrate_type?: SubstrateType | null;
   pot_drains?: boolean | null;
   light_level?: LightLevel | null;
+  /** null = not applicable (indoor/greenhouse); explicit boolean for outdoor/balcony (rain reaches the pot?). */
+  rain_exposed?: boolean | null;
 }
 
 /** Scalar-only dashboard list; skips relationship columns so Appwrite does not

@@ -111,6 +111,7 @@ User-owned plant profiles.
 | `substrate_type` | enum/string | no | `standard`, `succulent_gritty`, `chunky_aroid`, `peat_seedling`. Nullable = unknown; no DB default. |
 | `pot_drains` | boolean | no | Whether the pot drains. Nullable = unknown; no DB default. |
 | `light_level` | enum/string | no | `low`, `medium`, `bright`, `direct_sun`. |
+| `rain_exposed` | boolean | no | Nullable. `null` = not applicable (indoor/greenhouse); explicit boolean for outdoor/balcony (does rain reach the pot?). Feeds outdoor moisture inference. Excluded from public export. |
 | `created_at` | datetime | yes | Server generated. |
 | `updated_at` | datetime | yes | Server generated. |
 

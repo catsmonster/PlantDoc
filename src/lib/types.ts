@@ -67,6 +67,8 @@ export interface Plant extends RowMeta {
   substrate_type?: SubstrateType | null;
   pot_drains?: boolean | null;
   light_level?: LightLevel | null;
+  /** null = not applicable (indoor/greenhouse); explicit boolean for outdoor/balcony. */
+  rain_exposed?: boolean | null;
 }
 
 export interface InsightFeedback extends RowMeta {

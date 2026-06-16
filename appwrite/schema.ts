@@ -184,6 +184,7 @@ export const TABLES: TableDef[] = [
       },
       { kind: 'boolean', key: 'pot_drains' },
       { kind: 'enum', key: 'light_level', elements: ['low', 'medium', 'bright', 'direct_sun'] },
+      { kind: 'boolean', key: 'rain_exposed' },
     ],
     indexes: [
       { key: 'idx_user_id', type: 'key', columns: ['user_id'] },
