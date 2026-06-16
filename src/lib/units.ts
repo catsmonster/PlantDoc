@@ -44,3 +44,19 @@ export function volumeInputToMl(value: number, units: Units): number {
 export function mlToVolumeInput(ml: number, units: Units): number {
   return units === 'imperial' ? round1(ml / ML_PER_FL_OZ) : round1(ml);
 }
+
+/**
+ * Friendly watering amount for display, rounded coarsely (nearest 25 ml /
+ * 0.5 fl oz). Returns null when the amount rounds to zero in the active unit —
+ * the UI then shows no "Add about …" line (spec Unit 1, two-layer zero rule).
+ */
+export function formatSuggestedWater(ml: number, units: Units): string | null {
+  if (units === 'imperial') {
+    const flOz = Math.round(ml / ML_PER_FL_OZ / 0.5) * 0.5;
+    return flOz <= 0 ? null : `${round1(flOz)} fl oz`;
+  }
+  const rounded = Math.round(ml / 25) * 25;
+  if (rounded <= 0) return null;
+  if (rounded >= 1000) return `${round1(rounded / 1000)} l`;
+  return `${rounded} ml`;
+}

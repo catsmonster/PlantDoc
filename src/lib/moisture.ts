@@ -103,6 +103,8 @@ export interface SimInput {
   canopyFactor?: number;
   corrections: WaterContentCorrection[];
   repotBoundaryMs?: number;
+  /** ml-of-rain source per ISO day; engine converts mm→ml via pot top area + throughfall. */
+  dailyRainMm?: (iso: string) => number;
 }
 
 export interface SimResult {
@@ -143,6 +145,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const RESIDUAL_FRACTION = 0.05;
 const UNKNOWN_WATERING_FRACTION = 0.4;
 const UNKNOWN_REPOT_WATER_FRACTION = 0.5;
+/** Fraction of rain reaching the pot soil (foliage/rim interception) — internal, not tunable (spec Unit 3). */
+const THROUGHFALL = 0.8;
+/** 1 mm of rain over 1 cm² of pot top = 0.1 ml retained-before-throughfall. */
+const RAIN_ML_PER_MM_CM2 = 0.1;
 
 function dateIso(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
@@ -157,6 +163,9 @@ function nextUtcDayBoundaryMs(ms: number): number {
 export function simulateWaterContent(input: SimInput): SimResult {
   const capacityMl = waterCapacityMl(input.pot);
   const residualMl = capacityMl * RESIDUAL_FRACTION;
+  const potTopAreaCm2 = Math.PI * (input.pot.diameterCm / 2) ** 2;
+  const rainMlForDay = (iso: string): number =>
+    input.dailyRainMm ? input.dailyRainMm(iso) * potTopAreaCm2 * RAIN_ML_PER_MM_CM2 * THROUGHFALL : 0;
   const lastWateringMs = input.waterings.reduce(
     (latest, watering) =>
       watering.observedAtMs <= input.endMs ? Math.max(latest, watering.observedAtMs) : latest,
@@ -229,7 +238,12 @@ export function simulateWaterContent(input: SimInput): SimResult {
   while (cursorMs < input.endMs) {
     const nextEventMs = events[nextEventIndex]?.observedAtMs ?? Number.POSITIVE_INFINITY;
     const nextTimestampMs = Math.min(nextEventMs, nextUtcDayBoundaryMs(cursorMs), input.endMs);
-    const climate = input.dailyClimate(dateIso(cursorMs));
+    const iso = dateIso(cursorMs);
+    const climate = input.dailyClimate(iso);
+    const dayFraction = (nextTimestampMs - cursorMs) / DAY_MS;
+    // Rain first, proportional to the sub-step, capped at capacity.
+    waterContentMl = Math.min(capacityMl, waterContentMl + rainMlForDay(iso) * dayFraction);
+    // Then evapotranspiration, proportional, floored at residual.
     waterContentMl = Math.max(
       residualMl,
       waterContentMl -
@@ -240,8 +254,7 @@ export function simulateWaterContent(input: SimInput): SimResult {
           humidityPct: climate.humidityPct,
           light: climate.light,
           canopyFactor: input.canopyFactor,
-        }) *
-          ((nextTimestampMs - cursorMs) / DAY_MS),
+        }) * dayFraction,
     );
 
     cursorMs = nextTimestampMs;
@@ -303,6 +316,9 @@ export function seasonalIndoorTempC(iso: string, hemisphere: Hemisphere): number
 
 export type MoistureBand = 'dry' | 'moist' | 'wet';
 
+/** Post-watering fill target as a fraction of capacity, by mined species band (spec Unit 1). */
+export const TARGET_BY_BAND: Record<MoistureBand, number> = { dry: 0.4, moist: 0.6, wet: 0.8 };
+
 export type WateringStatus = 'water_now' | 'drying' | 'comfortable' | 'overwatered';
 
 export interface RecommendOptions {
@@ -310,12 +326,17 @@ export interface RecommendOptions {
   band?: MoistureBand;
   /** When provided, projects forward to estimate days until the Dry anchor. */
   et?: EtInputs;
+  /** Fill-to fraction of capacity; with capacityMl, yields suggestedWaterMl at water_now. */
+  targetFraction?: number;
+  capacityMl?: number;
 }
 
 export interface WateringRecommendation {
   status: WateringStatus;
   /** Days until soil reaches the Dry anchor — present only when `opts.et` is supplied and soil sits above it. */
   daysUntilDry?: number;
+  /** ml to add to reach the species target. Present only at water_now with a positive amount. */
+  suggestedWaterMl?: number;
 }
 
 /**
@@ -351,6 +372,13 @@ export function recommendWatering(
     if (dailyLoss > 0 && aboveDryMl > 0) {
       recommendation.daysUntilDry = aboveDryMl / dailyLoss;
     }
+  }
+
+  if (status === 'water_now' && opts.targetFraction !== undefined && opts.capacityMl !== undefined) {
+    const target = clamp(opts.targetFraction, 0, 1);
+    const current = clamp(pct / 100, 0, 1);
+    const amount = (target - current) * opts.capacityMl;
+    if (amount > 0) recommendation.suggestedWaterMl = amount;
   }
 
   return recommendation;

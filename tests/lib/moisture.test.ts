@@ -13,6 +13,7 @@ import {
   recommendWatering,
   seasonalIndoorTempC,
   simulateWaterContent,
+  TARGET_BY_BAND,
   waterCapacityMl,
 } from '../../src/lib/moisture';
 import type { Confidence, EstimateInput, EtInputs, MoistureEstimate } from '../../src/lib/moisture';
@@ -746,5 +747,74 @@ describe('confidence counts effective (rounded) ground-truth weight', () => {
   });
   it('rounds 0.4 effective weight down to low confidence', () => {
     expect(estimateMoisture({ ...base, groundTruthCount: 0.4 }).confidence).toBe('low');
+  });
+});
+
+describe('suggested water amount', () => {
+  const capacityMl = 1000;
+  it('fills from current up to the band target at water_now', () => {
+    // pct 10 (water_now), wet band target 0.80 -> (0.80 - 0.10) * 1000 = 700
+    const rec = recommendWatering(10, { targetFraction: TARGET_BY_BAND.wet, capacityMl });
+    expect(rec.status).toBe('water_now');
+    expect(rec.suggestedWaterMl).toBeCloseTo(700, 5);
+  });
+  it('uses the dry-band target (0.40)', () => {
+    const rec = recommendWatering(10, { targetFraction: TARGET_BY_BAND.dry, capacityMl });
+    expect(rec.suggestedWaterMl).toBeCloseTo((0.4 - 0.1) * 1000, 5);
+  });
+  it('omits the amount when not water_now', () => {
+    const rec = recommendWatering(70, { targetFraction: TARGET_BY_BAND.moist, capacityMl });
+    expect(rec.status).toBe('comfortable');
+    expect(rec.suggestedWaterMl).toBeUndefined();
+  });
+  it('omits the amount when target/capacity are absent', () => {
+    expect(recommendWatering(10, {}).suggestedWaterMl).toBeUndefined();
+  });
+  it('clamps inputs and omits a non-positive raw result', () => {
+    // current (via pct 200 -> clamp 1.0) already above any target -> <= 0 -> omitted
+    const rec = recommendWatering(200, { targetFraction: 1.5, capacityMl });
+    expect(rec.suggestedWaterMl).toBeUndefined();
+  });
+});
+
+describe('rainfall in the simulation', () => {
+  const baseInput = () => ({
+    pot: { diameterCm: 20, heightCm: 15, substrate: 'standard' as const, drains: true },
+    startMs: Date.parse('2026-06-10T00:00:00Z'),
+    endMs: Date.parse('2026-06-12T00:00:00Z'),
+    waterings: [{ observedAtMs: Date.parse('2026-06-10T00:00:00Z'), amountMl: 300 }],
+    dailyClimate: () => ({ tempC: 20, humidityPct: 50, light: 'medium' as const }),
+    speciesDailyFraction: 0.12,
+    corrections: [],
+  });
+
+  it('no dailyRainMm reproduces the current simulation', () => {
+    const dry = simulateWaterContent(baseInput());
+    expect(dry.waterContentMl).toBeGreaterThan(0);
+  });
+
+  it('rain adds water, capped at capacity', () => {
+    const wet = simulateWaterContent({ ...baseInput(), dailyRainMm: () => 50 });
+    const dry = simulateWaterContent(baseInput());
+    expect(wet.waterContentMl).toBeGreaterThan(dry.waterContentMl);
+    expect(wet.waterContentMl).toBeLessThanOrEqual(wet.capacityMl);
+  });
+
+  it('rain accrues proportionally; a midday watering sees only the earlier fraction (intra-day)', () => {
+    // A watering at midday on 06-11 should land on a pot that has received only
+    // half of that day's rain, not the whole day's rain up front.
+    const midday = Date.parse('2026-06-11T12:00:00Z');
+    const input = {
+      ...baseInput(),
+      endMs: Date.parse('2026-06-11T13:00:00Z'),
+      waterings: [
+        { observedAtMs: Date.parse('2026-06-10T00:00:00Z'), amountMl: 100 },
+        { observedAtMs: midday, amountMl: 0 }, // marker event that splits the day
+      ],
+      dailyRainMm: (iso: string) => (iso === '2026-06-11' ? 40 : 0),
+    };
+    const result = simulateWaterContent(input);
+    expect(result.waterContentMl).toBeLessThanOrEqual(result.capacityMl);
+    expect(result.waterContentMl).toBeGreaterThan(result.residualMl);
   });
 });

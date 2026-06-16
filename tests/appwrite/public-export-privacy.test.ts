@@ -36,6 +36,7 @@ const PRIVATE_FIELDS = [
   'watering_cadence_days',
   'latest_photo_file_id',
   'latest_photo_observed_at',
+  'rain_exposed',
 ];
 
 describe('public export privacy', () => {
@@ -48,6 +49,10 @@ describe('public export privacy', () => {
   it('source_observation_id is internal-only and not exportable', () => {
     expect(INTERNAL_ONLY_FIELDS).toContain('source_observation_id');
     expect(PUBLIC_EXPORT_FIELDS).not.toContain('source_observation_id');
+  });
+
+  it('never exports rain_exposed', () => {
+    expect(PUBLIC_EXPORT_FIELDS).not.toContain('rain_exposed');
   });
 
   it('every public export field exists on public_observations', () => {

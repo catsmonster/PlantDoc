@@ -1,4 +1,4 @@
-import type { Units } from '../../lib/types';
+import type { PlacementType, Units } from '../../lib/types';
 import { cmToLengthInput, lengthInputToCm } from '../../lib/units';
 
 const POT_DIMENSION_MIN_CM = 1;
@@ -16,4 +16,17 @@ export function potDimensionToCm(value: string, units: Units): number | null {
 /** Stored cm -> the field's initial value in the user's unit (empty when unset). */
 export function potDimensionInitialValue(cm: number | null | undefined, units: Units): string {
   return cm != null ? String(cmToLengthInput(cm, units)) : '';
+}
+
+/** Rain reaches the pot only when the plant lives outside, so we ask the
+ *  question for outdoor/balcony and leave it not-applicable elsewhere (spec Unit 4). */
+export function placementNeedsRainAnswer(placement: PlacementType): boolean {
+  return placement === 'outdoor' || placement === 'balcony';
+}
+
+/** The value to persist for `rain_exposed`: the explicit choice for outdoor/balcony,
+ *  null (not applicable) otherwise. A null result for an outdoor plant means the user
+ *  has not answered yet — the form blocks the save until they do. */
+export function resolveRainExposed(placement: PlacementType, rainExposed: boolean | null): boolean | null {
+  return placementNeedsRainAnswer(placement) ? rainExposed : null;
 }

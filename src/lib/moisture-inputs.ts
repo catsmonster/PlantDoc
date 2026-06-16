@@ -6,6 +6,7 @@
  */
 import type { LightLevel, MoistureFeedback, Plant } from './types';
 import type { SpeciesCareProfile } from './knowledge/care-profiles';
+import type { WeatherSeries } from './openmeteo';
 import {
   ANCHORS,
   INDOOR_DEFAULT_RH,
@@ -83,9 +84,23 @@ function resolveHemisphere(plant: Plant): Hemisphere {
   return 'north';
 }
 
-function makeClimateResolver(plant: Plant, hemisphere: Hemisphere): (iso: string) => DayClimate {
+function isOutdoor(plant: Plant): boolean {
+  return plant.placement_type === 'outdoor' || plant.placement_type === 'balcony';
+}
+
+function makeClimateResolver(
+  plant: Plant,
+  hemisphere: Hemisphere,
+  series: WeatherSeries | undefined,
+): (iso: string) => DayClimate {
   const light: LightLevel = plant.light_level ?? 'medium';
-  return (iso) => ({ tempC: seasonalIndoorTempC(iso, hemisphere), humidityPct: INDOOR_DEFAULT_RH, light });
+  return (iso) => {
+    if (series && isOutdoor(plant)) {
+      const day = series.get(iso);
+      if (day) return { tempC: day.tempC, humidityPct: day.humidityPct, light };
+    }
+    return { tempC: seasonalIndoorTempC(iso, hemisphere), humidityPct: INDOOR_DEFAULT_RH, light };
+  };
 }
 
 export interface BuildMoistureInputsArgs {
@@ -93,6 +108,8 @@ export interface BuildMoistureInputsArgs {
   careProfile: SpeciesCareProfile | null;
   feedback: MoistureFeedback[];
   now: number;
+  /** Resolved outdoor daily series; for outdoor/balcony it drives climate and rain. */
+  weatherSeries?: WeatherSeries;
 }
 
 export interface MoistureInputs {
@@ -109,7 +126,7 @@ export interface MoistureInputs {
 }
 
 export function buildMoistureInputs(args: BuildMoistureInputsArgs): MoistureInputs {
-  const { plant, careProfile, feedback, now } = args;
+  const { plant, careProfile, feedback, now, weatherSeries } = args;
   const observations = plant.observations ?? [];
   const startMs = now - OBSERVATION_WINDOW_DAYS * DAY_MS;
   const hemisphere = resolveHemisphere(plant);
@@ -210,19 +227,24 @@ export function buildMoistureInputs(args: BuildMoistureInputsArgs): MoistureInpu
   }
 
   const { band, sourced } = resolveSpeciesBand(careProfile);
+  const dailyRainMm =
+    weatherSeries && isOutdoor(plant) && plant.rain_exposed === true
+      ? (iso: string) => weatherSeries.get(iso)?.precipMm ?? 0
+      : undefined;
 
   const estimate: EstimateInput = {
     pot,
     startMs,
     endMs: now,
     waterings,
-    dailyClimate: makeClimateResolver(plant, hemisphere),
+    dailyClimate: makeClimateResolver(plant, hemisphere, weatherSeries),
     speciesDailyFraction: resolveSpeciesDailyFraction(careProfile),
     corrections,
     repotBoundaryMs,
     substratePresent: plant.substrate_type != null,
     amountMeasured: waterings.some((w) => typeof w.amountMl === 'number' && Number.isFinite(w.amountMl)),
     groundTruthCount,
+    ...(dailyRainMm ? { dailyRainMm } : {}),
   };
 
   return { estimate, band, bandSourced: sourced, latestFeedback, lastNonFeedbackEventMs, hasRecentGroundTruth };

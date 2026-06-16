@@ -2,9 +2,10 @@ import { useEffect, useState, useRef } from 'react';
 import { errorMessage } from '../../lib/error';
 import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
 import type { Observation, Plant, Profile, Units, InsightFeedback, MoistureFeedback, SoilState, EstimateFeedback } from '../../lib/types';
-import { moistureForPlant } from '../../lib/moisture-read';
+import { moistureCardState, type MoistureCardState } from '../../lib/moisture-read';
+import { useWeatherSeries } from '../../lib/weather-series';
 import { moistureInsight, moistureStatusColor } from '../../lib/moisture';
-import { formatHeight, formatTemperature } from '../../lib/units';
+import { formatHeight, formatSuggestedWater, formatTemperature } from '../../lib/units';
 import { Spinner } from '../../ui/Spinner';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon, healthLabel, type IconName } from '../../ui/Icon';
@@ -691,6 +692,7 @@ export function PlantScreen({
       cancelled = true;
     };
   }, [speciesRowId]);
+  const weatherForPlant = useWeatherSeries(plant ? [plant] : [], now);
 
   const refresh = () => {
     setLogOpen(false);
@@ -858,8 +860,15 @@ export function PlantScreen({
     tableProfile && tableProfile.speciesId === speciesRowId ? tableProfile.profile : null;
   const careProfile = tableMatch ?? careProfileForPlant(plant);
   const mergedFeedback = mergeById(plant.moisture_feedback ?? [], pendingFeedback);
-  const moisture = moistureForPlant({ ...plant, observations }, careProfile, mergedFeedback, now);
-  const showPotSizeMoistureNudge = !moisture && shouldPromptForPotSize(plant);
+  const cardState: MoistureCardState = moistureCardState(
+    { ...plant, observations },
+    careProfile,
+    mergedFeedback,
+    now,
+    weatherForPlant(plant),
+  );
+  const moisture = cardState.kind === 'ready' ? cardState.moisture : null;
+  const showPotSizeMoistureNudge = cardState.kind === 'needs_pot' && shouldPromptForPotSize(plant);
   const moistureSpeciesName =
     careProfile?.scientificName ?? plant.species_id?.scientific_name ?? plant.common_name ?? null;
   const moistureIns = moisture
@@ -871,6 +880,11 @@ export function PlantScreen({
         { needsSoilCheck: moisture.needsSoilCheck, needsSubstrate: moisture.needsSubstrate },
       )
     : null;
+  // Species-driven "how much to water" — only at water_now with a sourced band (spec Unit 1).
+  const suggestedWater =
+    moisture?.recommendation.status === 'water_now' && moisture.recommendation.suggestedWaterMl !== undefined
+      ? formatSuggestedWater(moisture.recommendation.suggestedWaterMl, profile.preferred_units)
+      : null;
 
   // Group timeline observations by day
   const groupedTimeline: [string, Observation[]][] = [];
@@ -1068,6 +1082,26 @@ export function PlantScreen({
             {showPotSizeMoistureNudge && (
               <PotSizeMoistureNudge isDark onClick={() => onEdit(plant)} />
             )}
+            {cardState.kind === 'needs_observation' && (
+              <p className="b-moisture-note" style={{ margin: '14px 0 0', fontSize: 13, lineHeight: 1.45, color: '#9BAA98' }}>
+                Log a watering or check soil to start estimating moisture.
+              </p>
+            )}
+            {cardState.kind === 'needs_location' && (
+              <p className="b-moisture-note" style={{ margin: '14px 0 0', fontSize: 13, lineHeight: 1.45, color: '#9BAA98' }}>
+                Add a location to estimate outdoor moisture.
+              </p>
+            )}
+            {cardState.kind === 'weather_loading' && (
+              <p className="b-moisture-note b-muted" style={{ margin: '14px 0 0', fontSize: 13, lineHeight: 1.45, color: '#67766A' }}>
+                Checking local weather...
+              </p>
+            )}
+            {cardState.kind === 'weather_unavailable' && (
+              <p className="b-moisture-note" style={{ margin: '14px 0 0', fontSize: 13, lineHeight: 1.45, color: '#E0A36B' }}>
+                Weather data unavailable right now.
+              </p>
+            )}
 
             {/* Quick Actions Row */}
             <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
@@ -1114,6 +1148,11 @@ export function PlantScreen({
                         <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#F2F6EF' }}>{moistureIns.title}</p>
                       </div>
                       <p style={{ margin: '5px 0 0', fontSize: 13, lineHeight: 1.5, color: '#9BAA98' }}>{moistureIns.detail}</p>
+                      {suggestedWater && (
+                        <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.5, fontWeight: 600, color: '#E0A36B' }}>
+                          Add about {suggestedWater} to water thoroughly.
+                        </p>
+                      )}
                       <p className="mono" style={{ margin: '6px 0 0', fontSize: 10, color: '#67766A', letterSpacing: '.06em' }}>
                         ESTIMATED · {moisture.confidence.toUpperCase()} CONFIDENCE
                       </p>
@@ -1407,6 +1446,26 @@ export function PlantScreen({
           {showPotSizeMoistureNudge && (
             <PotSizeMoistureNudge isDark={false} onClick={() => onEdit(plant)} />
           )}
+          {cardState.kind === 'needs_observation' && (
+            <p className="b-moisture-note" style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.45, color: '#6B7568' }}>
+              Log a watering or check soil to start estimating moisture.
+            </p>
+          )}
+          {cardState.kind === 'needs_location' && (
+            <p className="b-moisture-note" style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.45, color: '#6B7568' }}>
+              Add a location to estimate outdoor moisture.
+            </p>
+          )}
+          {cardState.kind === 'weather_loading' && (
+            <p className="b-moisture-note b-muted" style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.45, color: '#9AA294' }}>
+              Checking local weather...
+            </p>
+          )}
+          {cardState.kind === 'weather_unavailable' && (
+            <p className="b-moisture-note" style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.45, color: '#B07F57' }}>
+              Weather data unavailable right now.
+            </p>
+          )}
 
           {/* Species care guide — sourced reference facts */}
           {careProfile && (
@@ -1439,6 +1498,11 @@ export function PlantScreen({
                     <div style={{ flex: 1 }}>
                       <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: '#23302A' }}>{moistureIns.title}</p>
                       <p style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5, color: '#6B7568' }}>{moistureIns.detail}</p>
+                      {suggestedWater && (
+                        <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.5, fontWeight: 600, color: '#B07F57' }}>
+                          Add about {suggestedWater} to water thoroughly.
+                        </p>
+                      )}
                       <p style={{ margin: '6px 0 0', fontSize: 11, color: '#9AA294' }}>Estimated · {moisture.confidence} confidence</p>
                       {moisture.feedbackEligible && (
                         <MoistureFeedbackPrompt
