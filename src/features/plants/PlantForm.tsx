@@ -291,8 +291,8 @@ export function PlantForm({
             <label style={{ display: 'block' }}>
               <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>Pot size ({imperial ? 'in' : 'cm'})</span>
               <div style={{ display: 'flex', gap: 10 }}>
-                <input className="b-input" type="number" inputMode="decimal" min={1} max={imperial ? 80 : 200} value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder={imperial ? 'Width 5 in' : 'Width 12 cm'} disabled={busy} aria-label={`Pot diameter in ${imperial ? 'inches' : 'centimetres'}`} />
-                <input className="b-input" type="number" inputMode="decimal" min={1} max={imperial ? 80 : 200} value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder={imperial ? 'Height 4 in' : 'Height 10 cm'} disabled={busy} aria-label={`Pot height in ${imperial ? 'inches' : 'centimetres'}`} />
+                <input className="b-input" type="number" inputMode="decimal" min={0} max={imperial ? 80 : 200} step="any" value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder={imperial ? 'Width 5 in' : 'Width 12 cm'} disabled={busy} aria-label={`Pot diameter in ${imperial ? 'inches' : 'centimetres'}`} />
+                <input className="b-input" type="number" inputMode="decimal" min={0} max={imperial ? 80 : 200} step="any" value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder={imperial ? 'Height 4 in' : 'Height 10 cm'} disabled={busy} aria-label={`Pot height in ${imperial ? 'inches' : 'centimetres'}`} />
               </div>
             </label>
 
@@ -532,8 +532,8 @@ export function PlantForm({
           <label style={{ display: 'block' }}>
             <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>Pot size ({imperial ? 'in' : 'cm'})</span>
             <div style={{ display: 'flex', gap: 10 }}>
-              <input className="a-input" type="number" inputMode="decimal" min={1} max={imperial ? 80 : 200} value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder={imperial ? 'Width 5 in' : 'Width 12 cm'} disabled={busy} aria-label={`Pot diameter in ${imperial ? 'inches' : 'centimetres'}`} />
-              <input className="a-input" type="number" inputMode="decimal" min={1} max={imperial ? 80 : 200} value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder={imperial ? 'Height 4 in' : 'Height 10 cm'} disabled={busy} aria-label={`Pot height in ${imperial ? 'inches' : 'centimetres'}`} />
+              <input className="a-input" type="number" inputMode="decimal" min={0} max={imperial ? 80 : 200} step="any" value={potDiameter} onChange={(e) => setPotDiameter(e.target.value)} placeholder={imperial ? 'Width 5 in' : 'Width 12 cm'} disabled={busy} aria-label={`Pot diameter in ${imperial ? 'inches' : 'centimetres'}`} />
+              <input className="a-input" type="number" inputMode="decimal" min={0} max={imperial ? 80 : 200} step="any" value={potHeight} onChange={(e) => setPotHeight(e.target.value)} placeholder={imperial ? 'Height 4 in' : 'Height 10 cm'} disabled={busy} aria-label={`Pot height in ${imperial ? 'inches' : 'centimetres'}`} />
             </div>
           </label>
 
