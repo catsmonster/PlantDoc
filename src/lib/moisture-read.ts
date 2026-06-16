@@ -9,6 +9,7 @@ import { buildMoistureInputs, isFeedbackEligible } from './moisture-inputs';
 import {
   estimateMoisture,
   recommendWatering,
+  TARGET_BY_BAND,
   type Confidence,
   type MoistureBand,
   type WateringRecommendation,
@@ -55,8 +56,12 @@ export function moistureForPlant(
 
   const { estimate, band, bandSourced, latestFeedback, lastNonFeedbackEventMs, hasRecentGroundTruth } =
     buildMoistureInputs({ plant, careProfile, feedback, now });
-  const { moisturePercent, confidence } = estimateMoisture(estimate);
-  const recommendation = recommendWatering(moisturePercent, { band });
+  const { moisturePercent, confidence, capacityMl } = estimateMoisture(estimate);
+  const recommendation = recommendWatering(moisturePercent, {
+    band,
+    // Amount only when the band is real mined data (spec Unit 1 gate).
+    ...(bandSourced ? { targetFraction: TARGET_BY_BAND[band], capacityMl } : {}),
+  });
   const feedbackEligible = isFeedbackEligible({ currentPercent: moisturePercent, latestFeedback, lastNonFeedbackEventMs });
 
   return {

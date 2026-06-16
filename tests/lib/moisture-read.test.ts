@@ -26,6 +26,24 @@ describe('moistureForPlant', () => {
     expect(moistureForPlant(makePlant({ placement_type: 'greenhouse' }), null, [], NOW)).not.toBeNull();
   });
 
+  it('includes a suggested water amount only when the band is sourced and water_now', () => {
+    // No waterings -> simulation sits at residual (~5%) -> water_now. A sourced
+    // soil_moisture_percent range makes bandSourced true (spec Unit 1 gate).
+    const plantDueToWater = makePlant();
+    const sourcedCareProfile = baseProfile({
+      communityRanges: [
+        { attribute: 'soil_moisture_percent', label: 'Soil moisture', min: 60, max: 80, unit: '%', sourceId: 'opb' },
+      ],
+    });
+    const ready = moistureForPlant(plantDueToWater, sourcedCareProfile, [], NOW);
+    expect(ready?.recommendation.status).toBe('water_now');
+    expect(ready?.recommendation.suggestedWaterMl).toBeGreaterThan(0);
+
+    // Same plant, but an unsourced (bundled-fallback) profile -> no amount.
+    const unsourced = moistureForPlant(plantDueToWater, null, [], NOW);
+    expect(unsourced?.recommendation.suggestedWaterMl).toBeUndefined();
+  });
+
   it('lowers confidence one tier when the species band is an unsourced fallback', () => {
     // Engineered so estimateMoisture scores exactly 4 ('high'): substrate + a measured
     // watering + 2 corrections. The two calls differ only in bandSourced, isolating the downgrade.
