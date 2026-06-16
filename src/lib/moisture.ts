@@ -103,6 +103,8 @@ export interface SimInput {
   canopyFactor?: number;
   corrections: WaterContentCorrection[];
   repotBoundaryMs?: number;
+  /** ml-of-rain source per ISO day; engine converts mm→ml via pot top area + throughfall. */
+  dailyRainMm?: (iso: string) => number;
 }
 
 export interface SimResult {
@@ -143,6 +145,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const RESIDUAL_FRACTION = 0.05;
 const UNKNOWN_WATERING_FRACTION = 0.4;
 const UNKNOWN_REPOT_WATER_FRACTION = 0.5;
+/** Fraction of rain reaching the pot soil (foliage/rim interception) — internal, not tunable (spec Unit 3). */
+const THROUGHFALL = 0.8;
+/** 1 mm of rain over 1 cm² of pot top = 0.1 ml retained-before-throughfall. */
+const RAIN_ML_PER_MM_CM2 = 0.1;
 
 function dateIso(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
@@ -157,6 +163,9 @@ function nextUtcDayBoundaryMs(ms: number): number {
 export function simulateWaterContent(input: SimInput): SimResult {
   const capacityMl = waterCapacityMl(input.pot);
   const residualMl = capacityMl * RESIDUAL_FRACTION;
+  const potTopAreaCm2 = Math.PI * (input.pot.diameterCm / 2) ** 2;
+  const rainMlForDay = (iso: string): number =>
+    input.dailyRainMm ? input.dailyRainMm(iso) * potTopAreaCm2 * RAIN_ML_PER_MM_CM2 * THROUGHFALL : 0;
   const lastWateringMs = input.waterings.reduce(
     (latest, watering) =>
       watering.observedAtMs <= input.endMs ? Math.max(latest, watering.observedAtMs) : latest,
@@ -229,7 +238,12 @@ export function simulateWaterContent(input: SimInput): SimResult {
   while (cursorMs < input.endMs) {
     const nextEventMs = events[nextEventIndex]?.observedAtMs ?? Number.POSITIVE_INFINITY;
     const nextTimestampMs = Math.min(nextEventMs, nextUtcDayBoundaryMs(cursorMs), input.endMs);
-    const climate = input.dailyClimate(dateIso(cursorMs));
+    const iso = dateIso(cursorMs);
+    const climate = input.dailyClimate(iso);
+    const dayFraction = (nextTimestampMs - cursorMs) / DAY_MS;
+    // Rain first, proportional to the sub-step, capped at capacity.
+    waterContentMl = Math.min(capacityMl, waterContentMl + rainMlForDay(iso) * dayFraction);
+    // Then evapotranspiration, proportional, floored at residual.
     waterContentMl = Math.max(
       residualMl,
       waterContentMl -
@@ -240,8 +254,7 @@ export function simulateWaterContent(input: SimInput): SimResult {
           humidityPct: climate.humidityPct,
           light: climate.light,
           canopyFactor: input.canopyFactor,
-        }) *
-          ((nextTimestampMs - cursorMs) / DAY_MS),
+        }) * dayFraction,
     );
 
     cursorMs = nextTimestampMs;
