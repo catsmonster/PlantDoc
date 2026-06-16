@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { errorMessage } from '../../lib/error';
 import { createLog, createMoistureFeedback, getCareProfile, getPlantWithTimeline, photoUrl, setInsightFeedback, uploadPhoto } from '../../lib/repo';
-import type { Observation, Plant, Profile, Units, InsightFeedback, SoilState, EstimateFeedback } from '../../lib/types';
+import type { Observation, Plant, Profile, Units, InsightFeedback, MoistureFeedback, SoilState, EstimateFeedback } from '../../lib/types';
 import { moistureForPlant } from '../../lib/moisture-read';
 import { moistureInsight, moistureStatusColor } from '../../lib/moisture';
 import { formatHeight, formatTemperature } from '../../lib/units';
@@ -27,6 +27,10 @@ import {
 } from '../../lib/gemini-preview';
 import {
   detailLine,
+  dropReconciledObservations,
+  dropReconciledRows,
+  mergeById,
+  mergeObservations,
   shouldPromptForPotSize,
   submitMoistureFeedback,
   submitSoilCheck,
@@ -324,36 +328,46 @@ function MoistureFeedbackPrompt({
         ))}
       </div>
       {selected && (
-        <div
-          role="group"
-          aria-label="How far off?"
-          style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 6, marginTop: 8 }}
-        >
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={isDark ? 'b-tap' : 'a-tap'}
-              disabled={busy}
-              onClick={() => {
-                onSubmit(selected, n);
-                setSelected(null);
-              }}
-              style={{
-                minHeight: 36,
-                border,
-                borderRadius: 10,
-                background: activeBackground,
-                color: accent,
-                cursor: busy ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                fontSize: 12.5,
-                fontWeight: 700,
-              }}
-            >
-              {n}
-            </button>
-          ))}
+        <div style={{ marginTop: 8 }}>
+          <p style={{ margin: '0 0 6px', fontSize: 11.5, fontWeight: 700, color: muted }}>
+            How far off was it?
+          </p>
+          <div
+            role="group"
+            aria-label={`How much ${selected}?`}
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 6 }}
+          >
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                type="button"
+                className={isDark ? 'b-tap' : 'a-tap'}
+                disabled={busy}
+                aria-label={n === 1 ? `a little ${selected}` : n === 5 ? `much ${selected}` : `${n} of 5 ${selected}`}
+                onClick={() => {
+                  onSubmit(selected, n);
+                  setSelected(null);
+                }}
+                style={{
+                  minHeight: 36,
+                  border,
+                  borderRadius: 10,
+                  background: activeBackground,
+                  color: accent,
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10.5, color: muted }}>
+            <span>a little</span>
+            <span>a lot</span>
+          </div>
         </div>
       )}
     </div>
@@ -621,6 +635,8 @@ export function PlantScreen({
   const [soilCheckOpen, setSoilCheckOpen] = useState(false);
   const [soilCheckBusy, setSoilCheckBusy] = useState(false);
   const [moistureFeedbackBusy, setMoistureFeedbackBusy] = useState(false);
+  const [pendingFeedback, setPendingFeedback] = useState<MoistureFeedback[]>([]);
+  const [pendingObservations, setPendingObservations] = useState<Observation[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [verdicts, setVerdicts] = useState<Map<string, InsightFeedback>>(new Map());
   const [aiPreview, setAiPreview] = useState<AiPreviewState>(initialAiPreview);
@@ -642,6 +658,8 @@ export function PlantScreen({
         if (!cancelled) {
           setPlant(row);
           setVerdicts(new Map((row.insight_feedback ?? []).map((f) => [f.insight_kind, f])));
+          setPendingFeedback((prev) => dropReconciledRows(prev, row.moisture_feedback ?? []));
+          setPendingObservations((prev) => dropReconciledObservations(prev, row.observations ?? []));
         }
       })
       .catch((e: unknown) => {
@@ -676,22 +694,57 @@ export function PlantScreen({
   const refresh = () => {
     setLogOpen(false);
     setSoilCheckOpen(false);
+    setNow(Date.now());
     setReloadKey((k) => k + 1);
   };
 
   const handleSoilCheck = async (soilState: SoilState) => {
     if (!plant || soilCheckBusy) return;
     setSoilCheckBusy(true);
+    const observedAt = new Date();
+    const observedAtIso = observedAt.toISOString();
+    const tempId = `pending-${observedAt.getTime()}-${Math.random().toString(36).slice(2)}`;
+    const optimistic: Observation = {
+      $id: tempId,
+      $createdAt: observedAtIso,
+      $updatedAt: observedAtIso,
+      user_id: userId,
+      observed_at: observedAtIso,
+      observation_type: 'measurement',
+      notes_private: null,
+      contribute_to_public_dataset: profile.public_contribution_default,
+      measurements: [
+        {
+          $id: `${tempId}-m`,
+          $createdAt: observedAtIso,
+          $updatedAt: observedAtIso,
+          user_id: userId,
+          height_cm: null,
+          leaf_count: null,
+          soil_moisture_percent: null,
+          health_score: null,
+          pest_severity_score: null,
+          bloom_count: null,
+          soil_state: soilState,
+          notes_private: null,
+        },
+      ],
+    };
+    setPendingObservations((prev) => [...prev, optimistic]);
+    setNow(observedAt.getTime());
     try {
-      await submitSoilCheck({
+      const created = await submitSoilCheck({
         userId,
         plantId: plant.$id,
         soilState,
         contribute: profile.public_contribution_default,
+        observedAt: observedAtIso,
         createLog,
         refresh,
       });
+      setPendingObservations((prev) => prev.map((row) => (row.$id === tempId ? { ...row, $id: created.$id } : row)));
     } catch (e) {
+      setPendingObservations((prev) => prev.filter((row) => row.$id !== tempId));
       setError(errorMessage(e));
     } finally {
       setSoilCheckBusy(false);
@@ -701,17 +754,35 @@ export function PlantScreen({
   const handleMoistureFeedback = async (estimateFeedback: EstimateFeedback, magnitude: number | null) => {
     if (!plant || !moisture || moistureFeedbackBusy) return;
     setMoistureFeedbackBusy(true);
+    const observedAt = new Date();
+    const observedAtIso = observedAt.toISOString();
+    const tempId = `pending-${observedAt.getTime()}-${Math.random().toString(36).slice(2)}`;
+    const optimistic: MoistureFeedback = {
+      $id: tempId,
+      $createdAt: observedAtIso,
+      $updatedAt: observedAtIso,
+      user_id: userId,
+      observed_at: observedAtIso,
+      estimate_feedback: estimateFeedback,
+      magnitude: estimateFeedback === 'correct' ? null : magnitude,
+      predicted_moisture_percent: Math.round(moisture.moisturePercent),
+    };
+    setPendingFeedback((prev) => [...prev, optimistic]);
+    setNow(observedAt.getTime());
     try {
-      await submitMoistureFeedback({
+      const created = await submitMoistureFeedback({
         userId,
         plantId: plant.$id,
         estimateFeedback,
         magnitude,
         predictedMoisturePercent: Math.round(moisture.moisturePercent),
+        observedAt: observedAtIso,
         createMoistureFeedback,
         refresh,
       });
+      setPendingFeedback((prev) => prev.map((row) => (row.$id === tempId ? { ...row, $id: created.$id } : row)));
     } catch (e) {
+      setPendingFeedback((prev) => prev.filter((row) => row.$id !== tempId));
       setError(errorMessage(e));
     } finally {
       setMoistureFeedbackBusy(false);
@@ -749,7 +820,9 @@ export function PlantScreen({
 
   if (!plant) return <Spinner label="Loading timeline…" />;
 
-  const observations = plant.observations ?? [];
+  const observations = mergeObservations(plant.observations ?? [], pendingObservations).sort(
+    (a, b) => Date.parse(b.observed_at) - Date.parse(a.observed_at),
+  );
   const speciesLine = plant.common_name ?? plant.species_id?.scientific_name ?? plant.species_text ?? '';
 
   // Get dynamic stats
@@ -781,7 +854,8 @@ export function PlantScreen({
   const tableMatch =
     tableProfile && tableProfile.speciesId === speciesRowId ? tableProfile.profile : null;
   const careProfile = tableMatch ?? careProfileForPlant(plant);
-  const moisture = moistureForPlant(plant, careProfile, plant.moisture_feedback ?? [], now);
+  const mergedFeedback = mergeById(plant.moisture_feedback ?? [], pendingFeedback);
+  const moisture = moistureForPlant({ ...plant, observations }, careProfile, mergedFeedback, now);
   const showPotSizeMoistureNudge = !moisture && shouldPromptForPotSize(plant);
   const moistureSpeciesName =
     careProfile?.scientificName ?? plant.species_id?.scientific_name ?? plant.common_name ?? null;
@@ -791,6 +865,7 @@ export function PlantScreen({
         moisture.recommendation,
         moistureSpeciesName,
         moisture.band,
+        { needsSoilCheck: moisture.needsSoilCheck, needsSubstrate: moisture.needsSubstrate },
       )
     : null;
 
@@ -1039,12 +1114,14 @@ export function PlantScreen({
                       <p className="mono" style={{ margin: '6px 0 0', fontSize: 10, color: '#67766A', letterSpacing: '.06em' }}>
                         ESTIMATED · {moisture.confidence.toUpperCase()} CONFIDENCE
                       </p>
-                      <MoistureFeedbackPrompt
-                        isDark
-                        predictedMoisturePercent={moisture.moisturePercent}
-                        busy={moistureFeedbackBusy}
-                        onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
-                      />
+                      {moisture.feedbackEligible && (
+                        <MoistureFeedbackPrompt
+                          isDark
+                          predictedMoisturePercent={moisture.moisturePercent}
+                          busy={moistureFeedbackBusy}
+                          onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                        />
+                      )}
                     </div>
                   </Collapsible>
                 )}
@@ -1360,12 +1437,14 @@ export function PlantScreen({
                       <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: '#23302A' }}>{moistureIns.title}</p>
                       <p style={{ margin: '3px 0 0', fontSize: 13, lineHeight: 1.5, color: '#6B7568' }}>{moistureIns.detail}</p>
                       <p style={{ margin: '6px 0 0', fontSize: 11, color: '#9AA294' }}>Estimated · {moisture.confidence} confidence</p>
-                      <MoistureFeedbackPrompt
-                        isDark={false}
-                        predictedMoisturePercent={moisture.moisturePercent}
-                        busy={moistureFeedbackBusy}
-                        onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
-                      />
+                      {moisture.feedbackEligible && (
+                        <MoistureFeedbackPrompt
+                          isDark={false}
+                          predictedMoisturePercent={moisture.moisturePercent}
+                          busy={moistureFeedbackBusy}
+                          onSubmit={(f, m) => void handleMoistureFeedback(f, m)}
+                        />
+                      )}
                     </div>
                   </div>
                 </Collapsible>
