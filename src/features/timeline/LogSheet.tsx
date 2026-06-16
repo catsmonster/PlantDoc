@@ -244,6 +244,7 @@ export function LogSheet({
             repotHeight,
             repotSubstrate,
             updatePlant,
+            profile.preferred_units,
           );
         }
       } else if (mode === 'measure') {
@@ -357,10 +358,10 @@ export function LogSheet({
                   {careType === 'repotting' && (
                     <>
                       <label style={{ display: 'block' }}>
-                        <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>New pot size (optional)</span>
+                        <span className="b-kicker" style={{ display: 'block', marginBottom: 8 }}>New pot size ({imperial ? 'in' : 'cm'}, optional)</span>
                         <div style={{ display: 'flex', gap: 10 }}>
-                          <input className="b-input" type="number" inputMode="decimal" min={1} max={200} step="any" value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="New pot diameter in centimetres" />
-                          <input className="b-input" type="number" inputMode="decimal" min={1} max={200} step="any" value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="New pot height in centimetres" />
+                          <input className="b-input" type="number" inputMode="decimal" min={0} max={imperial ? 80 : 200} step="any" value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder={imperial ? 'Width 5 in' : 'Width 12 cm'} disabled={busy} aria-label={`New pot diameter in ${imperial ? 'inches' : 'centimetres'}`} />
+                          <input className="b-input" type="number" inputMode="decimal" min={0} max={imperial ? 80 : 200} step="any" value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder={imperial ? 'Height 4 in' : 'Height 10 cm'} disabled={busy} aria-label={`New pot height in ${imperial ? 'inches' : 'centimetres'}`} />
                         </div>
                       </label>
                       <label style={{ display: 'block' }}>
@@ -561,10 +562,10 @@ export function LogSheet({
                 {careType === 'repotting' && (
                   <>
                     <label style={{ display: 'block' }}>
-                      <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>New pot size (optional)</span>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#6B7568', marginBottom: 7 }}>New pot size ({imperial ? 'in' : 'cm'}, optional)</span>
                       <div style={{ display: 'flex', gap: 10 }}>
-                        <input className="a-input" type="number" inputMode="decimal" min={1} max={200} step="any" value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder="Width 12 cm" disabled={busy} aria-label="New pot diameter in centimetres" />
-                        <input className="a-input" type="number" inputMode="decimal" min={1} max={200} step="any" value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder="Height 10 cm" disabled={busy} aria-label="New pot height in centimetres" />
+                        <input className="a-input" type="number" inputMode="decimal" min={0} max={imperial ? 80 : 200} step="any" value={repotDiameter} onChange={(e) => setRepotDiameter(e.target.value)} placeholder={imperial ? 'Width 5 in' : 'Width 12 cm'} disabled={busy} aria-label={`New pot diameter in ${imperial ? 'inches' : 'centimetres'}`} />
+                        <input className="a-input" type="number" inputMode="decimal" min={0} max={imperial ? 80 : 200} step="any" value={repotHeight} onChange={(e) => setRepotHeight(e.target.value)} placeholder={imperial ? 'Height 4 in' : 'Height 10 cm'} disabled={busy} aria-label={`New pot height in ${imperial ? 'inches' : 'centimetres'}`} />
                       </div>
                     </label>
                     <label style={{ display: 'block' }}>

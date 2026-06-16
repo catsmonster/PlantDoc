@@ -37,8 +37,8 @@ describe('LogSheet repot plant update', () => {
       .split('\n')
       .filter(
         (line) =>
-          line.includes('aria-label="New pot diameter in centimetres"') ||
-          line.includes('aria-label="New pot height in centimetres"'),
+          line.includes('New pot diameter in ${imperial') ||
+          line.includes('New pot height in ${imperial'),
       );
     expect(dimensionInputs).toHaveLength(4);
     expect(dimensionInputs.every((line) => line.includes('step="any"'))).toBe(true);
@@ -51,6 +51,26 @@ describe('LogSheet repot plant update', () => {
     });
     expect(buildRepotPlantUpdate('', '11.5', '')).toEqual({ pot_height_cm: 11.5 });
     expect(buildRepotPlantUpdate('', '', '')).toEqual({});
+  });
+
+  it('converts imperial repot dimensions to stored centimetres', () => {
+    expect(buildRepotPlantUpdate('10', '8', '', 'imperial')).toEqual({
+      pot_diameter_cm: 25.4,
+      pot_height_cm: 20.32,
+    });
+  });
+
+  it('treats omitted units as metric (back-compat)', () => {
+    expect(buildRepotPlantUpdate('14', '', 'chunky_aroid')).toEqual({
+      pot_diameter_cm: 14,
+      substrate_type: 'chunky_aroid',
+    });
+  });
+
+  it('repotting with dimensions persists pot fields so pot-size prompting clears', async () => {
+    const updatePlant = vi.fn().mockResolvedValue({});
+    await submitRepotPlantUpdate('plant-1', '13', '12', '', updatePlant, 'metric');
+    expect(updatePlant).toHaveBeenCalledWith('plant-1', { pot_diameter_cm: 13, pot_height_cm: 12 });
   });
 
   it('omits invalid or out-of-range diameter and height values', () => {
