@@ -570,29 +570,41 @@ describe('moistureInsight', () => {
     expect(insight.title).toBe('Starting to dry out');
   });
 
-  it('appends an enrichment nudge only at low confidence', () => {
-    const low = moistureInsight(
+  it('builds the low-confidence nudge from only what is missing, never pot size', () => {
+    const soilOnly = moistureInsight(
       { moisturePercent: 50, confidence: 'low' },
       { status: 'comfortable' },
       'Monstera deliciosa',
       null,
+      { needsSoilCheck: true, needsSubstrate: false },
     );
-    const medium = moistureInsight(
+    const both = moistureInsight(
+      { moisturePercent: 50, confidence: 'low' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+      null,
+      { needsSoilCheck: true, needsSubstrate: true },
+    );
+    const nothingMissing = moistureInsight(
+      { moisturePercent: 50, confidence: 'low' },
+      { status: 'comfortable' },
+      'Monstera deliciosa',
+      null,
+      { needsSoilCheck: false, needsSubstrate: false },
+    );
+    const mediumConfidence = moistureInsight(
       { moisturePercent: 50, confidence: 'medium' },
       { status: 'comfortable' },
       'Monstera deliciosa',
       null,
-    );
-    const high = moistureInsight(
-      { moisturePercent: 50, confidence: 'high' },
-      { status: 'comfortable' },
-      'Monstera deliciosa',
-      null,
+      { needsSoilCheck: true, needsSubstrate: true },
     );
 
-    expect(low.detail.endsWith('Add your pot size and a soil check to sharpen this estimate.')).toBe(true);
-    expect(medium.detail).not.toContain('sharpen');
-    expect(high.detail).not.toContain('sharpen');
+    expect(soilOnly.detail.endsWith('Log a soil check to sharpen this estimate.')).toBe(true);
+    expect(both.detail.endsWith('Log a soil check and set your soil type to sharpen this estimate.')).toBe(true);
+    expect(soilOnly.detail).not.toContain('pot size');
+    expect(nothingMissing.detail).not.toContain('sharpen');
+    expect(mediumConfidence.detail).not.toContain('sharpen');
   });
 
   it('omits the species clause when no species name is known', () => {

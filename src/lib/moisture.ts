@@ -378,7 +378,16 @@ export const MOISTURE_INSIGHT_STATUS_PHRASE: Record<WateringStatus, string> = {
   overwatered: 'wetter than ideal',
 };
 
-const MOISTURE_ENRICHMENT_NUDGE = 'Add your pot size and a soil check to sharpen this estimate.';
+/** Low-confidence nudge built from only the missing signals (spec Unit E) — never
+ *  mentions pot size, which is always present when this card renders. */
+function enrichmentNudge(needsSoilCheck: boolean, needsSubstrate: boolean): string | null {
+  const actions: string[] = [];
+  if (needsSoilCheck) actions.push('log a soil check');
+  if (needsSubstrate) actions.push('set your soil type');
+  if (actions.length === 0) return null;
+  const joined = actions.length === 2 ? `${actions[0]} and ${actions[1]}` : actions[0];
+  return `${joined.charAt(0).toUpperCase()}${joined.slice(1)} to sharpen this estimate.`;
+}
 
 const MOISTURE_BAND_PREFERENCE: Record<MoistureBand, string> = {
   dry: 'prefers to dry out between waterings',
@@ -392,6 +401,7 @@ export function moistureInsight(
   recommendation: WateringRecommendation,
   speciesName: string | null,
   band: MoistureBand | null,
+  enrichment: { needsSoilCheck: boolean; needsSubstrate: boolean } = { needsSoilCheck: false, needsSubstrate: false },
 ): Insight {
   const pct = Math.round(estimate.moisturePercent);
   const statusPhrase = MOISTURE_INSIGHT_STATUS_PHRASE[recommendation.status];
@@ -403,7 +413,8 @@ export function moistureInsight(
     detail += ` ${subject} ${MOISTURE_BAND_PREFERENCE[band]}.`;
   }
   if (estimate.confidence === 'low') {
-    detail += ` ${MOISTURE_ENRICHMENT_NUDGE}`;
+    const nudge = enrichmentNudge(enrichment.needsSoilCheck, enrichment.needsSubstrate);
+    if (nudge) detail += ` ${nudge}`;
   }
 
   return {
